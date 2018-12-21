@@ -23,6 +23,7 @@
 #endif
 
 #include <stdio.h>
+#include <inttypes.h>
 #include <sys/time.h>
 #include <ell/ell.h>
 
@@ -45,8 +46,8 @@
 
 #define MIN_COMP_SIZE 14
 
-#define MESH_NODE_PATH_PREFIX "/node"
-#define MESH_ELEMENT_PATH_PREFIX "/ele"
+#define MESH_NODE_PATH_PREFIX "/org/bluez/mesh/node_"
+#define MESH_NODE_PATH_PREFIX_LEN 21
 
 /* Default element location: unknown */
 #define DEFAULT_LOCATION 0x0000
@@ -89,7 +90,7 @@ struct mesh_node {
 		uint8_t cnt;
 		uint8_t mode;
 	} relay;
-	uint8_t dev_uuid[16];
+	uint8_t dev_uuid[UUID_LEN];
 	uint8_t dev_key[16];
 	uint8_t num_ele;
 	uint8_t ttl;
@@ -104,12 +105,8 @@ struct attach_obj_request {
 	struct mesh_node *node;
 };
 
-struct join_obj_request {
-	node_join_ready_func_t cb;
-	const uint8_t *uuid;
-};
-
 static struct l_queue *nodes;
+static struct l_queue *request_nodes;
 
 static bool match_node_unicast(const void *a, const void *b)
 {
@@ -120,12 +117,20 @@ static bool match_node_unicast(const void *a, const void *b)
 		dst <= (node->primary + node->num_ele - 1));
 }
 
+static bool match_request_node_uuid(const void *a, const void *b)
+{
+	const struct request_node_data *node = a;
+	const uint8_t *uuid = b;
+
+	return (memcmp(node->uuid, uuid, UUID_LEN) == 0);
+}
+
 static bool match_device_uuid(const void *a, const void *b)
 {
 	const struct mesh_node *node = a;
 	const uint8_t *uuid = b;
 
-	return (memcmp(node->dev_uuid, uuid, 16) == 0);
+	return (memcmp(node->dev_uuid, uuid, UUID_LEN) == 0);
 }
 
 static bool match_token(const void *a, const void *b)
@@ -163,7 +168,7 @@ struct mesh_node *node_find_by_addr(uint16_t addr)
 	return l_queue_find(nodes, match_node_unicast, L_UINT_TO_PTR(addr));
 }
 
-struct mesh_node *node_find_by_uuid(uint8_t uuid[16])
+struct mesh_node *node_find_by_uuid(uint8_t uuid[UUID_LEN])
 {
 	return l_queue_find(nodes, match_device_uuid, uuid);
 }
@@ -173,6 +178,26 @@ uint8_t *node_uuid_get(struct mesh_node *node)
 	if (!node)
 		return NULL;
 	return node->dev_uuid;
+}
+
+void replace_dash_with_underscore(char *src, uint32_t len)
+{
+	int i;
+	for (i = 0; i < len; i++) {
+		if (src[i] == '-')
+			src[i] = '_';
+	}
+}
+
+void get_node_path_from_uuid(char *path, uint8_t *uuid)
+{
+	char uuid_string[(UUID_LEN * 2) + 5] = {'\0'};
+
+	l_uuid_to_string(uuid, uuid_string, ((UUID_LEN * 2) + 5));
+
+	replace_dash_with_underscore(uuid_string, (UUID_LEN * 2) + 5);
+
+	snprintf(path, ((UUID_LEN * 2) + MESH_NODE_PATH_PREFIX_LEN + 5), "%s%s", MESH_NODE_PATH_PREFIX, uuid_string);
 }
 
 struct mesh_node *node_new(void)
@@ -198,18 +223,33 @@ static void free_element_path(void *a, void *b)
 	element->path = NULL;
 }
 
+static void request_model_free(void *data)
+{
+	uint16_t *model = data;
+
+	l_free(model);
+	model = NULL;
+}
+
 static void element_free(void *data)
 {
 	struct node_element *element = data;
 
 	l_queue_destroy(element->models, mesh_model_free);
-	l_free(element->path);
 	l_free(element);
+}
+
+static void request_element_free(void *data)
+{
+	struct l_queue *element = data;
+
+	l_queue_destroy(element, request_model_free);
 }
 
 static void free_node_resources(void *data)
 {
 	struct mesh_node *node = data;
+	char path[(UUID_LEN * 2) + MESH_NODE_PATH_PREFIX_LEN + 6] = {'\0'};
 
 	/* Unregister io callbacks */
 	if(node->net)
@@ -221,9 +261,13 @@ static void free_node_resources(void *data)
 	l_free(node->app_path);
 	l_free(node->owner);
 
-	if (node->path)
-		l_dbus_object_remove_interface(dbus_get_bus(), node->path,
+	get_node_path_from_uuid(path, node->dev_uuid);
+
+	l_dbus_object_remove_interface(dbus_get_bus(), path,
 					MESH_NODE_INTERFACE);
+	l_dbus_object_remove_interface(dbus_get_bus(), path,
+					MESH_PROVISIONING_INTERFACE);
+
 	l_free(node->path);
 
 	l_free(node);
@@ -236,6 +280,29 @@ void node_free(struct mesh_node *node)
 
 	l_queue_remove(nodes, node);
 	free_node_resources(node);
+}
+
+void request_node_unregister_interface(struct request_node_data *node)
+{
+	char path[(UUID_LEN * 2) + MESH_NODE_PATH_PREFIX_LEN + 6] = {'\0'};
+
+	get_node_path_from_uuid(path, node->uuid);
+
+	l_dbus_object_remove_interface(dbus_get_bus(), path,
+					MESH_NODE_INTERFACE);
+	l_dbus_object_remove_interface(dbus_get_bus(), path,
+					MESH_PROVISIONING_INTERFACE);
+}
+
+void request_node_free(struct request_node_data *node)
+{
+	if (!node)
+		return;
+	//TODO: stop provisioning acceptor for this node if started previously
+	l_queue_remove(request_nodes, node);
+	l_queue_destroy(node->elements, request_element_free);
+
+	l_free(node);
 }
 
 static bool add_models(struct mesh_node *node, struct node_element *ele,
@@ -356,7 +423,7 @@ bool node_init_from_storage(struct mesh_node *node, void *data)
 
 	node->primary = db_node->unicast;
 
-	memcpy(node->dev_uuid, db_node->uuid, 16);
+	memcpy(node->dev_uuid, db_node->uuid, UUID_LEN);
 
 	/* Initialize configuration server model */
 	mesh_config_srv_init(node, PRIMARY_ELE_IDX);
@@ -389,6 +456,7 @@ void node_cleanup_all(void)
 {
 	l_queue_destroy(nodes, node_cleanup);
 	l_dbus_unregister_interface(dbus_get_bus(), MESH_NODE_INTERFACE);
+	l_dbus_unregister_interface(dbus_get_bus(), MESH_PROVISIONING_INTERFACE);
 }
 
 bool node_is_provisioned(struct mesh_node *node)
@@ -957,13 +1025,46 @@ void node_attach_io(struct mesh_io *io)
 
 static bool register_node_object(struct mesh_node *node)
 {
-	node->path = l_malloc(strlen(MESH_NODE_PATH_PREFIX) + 5);
+	char path[(UUID_LEN * 2) + MESH_NODE_PATH_PREFIX_LEN + 6] = {'\0'};
 
-	snprintf(node->path, 10, MESH_NODE_PATH_PREFIX "%4.4x", node->id);
+	get_node_path_from_uuid(path, node->dev_uuid);
 
-	if (!l_dbus_object_add_interface(dbus_get_bus(), node->path,
-					MESH_NODE_INTERFACE, node))
+	if (!l_dbus_object_add_interface(dbus_get_bus(), path,
+					MESH_NODE_INTERFACE, NULL))
+	{
+		l_info("Unable to add %s object", path);
 		return false;
+	}
+
+	if (!l_dbus_object_add_interface(dbus_get_bus(), path,
+					MESH_PROVISIONING_INTERFACE, NULL))
+	{
+		l_info("Unable to add %s object", path);
+		return false;
+	}
+
+	return true;
+}
+
+static bool register_request_node_object(struct request_node_data *node)
+{
+	char path[(UUID_LEN * 2) + MESH_NODE_PATH_PREFIX_LEN + 6] = {'\0'};
+
+	get_node_path_from_uuid(path, node->uuid);
+
+	if (!l_dbus_object_add_interface(dbus_get_bus(), path,
+					MESH_PROVISIONING_INTERFACE, NULL))
+	{
+		l_info("Unable to add %s object", path);
+		return false;
+	}
+
+	if (!l_dbus_object_add_interface(dbus_get_bus(), path,
+					MESH_NODE_INTERFACE, NULL))
+	{
+		l_info("Unable to add %s object", path);
+		return false;
+	}
 
 	return true;
 }
@@ -1251,7 +1352,7 @@ static void convert_node_to_storage(struct mesh_node *node,
 	db_node->modes.lpn = node->lpn;
 	db_node->modes.proxy = node->proxy;
 
-	memcpy(db_node->uuid, node->dev_uuid, 16);
+	memcpy(db_node->uuid, node->dev_uuid, UUID_LEN);
 
 	node->friend = db_node->modes.friend;
 	db_node->modes.relay.state = node->relay.mode;
@@ -1337,128 +1438,61 @@ static void set_defaults(struct mesh_node *node)
 	add_internal_model(node, CONFIG_SRV_MODEL, PRIMARY_ELE_IDX);
 }
 
-static void get_managed_objects_join_cb(struct l_dbus_message *msg,
-								void *user_data)
+bool create_node_request(struct request_node_data *request_node)
 {
-	struct l_dbus_message_iter objects, interfaces;
-	struct join_obj_request *req = user_data;
-	const char *path;
 	struct mesh_node *node = NULL;
-	void *agent = NULL;
+	uint8_t *uuid = request_node->uuid;
 
-	if (l_dbus_message_is_error(msg)) {
-		l_error("Failed to get app's dbus objects");
+	if (l_queue_find(nodes, match_device_uuid, uuid)) {
+		l_debug("Node already exists in nodes.");
 		goto fail;
 	}
 
-	if (!l_dbus_message_get_arguments(msg, "a{oa{sa{sv}}}", &objects)) {
-		l_error("Failed to parse app's dbus objects");
+	if (l_queue_find(request_nodes, match_request_node_uuid, uuid)) {
+		l_debug("Node already exists in request nodes.");
 		goto fail;
 	}
 
-	node = l_new(struct mesh_node, 1);
-	node->elements = l_queue_new();
+	if (!request_nodes)
+		request_nodes = l_queue_new();
 
-	while (l_dbus_message_iter_next_entry(&objects, &path, &interfaces)) {
-		struct l_dbus_message_iter properties;
-		const char *interface;
+	l_queue_push_tail(request_nodes, request_node);
 
-		while (l_dbus_message_iter_next_entry(&interfaces, &interface,
-								&properties)) {
-			bool res;
+	register_request_node_object(request_node);
 
-			if (!strcmp(MESH_ELEMENT_INTERFACE, interface)) {
-				res = get_element_properties(node, path,
-								&properties);
-				if (!res)
-					goto fail;
+	return true;
 
-				node->num_ele++;
-				continue;
-
-			}
-
-			if (!strcmp(MESH_APPLICATION_INTERFACE, interface)) {
-				res = get_app_properties(node, path,
-								&properties);
-				if (!res)
-					goto fail;
-
-				continue;
-			}
-
-			if (!strcmp(MESH_PROVISION_AGENT_INTERFACE,
-								interface)) {
-				const char *sender;
-
-				sender = l_dbus_message_get_sender(msg);
-				agent = mesh_agent_create(path, sender,
-								&properties);
-				if (!agent)
-					goto fail;
-			}
-		}
-	}
-
-	if (!node->comp){
-		l_error("Interface %s not found", MESH_APPLICATION_INTERFACE);
-		goto fail;
-	}
-
-	if (!agent) {
-		l_error("Interface %s not found",
-						MESH_PROVISION_AGENT_INTERFACE);
-		goto fail;
-	}
-
-	if (!node->num_ele) {
-		l_error("Interface %s not found", MESH_ELEMENT_INTERFACE);
-		goto fail;
-	}
-
-	if (!l_queue_find(node->elements, match_element_idx,
-				L_UINT_TO_PTR(PRIMARY_ELE_IDX))) {
-
-		l_debug("Primary element not detected");
-		goto fail;
-	}
-
-	set_defaults(node);
-	memcpy(node->dev_uuid, req->uuid, 16);
-
-	if (!create_node_config(node))
-		goto fail;
-
-	req->cb(node, agent);
-
-	return;
 fail:
-	if (agent)
-		free_node_resources(node);
+	if (request_node)
+		request_node_free(request_node);
 
-	if (node)
-		mesh_agent_remove(agent);
-
-	req->cb(NULL, NULL);
+	return false;
 }
 
-/* Create a temporary pre-provisioned node */
-void node_join(const char *app_path, const char *sender, const uint8_t *uuid,
-						node_join_ready_func_t cb)
+bool delete_node(uint8_t *uuid)
 {
-	struct join_obj_request *req;
+	struct mesh_node *node = NULL;
+	struct request_node_data *request_node = NULL;
 
-	l_debug("");
+	node = l_queue_find(nodes, match_device_uuid, uuid);
+	request_node = l_queue_find(request_nodes, match_request_node_uuid, uuid);
 
-	req = l_new(struct join_obj_request, 1);
-	req->uuid = uuid;
-	req->cb = cb;
+	if (node) {
+		l_queue_remove(nodes, node);
+		node_free(node);
+		goto done;
+	}
 
-	l_dbus_method_call(dbus_get_bus(), sender, app_path,
-					L_DBUS_INTERFACE_OBJECT_MANAGER,
-					"GetManagedObjects", NULL,
-					get_managed_objects_join_cb,
-					req, l_free);
+	if (request_node) {
+		l_queue_remove(request_nodes, request_node);
+		request_node_free(request_node);
+		goto done;
+	}
+
+	return false;
+
+done:
+	return true;
 }
 
 static void build_element_config(void *a, void *b)
@@ -1503,101 +1537,6 @@ void node_build_attach_reply(struct l_dbus_message *reply, uint64_t token)
 	l_dbus_message_builder_leave_array(builder);
 	l_dbus_message_builder_finalize(builder);
 	l_dbus_message_builder_destroy(builder);
-}
-
-static struct l_dbus_message *send_call(struct l_dbus *dbus,
-						struct l_dbus_message *msg,
-						void *user_data)
-{
-	struct mesh_node *node = user_data;
-	const char *sender, *ele_path;
-	struct l_dbus_message_iter iter_data;
-	struct node_element *ele;
-	uint16_t dst, app_idx, src;
-	uint8_t data[MESH_MAX_ACCESS_PAYLOAD];
-	uint32_t len;
-	struct l_dbus_message *reply;
-
-	l_debug("Send");
-
-	sender = l_dbus_message_get_sender(msg);
-
-	if (strcmp(sender, node->owner))
-		return dbus_error(msg, MESH_ERROR_NOT_AUTHORIZED, NULL);
-
-	if (!l_dbus_message_get_arguments(msg, "oqqay", &ele_path, &dst,
-							&app_idx, &iter_data))
-		return dbus_error(msg, MESH_ERROR_INVALID_ARGS, NULL);
-
-	ele = l_queue_find(node->elements, match_element_path, ele_path);
-	if (!ele)
-		return dbus_error(msg, MESH_ERROR_NOT_FOUND,
-							"Element not found");
-
-	src = node_get_primary(node) + ele->idx;
-
-	len = dbus_get_byte_array(&iter_data, data, L_ARRAY_SIZE(data));
-	if (!len)
-		return dbus_error(msg, MESH_ERROR_INVALID_ARGS,
-						"Mesh message is empty");
-
-	if (!mesh_model_send(node, src, dst, app_idx,
-				mesh_net_get_default_ttl(node->net), data, len))
-		return dbus_error(msg, MESH_ERROR_FAILED, NULL);
-
-	reply = l_dbus_message_new_method_return(msg);
-	l_dbus_message_set_arguments(reply, "");
-
-	return reply;
-}
-
-static struct l_dbus_message *publish_call(struct l_dbus *dbus,
-						struct l_dbus_message *msg,
-						void *user_data)
-{
-	struct mesh_node *node = user_data;
-	const char *sender, *ele_path;
-	struct l_dbus_message_iter iter_data;
-	uint16_t mod_id, src;
-	struct node_element *ele;
-	uint8_t data[MESH_MAX_ACCESS_PAYLOAD];
-	uint32_t len;
-	struct l_dbus_message *reply;
-	int result;
-
-	l_debug("Publish");
-
-	sender = l_dbus_message_get_sender(msg);
-
-	if (strcmp(sender, node->owner))
-		return dbus_error(msg, MESH_ERROR_NOT_AUTHORIZED, NULL);
-
-	if (!l_dbus_message_get_arguments(msg, "oqay", &ele_path, &mod_id,
-								&iter_data))
-		return dbus_error(msg, MESH_ERROR_INVALID_ARGS, NULL);
-
-	ele = l_queue_find(node->elements, match_element_path, ele_path);
-	if (!ele)
-		return dbus_error(msg, MESH_ERROR_NOT_FOUND,
-							"Element not found");
-
-	src = node_get_primary(node) + ele->idx;
-
-	len = dbus_get_byte_array(&iter_data, data, L_ARRAY_SIZE(data));
-	if (!len)
-		return dbus_error(msg, MESH_ERROR_INVALID_ARGS,
-						"Mesh message is empty");
-
-	result = mesh_model_publish(node, VENDOR_ID_MASK | mod_id, src,
-				mesh_net_get_default_ttl(node->net), data, len);
-
-	if (result != MESH_ERROR_NONE)
-		return dbus_error(msg, result, NULL);
-
-	reply = l_dbus_message_new_method_return(msg);
-	l_dbus_message_set_arguments(reply, "");
-
-	return reply;
 }
 
 static struct l_dbus_message *vendor_publish_call(struct l_dbus *dbus,
@@ -1652,25 +1591,494 @@ static struct l_dbus_message *vendor_publish_call(struct l_dbus *dbus,
 	return reply;
 }
 
-static void setup_node_interface(struct l_dbus_interface *iface)
+bool provision_request_node(struct request_node_data *request_node, uint8_t *network_key, uint16_t addr)
 {
-	l_dbus_interface_method(iface, "Send", 0, send_call, "", "oqqay",
-						"element_path", "destination",
-						"key", "data");
-	l_dbus_interface_method(iface, "Publish", 0, publish_call, "", "oqay",
-					"element_path", "model_id", "data");
-	l_dbus_interface_method(iface, "VendorPublish", 0, vendor_publish_call,
-						"", "oqqay", "element_path",
-						"vendor", "model_id", "data");
+	//TODO
+	return true;
+}
 
-	/*TODO: Properties */
+bool unprovision_node(struct mesh_node *node)
+{
+	//TODO
+	return true;
+}
+
+bool start_advertising(struct request_node_data *request_node)
+{
+	//TODO
+	request_node->is_advertising = true;
+	return true;
+}
+
+bool stop_advertising(struct request_node_data *request_node)
+{
+	//TODO
+	request_node->is_advertising = false;
+	return true;
+}
+
+void send_message(struct mesh_node *node, uint16_t element, uint16_t dest,
+					uint8_t *opcode, uint8_t *payload, uint16_t len,
+					uint16_t key_index)
+{
+	//TODO
+}
+
+bool get_uuid_from_path(const char *path, uint8_t *uuid)
+{
+	int n;
+
+	path += MESH_NODE_PATH_PREFIX_LEN;
+
+	n = sscanf(path, "%2"SCNx8 "%2"SCNx8 "%2"SCNx8 "%2"SCNx8
+					"_%2"SCNx8 "%2"SCNx8 "_%2"SCNx8 "%2"SCNx8
+					"_%2"SCNx8 "%2"SCNx8 "_%2"SCNx8 "%2"SCNx8
+					"%2"SCNx8 "%2"SCNx8 "%2"SCNx8 "%2"SCNx8 "",
+					&uuid[0], &uuid[1], &uuid[2], &uuid[3],
+					&uuid[4], &uuid[5], &uuid[6], &uuid[7],
+					&uuid[8], &uuid[9],&uuid[10], &uuid[11],
+					&uuid[12], &uuid[13], &uuid[14], &uuid[15]);
+
+	if (n != UUID_LEN)
+		return false;
+
+	return true;
+}
+
+static struct l_dbus_message *provision_call(struct l_dbus *dbus,
+						struct l_dbus_message *message, void *user_data)
+{
+	struct l_dbus_message *reply;
+	struct l_dbus_message_iter iter_network_key;
+	struct request_node_data *request_node;
+	bool status = false;
+	const char *path;
+	uint8_t uuid[UUID_LEN];
+	uint8_t network_key[16];
+	uint16_t addr;
+	uint32_t n;
+
+	l_debug("Provision");
+
+	if (!l_dbus_message_get_arguments(message, "ayq",
+			&iter_network_key, &addr)) {
+		return dbus_error(message, MESH_ERROR_INVALID_ARGS, NULL);
+	}
+
+	n = dbus_get_byte_array(&iter_network_key, network_key, 16);
+
+	if (n != 16) {
+		return dbus_error(message, MESH_ERROR_INVALID_ARGS,
+							"Bad network key");
+	}
+
+	path = l_dbus_message_get_path(message);
+	if (!get_uuid_from_path(path, uuid)) {
+		status = false;
+		goto done;
+	}
+
+	if (l_queue_find(nodes, match_device_uuid, uuid)) {
+		status = false;
+		goto done;
+	}
+
+	request_node = l_queue_find(request_nodes, match_request_node_uuid, uuid);
+
+	if (request_node) {
+		status = provision_request_node(request_node, network_key, addr);
+		goto done;
+	}
+
+done:
+	reply = l_dbus_message_new_method_return(message);
+	l_dbus_message_set_arguments(reply, "b", status);
+
+	return reply;
+}
+
+static struct l_dbus_message *unprovision_call(struct l_dbus *dbus,
+						struct l_dbus_message *message, void *user_data)
+{
+	struct l_dbus_message *reply;
+	struct mesh_node *node;
+	bool status = false;
+	const char *path;
+	uint8_t uuid[UUID_LEN];
+
+	l_debug("Unprovision");
+
+	path = l_dbus_message_get_path(message);
+	if (!get_uuid_from_path(path, uuid)) {
+		status = false;
+		goto done;
+	}
+
+	if (l_queue_find(request_nodes, match_request_node_uuid, uuid)) {
+		status = false;
+		goto done;
+	}
+
+	node = l_queue_find(nodes, match_device_uuid, uuid);
+
+	if (node) {
+		status = unprovision_node(node);
+		goto done;
+	}
+
+done:
+	reply = l_dbus_message_new_method_return(message);
+	l_dbus_message_set_arguments(reply, "b", status);
+
+	return reply;
+}
+
+static struct l_dbus_message *start_advertising_call(struct l_dbus *dbus,
+						struct l_dbus_message *message, void *user_data)
+{
+	struct l_dbus_message *reply;
+	struct request_node_data *request_node;
+	bool status = false;
+	const char *path;
+	uint8_t uuid[UUID_LEN];
+	int i;
+
+	l_debug("Start advertising as unprovisioned node");
+
+	path = l_dbus_message_get_path(message);
+	if (!get_uuid_from_path(path, uuid)) {
+		status = false;
+		goto done;
+	}
+
+	if (l_queue_find(nodes, match_device_uuid, uuid)) {
+		status = false;
+		goto done;
+	}
+
+	request_node = l_queue_find(request_nodes, match_request_node_uuid, uuid);
+
+	if (request_node) {
+		status = start_advertising(request_node);
+		goto done;
+	}
+
+done:
+	reply = l_dbus_message_new_method_return(message);
+	l_dbus_message_set_arguments(reply, "b", status);
+
+	return reply;
+}
+
+static struct l_dbus_message *stop_advertising_call(struct l_dbus *dbus,
+						struct l_dbus_message *message, void *user_data)
+{
+	struct l_dbus_message *reply;
+	struct request_node_data *request_node;
+	bool status = false;
+	const char *path;
+	uint8_t uuid[UUID_LEN];
+
+	l_debug("Stop advertising as unprovisioned node");
+
+	path = l_dbus_message_get_path(message);
+	if (!get_uuid_from_path(path, uuid)) {
+		status = false;
+		goto done;
+	}
+
+	if (l_queue_find(nodes, match_device_uuid, uuid)) {
+		status = false;
+		goto done;
+	}
+
+	request_node = l_queue_find(request_nodes, match_request_node_uuid, uuid);
+
+	if (request_node) {
+		status = stop_advertising(request_node);
+		goto done;
+	}
+
+done:
+	reply = l_dbus_message_new_method_return(message);
+	l_dbus_message_set_arguments(reply, "b", status);
+
+	return reply;
+}
+
+static bool is_provisioned_getter(struct l_dbus *dbus,
+				struct l_dbus_message *message,
+				struct l_dbus_message_builder *builder, void *user_data)
+{
+	const char *path;
+	uint8_t uuid[UUID_LEN];
+	bool is_provisioned = false;
+
+	path = l_dbus_message_get_path(message);
+	if (!get_uuid_from_path(path, uuid)) {
+		is_provisioned = false;
+		goto done;
+	}
+
+	if (l_queue_find(nodes, match_device_uuid, uuid)) {
+		is_provisioned = true;
+		goto done;
+	}
+
+done:
+	l_dbus_message_builder_append_basic(builder, 'b', &is_provisioned);
+
+	return true;
+}
+
+static bool is_advertising_getter(struct l_dbus *dbus,
+				struct l_dbus_message *message,
+				struct l_dbus_message_builder *builder, void *user_data)
+{
+	struct request_node_data *request_node;
+	const char *path;
+	uint8_t uuid[UUID_LEN];
+	bool is_advertising = false;
+
+	path = l_dbus_message_get_path(message);
+	if (!get_uuid_from_path(path, uuid)) {
+		is_advertising = false;
+		goto done;
+	}
+
+	request_node = l_queue_find(request_nodes, match_request_node_uuid, uuid);
+
+	if (request_node) {
+		is_advertising = request_node->is_advertising;
+		goto done;
+	}
+
+done:
+	l_dbus_message_builder_append_basic(builder, 'b', &is_advertising);
+
+	return true;
+}
+
+static void setup_provisioning_interface(struct l_dbus_interface *interface)
+{
+	l_dbus_interface_method(interface, "Provision", 0,
+				provision_call, "b", "ayq", "status", "net_key", "addr");
+
+	l_dbus_interface_method(interface, "Unprovision", 0,
+				unprovision_call, "b", "", "status");
+
+	l_dbus_interface_method(interface, "StartAdvertising", 0,
+				start_advertising_call, "b", "", "status");
+
+	l_dbus_interface_method(interface, "StopAdvertising", 0,
+				stop_advertising_call, "b", "", "status");
+
+	l_dbus_interface_property(interface, "Provisioned", 0, "b",
+				is_provisioned_getter, NULL);
+
+	l_dbus_interface_property(interface, "Advertising", 0, "b",
+				is_advertising_getter, NULL);
+}
+
+static struct l_dbus_message *send_message_call(struct l_dbus *dbus,
+					struct l_dbus_message *message, void *user_data)
+{
+	struct l_dbus_message *reply;
+	struct l_dbus_message_iter iter_opcode, iter_payload;
+	struct mesh_node *node;
+	const char *path;
+	uint8_t uuid[UUID_LEN];
+	uint8_t opcode[OPCODE_MAX_LEN];
+	uint8_t *payload;
+	uint16_t element, dest, key_index, len;
+
+	l_info("Send message call");
+
+	path = l_dbus_message_get_path(message);
+	if (!get_uuid_from_path(path, uuid)) {
+		//TODO: trigger (dbus?) exception
+		goto done;
+	}
+
+	if (l_queue_find(request_nodes, match_request_node_uuid, uuid)) {
+		//TODO: trigger (dbus?) exception
+		goto done;
+	}
+
+	if (!l_dbus_message_get_arguments(message, "qqayayq", &element, &dest,
+			&iter_opcode, &iter_payload, &key_index)) {
+		return dbus_error(message, MESH_ERROR_INVALID_ARGS, NULL);
+	}
+
+	payload = l_new(uint8_t, PAYLOAD_MAX_LEN);
+
+	dbus_get_byte_array(&iter_opcode, opcode, OPCODE_MAX_LEN);
+	len = dbus_get_byte_array(&iter_payload, payload, PAYLOAD_MAX_LEN);
+
+	node = l_queue_find(nodes, match_device_uuid, uuid);
+
+	if (node) {
+		send_message(node, element, dest, opcode, payload, len, key_index);
+		goto done;
+	}
+
+	l_free(payload);
+
+done:
+	reply = l_dbus_message_new_method_return(message);
+	l_dbus_message_set_arguments(reply, "");
+
+	return reply;
+}
+
+static bool node_address_getter(struct l_dbus *dbus,
+				struct l_dbus_message *message,
+				struct l_dbus_message_builder *builder, void *user_data)
+{
+	struct mesh_node *node;
+	const char *path;
+	uint8_t uuid[UUID_LEN];
+	uint16_t addr = 0;
+
+	path = l_dbus_message_get_path(message);
+	if (!get_uuid_from_path(path, uuid))
+		goto done;
+
+	node = l_queue_find(nodes, match_device_uuid, uuid);
+
+	if (node) {
+		addr = node_get_primary(node);
+		goto done;
+	}
+
+done:
+	l_dbus_message_builder_append_basic(builder, 'q', &addr);
+
+	return true;
+}
+
+static bool node_network_key_getter(struct l_dbus *dbus,
+				struct l_dbus_message *message,
+				struct l_dbus_message_builder *builder, void *user_data)
+{
+	const uint8_t network_key[16] = {0};
+
+	//TODO - create api to get network key from node
+	dbus_append_byte_array(builder, network_key, 16);
+
+	return true;
+}
+
+static bool node_device_key_getter(struct l_dbus *dbus,
+				struct l_dbus_message *message,
+				struct l_dbus_message_builder *builder, void *user_data)
+{
+	struct mesh_node *node;
+	const char *path;
+	uint8_t uuid[UUID_LEN];
+	const uint8_t *device_key;
+
+	path = l_dbus_message_get_path(message);
+	if (!get_uuid_from_path(path, uuid))
+		return false;
+
+	node = l_queue_find(nodes, match_device_uuid, uuid);
+
+	if (node)
+		device_key = node_get_device_key(node);
+
+	dbus_append_byte_array(builder, device_key, 16);
+
+	return true;
+}
+
+static bool node_application_keys_getter(struct l_dbus *dbus,
+				struct l_dbus_message *message,
+				struct l_dbus_message_builder *builder, void *user_data)
+{
+	const uint8_t app_keys[2][16] = {
+		{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0},
+		{0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1}
+	};
+	int i;
+
+	//TODO - create api to get application keys from node
+
+	if (!l_dbus_message_builder_enter_array(builder, "ay"))
+		return false;
+
+	for (i = 0; i < 2; i++)
+		if (!dbus_append_byte_array(builder, app_keys[i], 16))
+			return false;
+
+	if (!l_dbus_message_builder_leave_array(builder))
+		return false;
+
+	return true;
+}
+
+static bool node_elements_getter(struct l_dbus *dbus,
+				struct l_dbus_message *message,
+				struct l_dbus_message_builder *builder, void *user_data)
+{
+	struct mesh_node *node;
+	const char *path;
+	uint8_t uuid[UUID_LEN];
+	uint16_t elements = 0;
+
+	path = l_dbus_message_get_path(message);
+	if (!get_uuid_from_path(path, uuid))
+		goto done;
+
+	node = l_queue_find(nodes, match_device_uuid, uuid);
+
+	if (node) {
+		elements = (uint16_t) l_queue_length(node->elements);
+		goto done;
+	}
+
+done:
+	l_dbus_message_builder_append_basic(builder, 'q', &elements);
+
+	return true;
+}
+
+static void setup_node_interface(struct l_dbus_interface *interface)
+{
+	l_dbus_interface_method(interface, "SendMessage", 0,
+				send_message_call, "", "qqayayq", "element", "dest",
+				"opcode", "payload", "key_index");
+
+	l_dbus_interface_signal(interface, "MessageReceived", 0,
+				"qqayayq", "element", "source", "opcode",
+				"payload", "key_index");
+
+	l_dbus_interface_property(interface, "Address", 0, "q",
+				node_address_getter, NULL);
+
+	l_dbus_interface_property(interface, "NetworkKey", 0, "ay",
+				node_network_key_getter, NULL);
+
+	l_dbus_interface_property(interface, "DeviceKey", 0, "ay",
+				node_device_key_getter, NULL);
+
+	l_dbus_interface_property(interface, "ApplicationKeys", 0, "aay",
+				node_application_keys_getter, NULL);
+
+	l_dbus_interface_property(interface, "Elements", 0, "q",
+				node_elements_getter, NULL);
 }
 
 bool node_dbus_init(struct l_dbus *bus)
 {
+	if (!l_dbus_register_interface(bus, MESH_PROVISIONING_INTERFACE,
+						setup_provisioning_interface, NULL, false)) {
+		l_info("Unable to register %s interface", MESH_PROVISIONING_INTERFACE);
+		return false;
+	}
+
 	if (!l_dbus_register_interface(bus, MESH_NODE_INTERFACE,
-						setup_node_interface,
-						NULL, false)) {
+						setup_node_interface, NULL, false)) {
 		l_info("Unable to register %s interface", MESH_NODE_INTERFACE);
 		return false;
 	}

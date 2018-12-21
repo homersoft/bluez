@@ -28,6 +28,17 @@ struct mesh_agent;
 #define MIN_SEQ_CACHE		(2*MIN_SEQ_TRIGGER)
 #define MIN_SEQ_CACHE_TIME	(5*60)
 
+#define UUID_LEN 16
+#define OPCODE_MAX_LEN 3
+#define PAYLOAD_MAX_LEN 379
+
+struct request_node_data {
+	uint8_t uuid[UUID_LEN];
+	bool is_advertising;
+	/* Each element should have l_queue of models. */
+	struct l_queue *elements;
+};
+
 typedef void (*node_attach_ready_func_t) (int status, char *node_path,
 								uint64_t token);
 
@@ -36,8 +47,9 @@ typedef void (*node_join_ready_func_t) (struct mesh_node *node,
 
 struct mesh_node *node_new(void);
 void node_free(struct mesh_node *node);
-void node_join(const char *app_path, const char *sender, const uint8_t *uuid,
-						node_join_ready_func_t cb);
+void request_node_free(struct request_node_data *node);
+bool create_node_request(struct request_node_data *request_node);
+bool delete_node(uint8_t *uuid);
 uint8_t *node_uuid_get(struct mesh_node *node);
 struct mesh_net *node_get_net(struct mesh_node *node);
 struct mesh_node *node_find_by_addr(uint16_t addr);
