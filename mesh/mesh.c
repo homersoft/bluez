@@ -406,7 +406,9 @@ static struct l_dbus_message *create_node_call(struct l_dbus *dbus,
 						void *user_data)
 {
 	struct request_node_data *new_node;
-	uint16_t *model;
+	uint16_t model;
+	uint16_t n = 0;
+	uint64_t element_bits = 0;
 	struct l_dbus_message_iter iter_uuid, iter_element_models, iter_temp_element;
 	uint32_t temp_element_idx = 0;
 	uint16_t element_idx;
@@ -420,31 +422,30 @@ static struct l_dbus_message *create_node_call(struct l_dbus *dbus,
 								&iter_element_models))
 		return dbus_error(msg, MESH_ERROR_INVALID_ARGS, NULL);
 
-	new_node = l_new(struct request_node_data, 1);
-
-	if (dbus_get_byte_array(&iter_uuid, new_node->uuid, UUID_LEN) != UUID_LEN) {
-		l_free(new_node);
+	if (dbus_get_byte_array(&iter_uuid, new_node->uuid, UUID_LEN) != UUID_LEN)
 		return dbus_error(msg, MESH_ERROR_INVALID_ARGS, "Bad device UUID");
-	}
-
-	if (!new_node->elements)
-		new_node->elements = l_queue_new();
 
 	while (l_dbus_message_iter_next_entry(&iter_element_models, &element_idx,
 				&iter_temp_element))
 	{
-		if (element_idx != temp_element_idx) {
-			request_node_free(new_node);
-			return dbus_error(msg, MESH_ERROR_INVALID_ARGS, "Wrong element indexation");
-		}
+		element_bits |= (1 << element_idx);
+		n++;
+	}
 
+	if (element_bits != ((1 << n) - 1))
+		return dbus_error(msg, MESH_ERROR_INVALID_ARGS, "Wrong element indexation");
+
+	new_node = l_new(struct request_node_data, 1);
+
+	new_node->elements = l_queue_new();
+
+	while (l_dbus_message_iter_next_entry(&iter_element_models, &element_idx,
+				&iter_temp_element))
+	{
 		element_models = l_queue_new();
 
-		while (has_next_model) {
-			model = l_new(uint16_t, 1);
-			has_next_model = l_dbus_message_iter_next_entry(&iter_temp_element, model);
-			if (has_next_model)
-				l_queue_push_tail(element_models, model);
+		while (l_dbus_message_iter_next_entry(&iter_temp_element, &model)) {
+			l_queue_push_tail(element_models, l_memdup(&model, sizeof(uint16_t)));
 		}
 
 		l_queue_push_tail(new_node->elements, element_models);

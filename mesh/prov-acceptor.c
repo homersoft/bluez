@@ -688,6 +688,7 @@ bool acceptor_start(uint8_t num_ele, uint8_t uuid[16],
 	}
 
 	/* Infinitely Beacon until Canceled, or Provisioning Starts */
+	//FIXME
 	result = true;
 
 	if (!result)

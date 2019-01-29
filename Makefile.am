@@ -124,8 +124,8 @@ ell_headers = ell/util.h \
 			ell/dbus.h \
 			ell/dbus-service.h \
 			ell/dbus-client.h \
-            ell/checksum.h \
-            ell/uuid.h
+			ell/checksum.h \
+			ell/uuid.h
 
 ell_sources = ell/private.h ell/missing.h \
 			ell/util.c \
@@ -152,8 +152,8 @@ ell_sources = ell/private.h ell/missing.h \
 			ell/gvariant-util.c \
 			ell/siphash-private.h \
 			ell/siphash.c \
-            ell/checksum.c \
-            ell/uuid.c
+			ell/checksum.c \
+			ell/uuid.c
 
 ell_libell_internal_la_SOURCES = $(ell_headers) $(ell_sources)
 endif
