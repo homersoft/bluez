@@ -47,6 +47,9 @@
 #include "mesh/mesh-db.h"
 #include "mesh/storage.h"
 
+/* Define how many separators occurs in uuid during uuid to str conversion */
+#define NUM_OF_SEP_IN_UUID_STR   ((uint8_t)4)
+
 struct write_info {
 	json_object *jnode;
 	const char *config_name;
@@ -227,6 +230,26 @@ done:
 		l_free(str);
 
 	return result;
+}
+
+static void uuid_to_str(uint8_t* uuid_buf, uint8_t* str_buf)
+{
+   const uint8_t UUID_FIRST_SEP_IDX = 3;
+
+   for(int i = 0; i < UUID_LEN; i++)
+   {
+      uint8_t temp[4];
+      sprintf(temp, "%02x", uuid_buf[i]);
+
+      if(i == UUID_FIRST_SEP_IDX) {
+         temp[2] = '-';
+         temp[3] = '\0';
+      } else if ( ((i + 1) % 2 == 0) && (i >= 4 && i < 10)) {
+         temp[2] = '-';
+         temp[3] = '\0';
+      }
+      strcat(str_buf, temp);
+   }
 }
 
 bool storage_set_ttl(json_object *jnode, uint8_t ttl)
@@ -515,9 +538,8 @@ bool storage_load_nodes(const char *dir_name)
 
 bool storage_create_node_config(struct mesh_node *node, void *data)
 {
+   const uint8_t uuid_str_len = sizeof(uint8_t *) * UUID_LEN + NUM_OF_SEP_IN_UUID_STR + 1;
 	struct mesh_db_node *db_node = data;
-	uint16_t node_id;
-	uint8_t num_tries = 0;
 	char name_buf[PATH_MAX];
 	char *filename;
 	json_object *jnode;
@@ -531,17 +553,13 @@ bool storage_create_node_config(struct mesh_node *node, void *data)
 	if (!mesh_db_add_node(jnode, db_node))
 		return false;
 
-	do {
-		l_getrandom(&node_id, 2);
-		if (!l_queue_find(node_ids, simple_match,
-						L_UINT_TO_PTR(node_id)))
-			break;
-	} while (++num_tries < 10);
+   uint8_t *uuid_str = malloc(uuid_str_len);
+   uuid_str = memset(uuid_str, '\0', uuid_str_len);
 
-	if (num_tries == 10)
-		l_error("Failed to generate unique node ID");
+   uuid_to_str(node_uuid_get(node), uuid_str);
 
-	snprintf(name_buf, PATH_MAX, "%s/%04x", storage_dir, node_id);
+	snprintf(name_buf, PATH_MAX, "%s/%s", storage_dir, uuid_str);
+   free(uuid_str);
 
 	/* Create a new directory and node.json file */
 	if (mkdir(name_buf, 0755) != 0)

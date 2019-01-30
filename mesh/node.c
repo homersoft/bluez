@@ -89,7 +89,7 @@ struct mesh_node {
 		uint8_t cnt;
 		uint8_t mode;
 	} relay;
-	uint8_t dev_uuid[16];
+	uint8_t dev_uuid[UUID_LEN];
 	uint8_t dev_key[16];
 	uint8_t num_ele;
 	uint8_t ttl;
