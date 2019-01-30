@@ -35,6 +35,7 @@
 
 #include <json-c/json.h>
 #include <ell/ell.h>
+#include "ell/uuid.h"
 
 #include "mesh/mesh-defs.h"
 
@@ -230,26 +231,6 @@ done:
 		l_free(str);
 
 	return result;
-}
-
-static void uuid_to_str(uint8_t* uuid_buf, uint8_t* str_buf)
-{
-   const uint8_t UUID_FIRST_SEP_IDX = 3;
-
-   for(int i = 0; i < UUID_LEN; i++)
-   {
-      uint8_t temp[4];
-      sprintf(temp, "%02x", uuid_buf[i]);
-
-      if(i == UUID_FIRST_SEP_IDX) {
-         temp[2] = '-';
-         temp[3] = '\0';
-      } else if ( ((i + 1) % 2 == 0) && (i >= 4 && i < 10)) {
-         temp[2] = '-';
-         temp[3] = '\0';
-      }
-      strcat(str_buf, temp);
-   }
 }
 
 bool storage_set_ttl(json_object *jnode, uint8_t ttl)
@@ -538,7 +519,9 @@ bool storage_load_nodes(const char *dir_name)
 
 bool storage_create_node_config(struct mesh_node *node, void *data)
 {
-   const uint8_t uuid_str_len = sizeof(uint8_t *) * UUID_LEN + NUM_OF_SEP_IN_UUID_STR + 1;
+   const uint8_t uuid_str_len = (2 * UUID_LEN) + NUM_OF_SEP_IN_UUID_STR + 1;
+   char uuid_str[uuid_str_len];
+   
 	struct mesh_db_node *db_node = data;
 	char name_buf[PATH_MAX];
 	char *filename;
@@ -553,13 +536,10 @@ bool storage_create_node_config(struct mesh_node *node, void *data)
 	if (!mesh_db_add_node(jnode, db_node))
 		return false;
 
-   uint8_t *uuid_str = malloc(uuid_str_len);
-   uuid_str = memset(uuid_str, '\0', uuid_str_len);
-
-   uuid_to_str(node_uuid_get(node), uuid_str);
+	/* Convert UUID to string */
+   l_uuid_to_string(node_uuid_get(node), &uuid_str[0], uuid_str_len);
 
 	snprintf(name_buf, PATH_MAX, "%s/%s", storage_dir, uuid_str);
-   free(uuid_str);
 
 	/* Create a new directory and node.json file */
 	if (mkdir(name_buf, 0755) != 0)
