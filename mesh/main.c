@@ -48,6 +48,9 @@ static const struct option main_options[] = {
 	{ "config",	optional_argument,	NULL, 'c' },
 	{ "nodetach",	no_argument,		NULL, 'n' },
 	{ "debug",	no_argument,		NULL, 'd' },
+	{ "debug-bus",	no_argument,		NULL, 'b' },
+	{ "system-bus",	no_argument,		NULL, 'S' },
+	{ "session-bus",	no_argument,		NULL, 's' },
 	{ "help",	no_argument,		NULL, 'h' },
 	{ }
 };
@@ -62,6 +65,9 @@ static void usage(void)
 	       "\t--config          Configuration directory\n"
 	       "\t--nodetach        Run in foreground\n"
 	       "\t--debug           Enable debug output\n"
+	       "\t--debug-bus       Enable dbus debug output\n"
+	       "\t--system-bus      Connect to system bus (default)\n"
+	       "\t--session-bus     Connect to session bus\n"
 	       "\t--help            Show %s information\n", __func__);
 }
 
@@ -116,6 +122,7 @@ int main(int argc, char *argv[])
 	int status;
 	bool detached = true;
 	bool dbus_debug = false;
+	enum l_dbus_bus dbus_bus = L_DBUS_SYSTEM_BUS;
 	struct l_dbus *dbus = NULL;
 	const char *config_dir = NULL;
 	int index = MGMT_INDEX_NONE;
@@ -129,7 +136,7 @@ int main(int argc, char *argv[])
 		int opt;
 		const char *str;
 
-		opt = getopt_long(argc, argv, "i:c:ndbh", main_options, NULL);
+		opt = getopt_long(argc, argv, "i:c:ndbsSh", main_options, NULL);
 		if (opt < 0)
 			break;
 
@@ -160,6 +167,12 @@ int main(int argc, char *argv[])
 		case 'b':
 			dbus_debug = true;
 			break;
+		case 'S':
+			dbus_bus = L_DBUS_SYSTEM_BUS;
+			break;
+		case 's':
+			dbus_bus = L_DBUS_SESSION_BUS;
+			break;
 		case 'h':
 			usage();
 			status = EXIT_SUCCESS;
@@ -179,7 +192,7 @@ int main(int argc, char *argv[])
 
 	umask(0077);
 
-	dbus = l_dbus_new_default(L_DBUS_SYSTEM_BUS);
+	dbus = l_dbus_new_default(dbus_bus);
 	if (!dbus) {
 		l_error("unable to connect to D-Bus");
 		status = EXIT_FAILURE;
