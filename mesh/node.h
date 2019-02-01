@@ -32,13 +32,6 @@ struct mesh_agent;
 #define OPCODE_MAX_LEN 3
 #define PAYLOAD_MAX_LEN 379
 
-struct request_node_data {
-	uint8_t uuid[UUID_LEN];
-	bool is_advertising;
-	/* Each element should have l_queue of models. */
-	struct l_queue *elements;
-};
-
 typedef void (*node_attach_ready_func_t) (int status, char *node_path,
 								uint64_t token);
 
@@ -47,8 +40,8 @@ typedef void (*node_join_ready_func_t) (struct mesh_node *node,
 
 struct mesh_node *node_new(void);
 void node_free(struct mesh_node *node);
-void request_node_free(struct request_node_data *node);
-bool create_node_request(struct request_node_data *request_node);
+bool create_node_request(uint8_t *uuid, uint16_t cid, uint16_t pid, uint16_t vid,
+							struct l_dbus_message_iter *iter_element_models);
 bool delete_node(uint8_t *uuid);
 uint8_t *node_uuid_get(struct mesh_node *node);
 struct mesh_net *node_get_net(struct mesh_node *node);

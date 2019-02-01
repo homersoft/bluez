@@ -141,6 +141,14 @@ static bool match_model_id(const void *a, const void *b)
 	return (mesh_model_get_model_id(model) == id);
 }
 
+int compare_model_id(const void *a, const void *b, void *user_data)
+{
+	const struct mesh_model *new_model = a;
+	const struct mesh_model *current_model = b ;
+
+	return (new_model->id - current_model->id);
+}
+
 static struct mesh_model *get_model(struct mesh_node *node, uint8_t ele_idx,
 						uint32_t id, int *status)
 {
@@ -203,15 +211,10 @@ static struct l_dbus_message *create_config_update_msg(struct mesh_node *node,
 {
 	struct l_dbus *dbus = dbus_get_bus();
 	struct l_dbus_message *msg;
-	const char *owner;
-	const char *path;
 	uint16_t model_id;
 
-	owner = node_get_owner(node);
-	path = node_get_element_path(node, ele_idx);
-	if (!path || !owner)
-		return NULL;
-
+	/*
+	FIXME emit signal
 	l_debug("Send \"UpdateModelConfiguration\"");
 	msg = l_dbus_message_new_method_call(dbus, owner, path,
 						MESH_ELEMENT_INTERFACE,
@@ -229,6 +232,7 @@ static struct l_dbus_message *create_config_update_msg(struct mesh_node *node,
 		uint16_t vendor = id >> 16;
 		dbus_append_dict_entry_basic(*builder, "Vendor", "q", &vendor);
 	}
+	*/
 
 	return msg;
 }
@@ -710,15 +714,11 @@ static void send_msg_rcvd(struct mesh_node *node, uint8_t ele_idx, bool is_sub,
 	struct l_dbus *dbus = dbus_get_bus();
 	struct l_dbus_message *msg;
 	struct l_dbus_message_builder *builder;
-	const char *owner;
-	const char *path;
 
-	owner = node_get_owner(node);
-	path = node_get_element_path(node, ele_idx);
-	if (!path || !owner)
-		return;
+	l_debug("Emit \"MessageReceived\" signal");
 
-	l_debug("Send \"MessageReceived\"");
+	/*
+	FIXME: emit signal instead of 'that' below
 
 	msg = l_dbus_message_new_method_call(dbus, owner, path,
 				MESH_ELEMENT_INTERFACE, "MessageReceived");
@@ -744,6 +744,7 @@ static void send_msg_rcvd(struct mesh_node *node, uint8_t ele_idx, bool is_sub,
 
 error:
 	l_dbus_message_builder_destroy(builder);
+	*/
 }
 
 bool mesh_model_rx(struct mesh_node *node, bool szmict, uint32_t seq0,

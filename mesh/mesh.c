@@ -402,32 +402,36 @@ static const char *prov_status_str(uint8_t status)
 }
 
 static struct l_dbus_message *create_node_call(struct l_dbus *dbus,
-						struct l_dbus_message *msg,
-						void *user_data)
+					struct l_dbus_message *msg, void *user_data)
 {
-	struct request_node_data *new_node;
-	uint16_t model;
 	uint16_t n = 0;
 	uint64_t element_bits = 0;
-	struct l_dbus_message_iter iter_uuid, iter_element_models, iter_temp_element;
-	uint32_t temp_element_idx = 0;
-	uint16_t element_idx;
-	bool has_next_model = true;
+	uint16_t cid, pid, vid;
+	struct l_dbus_message_iter iter_element_models, iter_temp_element_models;
+	struct l_dbus_message_iter iter_uuid, iter_temp_element;
+	uint8_t element_idx;
+	uint8_t temp_uuid[UUID_LEN] = {0};
 	struct l_dbus_message *reply;
-	struct l_queue *element_models;
 
 	l_debug("Create node request");
 
-	if (!l_dbus_message_get_arguments(msg, "aya{qaq}", &iter_uuid,
-								&iter_element_models))
+	if (!l_dbus_message_get_arguments(msg, "qqqaya{yaq}", &cid, &pid, &vid,
+				&iter_uuid, &iter_element_models))
 		return dbus_error(msg, MESH_ERROR_INVALID_ARGS, NULL);
 
-	if (dbus_get_byte_array(&iter_uuid, new_node->uuid, UUID_LEN) != UUID_LEN)
-		return dbus_error(msg, MESH_ERROR_INVALID_ARGS, "Bad device UUID");
+	iter_temp_element_models = iter_element_models;
 
-	while (l_dbus_message_iter_next_entry(&iter_element_models, &element_idx,
+	if (dbus_get_byte_array(&iter_uuid, temp_uuid, UUID_LEN) != UUID_LEN)
+		return dbus_error(msg, MESH_ERROR_INVALID_ARGS, "Wrong UUID");
+
+	if (node_find_by_uuid(temp_uuid))
+		return dbus_error(msg, MESH_ERROR_ALREADY_EXISTS, NULL);
+
+	while (l_dbus_message_iter_next_entry(&iter_temp_element_models, &element_idx,
 				&iter_temp_element))
 	{
+		if (element_idx > 63)
+			return dbus_error(msg, MESH_ERROR_INVALID_ARGS, "Max element id 63");
 		element_bits |= (1 << element_idx);
 		n++;
 	}
@@ -435,34 +439,17 @@ static struct l_dbus_message *create_node_call(struct l_dbus *dbus,
 	if (element_bits != ((1 << n) - 1))
 		return dbus_error(msg, MESH_ERROR_INVALID_ARGS, "Wrong element indexation");
 
-	new_node = l_new(struct request_node_data, 1);
-
-	new_node->elements = l_queue_new();
-
-	while (l_dbus_message_iter_next_entry(&iter_element_models, &element_idx,
-				&iter_temp_element))
-	{
-		element_models = l_queue_new();
-
-		while (l_dbus_message_iter_next_entry(&iter_temp_element, &model)) {
-			l_queue_push_tail(element_models, l_memdup(&model, sizeof(uint16_t)));
-		}
-
-		l_queue_push_tail(new_node->elements, element_models);
-		temp_element_idx++;
-	}
-
-	new_node->is_advertising = false;
+	if (!create_node_request(temp_uuid, pid, cid, vid, &iter_element_models))
+		return dbus_error(msg, MESH_ERROR_FAILED, NULL);
 
 	reply = l_dbus_message_new_method_return(msg);
-	l_dbus_message_set_arguments(reply, "b", create_node_request(new_node));
+	l_dbus_message_set_arguments(reply, "");
 
 	return reply;
 }
 
 static struct l_dbus_message *delete_node_call(struct l_dbus *dbus,
-						struct l_dbus_message *msg,
-						void *user_data)
+						struct l_dbus_message *msg, void *user_data)
 {
 	struct l_dbus_message *reply;
 	struct l_dbus_message_iter iter_uuid;
@@ -474,24 +461,25 @@ static struct l_dbus_message *delete_node_call(struct l_dbus *dbus,
 	if (!l_dbus_message_get_arguments(msg, "ay", &iter_uuid))
 		return dbus_error(msg, MESH_ERROR_INVALID_ARGS, NULL);
 
-	if (dbus_get_byte_array(&iter_uuid, uuid, UUID_LEN) != UUID_LEN) {
-		return dbus_error(msg, MESH_ERROR_INVALID_ARGS,
-							"Bad device UUID");
-	}
+	if (dbus_get_byte_array(&iter_uuid, uuid, UUID_LEN) != UUID_LEN)
+		return dbus_error(msg, MESH_ERROR_INVALID_ARGS, "Wrong UUID");
+
+	if (!delete_node(uuid))
+		return dbus_error(msg, MESH_ERROR_DOES_NOT_EXIST, NULL);
 
 	reply = l_dbus_message_new_method_return(msg);
-	l_dbus_message_set_arguments(reply, "b", delete_node(uuid));
+	l_dbus_message_set_arguments(reply, "");
 
 	return reply;
 }
 
 static void setup_network_interface(struct l_dbus_interface *iface)
 {
-	l_dbus_interface_method(iface, "CreateNode", 0, create_node_call, "b",
-				"aya{qaq}", "status", "uuid", "element_models");
+	l_dbus_interface_method(iface, "CreateNode", 0, create_node_call, "",
+				"qqqaya{yaq}", "cid", "pid", "vid", "uuid", "element_models");
 
-	l_dbus_interface_method(iface, "DeleteNode", 0, delete_node_call, "b",
-				"ay", "status", "uuid");
+	l_dbus_interface_method(iface, "DeleteNode", 0, delete_node_call, "",
+				"ay", "uuid");
 }
 
 bool mesh_dbus_init(struct l_dbus *dbus)
