@@ -1031,6 +1031,14 @@ uint32_t mesh_net_get_iv_index(struct mesh_net *net)
 	return net->iv_index - (iv_is_updating(net) ? 1 : 0);
 }
 
+bool mesh_net_get_iv_update(struct mesh_net *net)
+{
+   if (!net)
+      return false;
+
+   return net->iv_update;
+}
+
 /* TODO: net key index? */
 void mesh_net_get_snb_state(struct mesh_net *net, uint8_t *flags,
 							uint32_t *iv_index)

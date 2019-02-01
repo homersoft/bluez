@@ -519,7 +519,7 @@ bool storage_load_nodes(const char *dir_name)
 
 bool storage_create_node_config(struct mesh_node *node, void *data)
 {
-   const uint8_t uuid_str_len = (2 * UUID_LEN) + NUM_OF_SEP_IN_UUID_STR + 1;
+   const uint8_t uuid_str_len = (2 * NODE_UUID_LEN) + NUM_OF_SEP_IN_UUID_STR + 1;
    char uuid_str[uuid_str_len];
    
 	struct mesh_db_node *db_node = data;

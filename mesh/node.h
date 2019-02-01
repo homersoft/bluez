@@ -27,7 +27,9 @@ struct mesh_agent;
 #define MIN_SEQ_TRIGGER	32
 #define MIN_SEQ_CACHE		(2*MIN_SEQ_TRIGGER)
 #define MIN_SEQ_CACHE_TIME	(5*60)
-#define UUID_LEN ((uint8_t)16)
+#define NODE_UUID_LEN      ((uint8_t)16)
+#define NODE_DEVKEY_LEN    ((uint8_t)16)
+#define NODE_NETKEY_LEN    ((uint8_t)16)
 
 typedef void (*node_attach_ready_func_t) (int status, char *node_path,
 								uint64_t token);

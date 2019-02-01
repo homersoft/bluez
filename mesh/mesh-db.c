@@ -1050,63 +1050,66 @@ static void parse_features(json_object *jconfig, struct mesh_db_node *node)
 	int mode, count;
 	uint16_t interval;
 
-	json_object_object_get_ex(jconfig, "proxy", &jvalue);
-	if (jvalue) {
-		mode = get_mode(jvalue);
-		if (mode <= MESH_MODE_UNSUPPORTED)
-			node->modes.proxy = mode;
-	}
+   printf(">>>>>parse_features()\r\n");
 
-	json_object_object_get_ex(jconfig, "friend", &jvalue);
-	if (jvalue) {
-		mode = get_mode(jvalue);
-		if (mode <= MESH_MODE_UNSUPPORTED)
-			node->modes.friend = mode;
-	}
 
-	json_object_object_get_ex(jconfig, "lowPower", &jvalue);
-	if (jvalue) {
-		mode = get_mode(jvalue);
-		if (mode <= MESH_MODE_UNSUPPORTED)
-			node->modes.friend = mode;
-	}
-
-	json_object_object_get_ex(jconfig, "beacon", &jvalue);
-	if (jvalue) {
-		mode = get_mode(jvalue);
-		if (mode <= MESH_MODE_ENABLED)
-			node->modes.beacon = mode;
-	}
-
-	json_object_object_get_ex(jconfig, "relay", &jrelay);
-	if (!jrelay)
-		return;
-
-	json_object_object_get_ex(jrelay, "mode", &jvalue);
-	if (jvalue) {
-		mode = get_mode(jvalue);
-		if (mode <= MESH_MODE_UNSUPPORTED)
-			node->modes.relay.state = mode;
-		else
-			return;
-	} else
-		return;
-
-	json_object_object_get_ex(jrelay, "count", &jvalue);
-	if (!jvalue)
-		return;
-
-	/* TODO: check range */
-	count = json_object_get_int(jvalue);
-	node->modes.relay.cnt = count;
-
-	json_object_object_get_ex(jrelay, "interval", &jvalue);
-	if (!jvalue)
-		return;
-
-	/* TODO: check range */
-	interval = json_object_get_int(jvalue);
-	node->modes.relay.interval = interval;
+//   json_object_object_get_ex(jconfig, "proxy", &jvalue);
+//	if (jvalue) {
+//		mode = get_mode(jvalue);
+//		if (mode <= MESH_MODE_UNSUPPORTED)
+//			node->modes.proxy = mode;
+//	}
+//
+//	json_object_object_get_ex(jconfig, "friend", &jvalue);
+//	if (jvalue) {
+//		mode = get_mode(jvalue);
+//		if (mode <= MESH_MODE_UNSUPPORTED)
+//			node->modes.friend = mode;
+//	}
+//
+//	json_object_object_get_ex(jconfig, "lowPower", &jvalue);
+//	if (jvalue) {
+//		mode = get_mode(jvalue);
+//		if (mode <= MESH_MODE_UNSUPPORTED)
+//			node->modes.friend = mode;
+//	}
+//
+//	json_object_object_get_ex(jconfig, "beacon", &jvalue);
+//	if (jvalue) {
+//		mode = get_mode(jvalue);
+//		if (mode <= MESH_MODE_ENABLED)
+//			node->modes.beacon = mode;
+//	}
+//
+//	json_object_object_get_ex(jconfig, "relay", &jrelay);
+//	if (!jrelay)
+//		return;
+//
+//	json_object_object_get_ex(jrelay, "mode", &jvalue);
+//	if (jvalue) {
+//		mode = get_mode(jvalue);
+//		if (mode <= MESH_MODE_UNSUPPORTED)
+//			node->modes.relay.state = mode;
+//		else
+//			return;
+//	} else
+//		return;
+//
+//	json_object_object_get_ex(jrelay, "count", &jvalue);
+//	if (!jvalue)
+//		return;
+//
+//	/* TODO: check range */
+//	count = json_object_get_int(jvalue);
+//	node->modes.relay.cnt = count;
+//
+//	json_object_object_get_ex(jrelay, "interval", &jvalue);
+//	if (!jvalue)
+//		return;
+//
+//	/* TODO: check range */
+//	interval = json_object_get_int(jvalue);
+//	node->modes.relay.interval = interval;
 }
 
 static bool parse_composition(json_object *jcomp, struct mesh_db_node *node)
@@ -1114,38 +1117,40 @@ static bool parse_composition(json_object *jcomp, struct mesh_db_node *node)
 	json_object *jvalue;
 	char *str;
 
-	/* All the fields in node composition are mandatory */
-	json_object_object_get_ex(jcomp, "cid", &jvalue);
-	if (!jvalue)
-		return false;
+   printf(">>>>>parse_composition()\r\n");
 
-	str = (char *)json_object_get_string(jvalue);
-	if (sscanf(str, "%04hx", &node->cid) != 1)
-		return false;
-
-	json_object_object_get_ex(jcomp, "pid", &jvalue);
-	if (!jvalue)
-		return false;
-
-	str = (char *)json_object_get_string(jvalue);
-	if (sscanf(str, "%04hx", &node->pid) != 1)
-		return false;
-
-	json_object_object_get_ex(jcomp, "vid", &jvalue);
-	if (!jvalue)
-		return false;
-
-	str = (char *)json_object_get_string(jvalue);
-	if (sscanf(str, "%04hx", &node->vid) != 1)
-		return false;
-
-	json_object_object_get_ex(jcomp, "crpl", &jvalue);
-	if (!jvalue)
-		return false;
-
-	str = (char *)json_object_get_string(jvalue);
-	if (sscanf(str, "%04hx", &node->crpl) != 1)
-		return false;
+   /* All the fields in node composition are mandatory */
+//	json_object_object_get_ex(jcomp, "cid", &jvalue);
+//	if (!jvalue)
+//		return false;
+//
+//	str = (char *)json_object_get_string(jvalue);
+//	if (sscanf(str, "%04hx", &node->cid) != 1)
+//		return false;
+//
+//	json_object_object_get_ex(jcomp, "pid", &jvalue);
+//	if (!jvalue)
+//		return false;
+//
+//	str = (char *)json_object_get_string(jvalue);
+//	if (sscanf(str, "%04hx", &node->pid) != 1)
+//		return false;
+//
+//	json_object_object_get_ex(jcomp, "vid", &jvalue);
+//	if (!jvalue)
+//		return false;
+//
+//	str = (char *)json_object_get_string(jvalue);
+//	if (sscanf(str, "%04hx", &node->vid) != 1)
+//		return false;
+//
+//	json_object_object_get_ex(jcomp, "crpl", &jvalue);
+//	if (!jvalue)
+//		return false;
+//
+//	str = (char *)json_object_get_string(jvalue);
+//	if (sscanf(str, "%04hx", &node->crpl) != 1)
+//		return false;
 
 	return true;
 }
@@ -1200,6 +1205,27 @@ bool mesh_db_read_node(json_object *jnode, mesh_db_node_cb cb, void *user_data)
 	}
 
 	return cb(&node, user_data);
+}
+
+bool mesh_db_write_model_id(json_object *jobj, struct mesh_db_model *mod)
+{
+   char buf[9];
+   json_object *jstring;
+
+   if (!mod->vendor) {
+      snprintf(buf, 5, "%4.4x", (uint16_t)mod->id);
+   }
+	else {
+      snprintf(buf, 9, "%8.8x", mod->id);
+	}
+
+   jstring = json_object_new_string(buf);
+
+   if (!jstring)
+      return false;
+
+   json_object_array_add(jobj, jstring);
+   return true;
 }
 
 bool mesh_db_write_uint16_hex(json_object *jobj, const char *desc,
@@ -1385,19 +1411,9 @@ void mesh_db_remove_property(json_object *jobj, const char *desc)
 static void add_model(void *a, void *b)
 {
 	struct mesh_db_model *mod = a;
-	json_object *jmodels = b, *jmodel;
+	json_object *jmodels = b;
 
-	jmodel = json_object_new_object();
-	if (!jmodel)
-		return;
-
-	if (!mod->vendor)
-		mesh_db_write_uint16_hex(jmodel, "modelId",
-						(uint16_t) mod->id);
-	else
-		mesh_db_write_uint32_hex(jmodel, "modelId", mod->id);
-
-	json_object_array_add(jmodels, jmodel);
+   (void)mesh_db_write_model_id(jmodels, mod);
 }
 
 /* Add unprovisioned node (local) */
@@ -1411,83 +1427,99 @@ bool mesh_db_add_node(json_object *jnode, struct mesh_db_node *node) {
 	if (!mesh_db_write_uint16_hex(jnode, "cid", node->cid))
 		return false;
 
-	if (!mesh_db_write_uint16_hex(jnode, "pid", node->pid))
-		return false;
+   /* CID, PID, VID */
+   if (!mesh_db_write_uint16_hex(jnode, "cid", node->cid))
+      return false;
 
-	if (!mesh_db_write_uint16_hex(jnode, "vid", node->vid))
-		return false;
+   if (!mesh_db_write_uint16_hex(jnode, "pid", node->pid))
+      return false;
 
-	if (!mesh_db_write_uint16_hex(jnode, "crpl", node->crpl))
-		return false;
+   if (!mesh_db_write_uint16_hex(jnode, "vid", node->vid))
+      return false;
 
-	/* Device UUID */
-	if (!add_key(jnode, "UUID", node->uuid))
-		return false;
+   /* IV index and IV update flag */
+   if(!mesh_db_write_iv_index(jnode, node->iv_index, node->iv_update))
+      return false;
 
-	/* Features: relay, LPN, friend, proxy*/
-	if (!mesh_db_write_relay_mode(jnode, modes->relay.state,
-						modes->relay.cnt,
-						modes->relay.interval))
-		return false;
+   /* Device UUID */
+   if(!add_key(jnode, "UUID", node->uuid))
+      return false;
 
-	if (!mesh_db_write_mode(jnode, "lowPower", modes->lpn))
-		return false;
+   /* Beaconing state */
+   if(!mesh_db_write_bool(jnode, "beacon", modes->beacon))
+      return false;
 
-	if (!mesh_db_write_mode(jnode, "friend", modes->friend))
-		return false;
+   /* Default TTL */
+   json_object_object_add(jnode, "defaultTTL", json_object_new_int(node->ttl));
 
-	if (!mesh_db_write_mode(jnode, "proxy", modes->proxy))
-		return false;
+   /* Device Key */
+   if(!mesh_db_write_device_key(jnode, node->dev_key))
+      return false;
 
-	/* Beaconing state */
-	if (!mesh_db_write_mode(jnode, "beacon", modes->beacon))
-		return false;
+   /* Elements */
+   jelements = json_object_new_object();
+
+   if(!jelements)
+      return false;
+
+   entry = l_queue_get_entries(node->elements);
+
+   for(int idx = 0; entry; entry = entry->next, idx++)
+   {
+      char int_as_str[5];
+      struct mesh_db_element *ele = entry->data;
+
+      /* Convert idx to string value */
+      sprintf(int_as_str, "%d", idx);
+
+      json_object *jsub_elements = json_object_new_object();
+
+      mesh_db_write_int(jsub_elements, "elementIndex", ele->index);
+      mesh_db_write_uint16_hex(jsub_elements, "location", ele->location);
+
+      json_object_object_add(jelements, &int_as_str[0], jsub_elements);
+
+      /* Models */
+      if(l_queue_isempty(ele->models))
+         continue;
+
+      json_object *jmodels = json_object_new_array();
+
+      if(!jmodels) {
+         json_object_put(jelements);
+         return false;
+      }
+
+      json_object_object_add(jsub_elements, "models", jmodels);
+      l_queue_foreach(ele->models, add_model, jmodels);
+   }
+
+   json_object_object_add(jnode, "elements", jelements);
+
+   /* Friend and low power flags */
+   if(!mesh_db_write_bool(jnode, "friend", modes->friend))
+      return false;
+
+   if(!mesh_db_write_bool(jnode, "lowPower", modes->low_power))
+      return false;
+
+   /* Network Key */
+   if(!add_key(jnode, "net_key", node->net_key))
+      return false;
+
+   /* Provisioned and proxy flags */
+	if (!mesh_db_write_bool(jnode, "provisioned", node->provisioned))
+      return false;
+
+	if (!mesh_db_write_bool(jnode, "proxy", modes->proxy))
+      return false;
 
 	/* Sequence number */
-	json_object_object_add(jnode, "sequenceNumber",
-					json_object_new_int(node->seq_number));
+	json_object_object_add(jnode, "sequenceNumber", json_object_new_int(node->seq_number));
 
-	/* Default TTL */
-	json_object_object_add(jnode, "defaultTTL",
-						json_object_new_int(node->ttl));
-
-	/* Elements */
-	jelements = json_object_new_array();
-	if (!jelements)
-		return false;
-
-	entry = l_queue_get_entries(node->elements);
-
-	for (; entry; entry = entry->next) {
-		struct mesh_db_element *ele = entry->data;
-		json_object *jelement, *jmodels;
-
-		jelement = json_object_new_object();
-
-		if (!jelement) {
-			json_object_put(jelements);
-			return false;
-		}
-
-		mesh_db_write_int(jelement, "elementIndex", ele->index);
-		mesh_db_write_uint16_hex(jelement, "location", ele->location);
-		json_object_array_add(jelements, jelement);
-
-		/* Models */
-		if (l_queue_isempty(ele->models))
-			continue;
-
-		jmodels = json_object_new_array();
-		if (!jmodels) {
-			json_object_put(jelements);
-			return false;
-		}
-
-		json_object_object_add(jelement, "models", jmodels);
-		l_queue_foreach(ele->models, add_model, jmodels);
-	}
-
-	json_object_object_add(jnode, "elements", jelements);
+   /* Unicast address */
+   if (!mesh_db_write_uint16_hex(jnode, "unicastAddress", node->unicast))
+      return false;
 
 	return true;
 }
