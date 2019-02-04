@@ -91,6 +91,7 @@ struct mesh_model *mesh_model_vendor_new(uint8_t ele_idx, uint16_t vendor_id,
 void mesh_model_free(void *data);
 uint32_t mesh_model_get_model_id(const struct mesh_model *model);
 int compare_model_id(const void *a, const void *b, void *user_data);
+bool match_model_id(const void *a, const void *b);
 bool mesh_model_register(struct mesh_node *node, uint8_t ele_idx,
 			uint32_t mod_id, const struct mesh_model_ops *cbs,
 							void *user_data);

@@ -135,14 +135,6 @@ static bool match_element_idx(const void *a, const void *b)
 	return (element->idx == index);
 }
 
-static bool match_model_id(const void *a, const void *b)
-{
-	uint16_t model_id = L_PTR_TO_UINT(a);
-	uint16_t index = L_PTR_TO_UINT(b);
-
-	return (model_id == index);
-}
-
 static int compare_element_idx(const void *a, const void *b, void *user_data)
 {
 	const struct node_element *new_element = a;
@@ -288,35 +280,55 @@ static bool add_model_from_properties(struct node_element *ele, uint16_t model_i
 	if (!ele->models)
 		ele->models = l_queue_new();
 
-	l_debug("model_id %4.4x", model_id);
+	l_debug("sig model_id %4.4x", model_id);
 	mod = mesh_model_new(ele->idx, model_id);
 	l_queue_insert(ele->models, mod, compare_model_id, NULL);
 }
 
+static bool add_vendor_model_from_properties(struct node_element *ele, uint16_t vendor_id,
+					uint16_t model_id)
+{
+	struct mesh_model *mod;
+
+	if (!ele->models)
+		ele->models = l_queue_new();
+
+	l_debug("model_id %4.4x vendor_id: %4.4x", model_id, vendor_id);
+	mod = mesh_model_vendor_new(ele->idx, vendor_id, model_id);
+	l_queue_insert(ele->models, mod, compare_model_id, NULL);
+}
+
 static bool add_element_properties(struct mesh_node *node, uint8_t element_idx,
-					struct l_dbus_message_iter *element_properties)
+					uint16_t location, struct l_dbus_message_iter *iter_sig_models,
+					struct l_dbus_message_iter *iter_vendor_models, uint16_t cid)
 {
 	struct node_element *ele;
 	uint16_t model = 0;
-	uint16_t config_model = 0x0000;
-	uint16_t health_model = 0x0002;
+	uint32_t config_model = 0xFFFF0000;
+	uint32_t health_model = 0xFFFF0002;
 
 	ele = l_new(struct node_element, 1);
 	ele->idx = element_idx;
+	ele->location = location;
+	ele->models = l_queue_new();
 
-	while (l_dbus_message_iter_next_entry(element_properties, &model)) {
+	while (l_dbus_message_iter_next_entry(iter_sig_models, &model)) {
 		add_model_from_properties(ele, model);
 	}
 
-	if (0 == element_idx) {
-		if (!l_queue_find(ele->models, match_model_id, &config_model))
-			add_model_from_properties(ele, config_model);
+	while (l_dbus_message_iter_next_entry(iter_vendor_models, &model)) {
+		add_vendor_model_from_properties(ele, cid, model);
+	}
 
-		if (!l_queue_find(ele->models, match_model_id, &health_model))
-			add_model_from_properties(ele, health_model);
+	if (0 == element_idx) {
+		if (!l_queue_find(ele->models, match_model_id, L_UINT_TO_PTR(config_model)))
+			add_model_from_properties(ele, 0x0000);
+
+		if (!l_queue_find(ele->models, match_model_id, L_UINT_TO_PTR(health_model)))
+			add_model_from_properties(ele, 0x0002);
 	} else {
-		if (l_queue_find(ele->models, match_model_id, &config_model) ||
-			l_queue_find(ele->models, match_model_id, &health_model))
+		if (l_queue_find(ele->models, match_model_id, L_UINT_TO_PTR(config_model)) ||
+			l_queue_find(ele->models, match_model_id, L_UINT_TO_PTR(health_model)))
 		{
 			goto failed;
 		}
@@ -340,8 +352,10 @@ static void add_internal_models(struct mesh_node *node)
 	ele = l_queue_find(node->elements, match_element_idx,
 							L_UINT_TO_PTR(PRIMARY_ELE_IDX));
 
+	//adding minimal SIG models configuration onto primary element with
+	//0x0000 (unknown) location
 	if (!ele)
-		add_element_properties(node, PRIMARY_ELE_IDX, NULL);
+		add_element_properties(node, PRIMARY_ELE_IDX, 0x0000, NULL, NULL, 0);
 }
 
 static bool add_element(struct mesh_node *node, struct mesh_db_element *db_ele)
@@ -1147,17 +1161,19 @@ bool create_node_request(uint8_t *uuid, uint16_t cid, uint16_t pid, uint16_t vid
 							struct l_dbus_message_iter *iter_element_models)
 {
 	struct mesh_node *new_node;
-	struct l_dbus_message_iter iter_temp_element;
+	struct l_dbus_message_iter iter_sig_models, iter_vendor_models;
 	uint8_t element_idx;
+	uint16_t location;
 
 	new_node = l_new(struct mesh_node, 1);
 	new_node->elements = l_queue_new();
 	memcpy(new_node->dev_uuid, uuid, UUID_LEN);
 
-	while (l_dbus_message_iter_next_entry(iter_element_models, &element_idx,
-				&iter_temp_element))
+	while (l_dbus_message_iter_next_entry(iter_element_models, &element_idx, &location,
+				&iter_sig_models, &iter_vendor_models))
 	{
-		if (!add_element_properties(new_node, element_idx, &iter_temp_element))
+		if (!add_element_properties(new_node, element_idx, location, &iter_sig_models,
+					&iter_vendor_models, cid))
 			goto failed;
 	}
 

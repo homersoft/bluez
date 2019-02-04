@@ -408,14 +408,15 @@ static struct l_dbus_message *create_node_call(struct l_dbus *dbus,
 	uint64_t element_bits = 0;
 	uint16_t cid, pid, vid;
 	struct l_dbus_message_iter iter_element_models, iter_temp_element_models;
-	struct l_dbus_message_iter iter_uuid, iter_temp_element;
+	struct l_dbus_message_iter iter_uuid, iter_sig_models, iter_vendor_models;
 	uint8_t element_idx;
+	uint16_t location;
 	uint8_t temp_uuid[UUID_LEN] = {0};
 	struct l_dbus_message *reply;
 
 	l_debug("Create node request");
 
-	if (!l_dbus_message_get_arguments(msg, "qqqaya{yaq}", &cid, &pid, &vid,
+	if (!l_dbus_message_get_arguments(msg, "qqqaya{y(qaqaq)}", &cid, &pid, &vid,
 				&iter_uuid, &iter_element_models))
 		return dbus_error(msg, MESH_ERROR_INVALID_ARGS, NULL);
 
@@ -428,7 +429,7 @@ static struct l_dbus_message *create_node_call(struct l_dbus *dbus,
 		return dbus_error(msg, MESH_ERROR_ALREADY_EXISTS, NULL);
 
 	while (l_dbus_message_iter_next_entry(&iter_temp_element_models, &element_idx,
-				&iter_temp_element))
+				&location, &iter_sig_models, &iter_vendor_models))
 	{
 		if (element_idx > 63)
 			return dbus_error(msg, MESH_ERROR_INVALID_ARGS, "Max element id 63");
@@ -476,7 +477,7 @@ static struct l_dbus_message *delete_node_call(struct l_dbus *dbus,
 static void setup_network_interface(struct l_dbus_interface *iface)
 {
 	l_dbus_interface_method(iface, "CreateNode", 0, create_node_call, "",
-				"qqqaya{yaq}", "cid", "pid", "vid", "uuid", "element_models");
+				"qqqaya{y(qaqaq)}", "cid", "pid", "vid", "uuid", "element_models");
 
 	l_dbus_interface_method(iface, "DeleteNode", 0, delete_node_call, "",
 				"ay", "uuid");
@@ -485,8 +486,7 @@ static void setup_network_interface(struct l_dbus_interface *iface)
 bool mesh_dbus_init(struct l_dbus *dbus)
 {
 	if (!l_dbus_register_interface(dbus, MESH_NETWORK_INTERFACE,
-						setup_network_interface,
-						NULL, false)) {
+						setup_network_interface, NULL, false)) {
 		l_info("Unable to register %s interface",
 			       MESH_NETWORK_INTERFACE);
 		return false;

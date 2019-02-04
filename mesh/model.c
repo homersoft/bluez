@@ -133,7 +133,7 @@ static bool find_virt_by_addr(const void *a, const void *b)
 	return memcmp(virt->addr, addr, 16) == 0;
 }
 
-static bool match_model_id(const void *a, const void *b)
+bool match_model_id(const void *a, const void *b)
 {
 	const struct mesh_model *model = a;
 	uint32_t id = L_PTR_TO_UINT(b);
@@ -1075,7 +1075,9 @@ static struct mesh_model *model_new(uint8_t ele_idx, uint32_t id)
 
 struct mesh_model *mesh_model_new(uint8_t ele_idx, uint16_t id)
 {
-	return model_new(ele_idx, id | VENDOR_ID_MASK);
+	uint32_t model_id = id | VENDOR_ID_MASK;
+
+	return model_new(ele_idx, model_id);
 }
 
 struct mesh_model *mesh_model_vendor_new(uint8_t ele_idx, uint16_t vendor_id,
