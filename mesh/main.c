@@ -60,13 +60,13 @@ static void usage(void)
 	l_info("Usage:\n"
 	       "\tmeshd [options]\n");
 	l_info("Options:\n"
-	       "\t--index <hcinum>  Use specified controller\n"
-	       "\t--config          Configuration directory\n"
-	       "\t--debug           Enable debug output\n"
-	       "\t--debug-bus       Enable dbus debug output\n"
-	       "\t--system-bus      Connect to system bus (default)\n"
-	       "\t--session-bus     Connect to session bus\n"
-	       "\t--help            Show %s information\n", __func__);
+	       "\t-i, --index <hcinum>  Use specified controller\n"
+	       "\t-c, --config          Configuration directory\n"
+	       "\t--debug               Enable debug output\n"
+	       "\t--debug-bus           Enable dbus debug output\n"
+	       "\t--system-bus          Connect to system bus (default)\n"
+	       "\t--session-bus         Connect to session bus\n"
+	       "\t--help                Show %s information\n", __func__);
 }
 
 static void do_debug(const char *str, void *user_data)
@@ -133,7 +133,7 @@ int main(int argc, char *argv[])
 		int opt;
 		const char *str;
 
-		opt = getopt_long(argc, argv, "i:c:dbsSh", main_options, NULL);
+		opt = getopt_long(argc, argv, "i:c:", main_options, NULL);
 		if (opt < 0)
 			break;
 
