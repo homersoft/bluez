@@ -1252,6 +1252,7 @@ static void convert_node_to_storage(struct mesh_node *node, struct mesh_db_node 
    node->friend = db_node->modes.friend;
    db_node->modes.low_power = node->lpn;
 
+   db_node->provisioned = node->net ? true : false;
 	db_node->modes.proxy = node->proxy;
 	db_node->seq_number = node->seq_number;
    db_node->unicast = node->primary;
