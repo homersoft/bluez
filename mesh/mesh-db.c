@@ -236,7 +236,7 @@ bool mesh_db_read_iv_index(json_object *jobj, uint32_t *idx, bool *update)
 	return true;
 }
 
-bool mesh_db_read_device_key(json_object *jobj, uint8_t key_buf[16])
+bool mesh_db_read_device_key(json_object *jobj, uint8_t key_buf[NODE_DEVKEY_LEN])
 {
 	json_object *jvalue;
 	char *str;
@@ -249,7 +249,7 @@ bool mesh_db_read_device_key(json_object *jobj, uint8_t key_buf[16])
 		return false;
 
 	str = (char *)json_object_get_string(jvalue);
-	if (!str2hex(str, strlen(str), key_buf, 16))
+	if (!str2hex(str, strlen(str), key_buf, NODE_DEVKEY_LEN))
 		return false;
 
 	return true;
@@ -1048,14 +1048,11 @@ static void parse_features(json_object *jconfig, struct mesh_db_node *node)
 	json_object *jvalue;
 	int mode;
 
-   printf(">>>>>parse_features()\r\n");
-
    json_object_object_get_ex(jconfig, "proxy", &jvalue);
 	if (jvalue) {
 		mode = get_mode(jvalue);
 		if (mode <= MESH_MODE_UNSUPPORTED)
          node->modes.proxy = mode;
-
 	}
 
 	json_object_object_get_ex(jconfig, "friend", &jvalue);
@@ -1091,8 +1088,6 @@ static bool parse_composition(json_object *jcomp, struct mesh_db_node *node)
 {
 	json_object *jvalue;
 	char *str;
-
-   printf(">>>>>parse_composition()\r\n");
 
    /* All the fields in node composition are mandatory */
 	json_object_object_get_ex(jcomp, "cid", &jvalue);

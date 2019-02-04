@@ -326,42 +326,34 @@ bool node_init_from_storage(struct mesh_node *node, void *data)
 	struct mesh_db_node *db_node = data;
 	unsigned int num_ele;
 
-   printf(">>>>> node_init_from_storage()\r\n");
+   node->comp = l_new(struct node_composition, 1);
+	node->comp->cid = db_node->cid;
+	node->comp->pid = db_node->pid;
+	node->comp->vid = db_node->vid;
+	node->lpn = db_node->modes.low_power;
 
-//   node->comp = l_new(struct node_composition, 1);
-//	node->comp->cid = db_node->cid;
-//	node->comp->pid = db_node->pid;
-//	node->comp->vid = db_node->vid;
-//	node->comp->crpl = db_node->crpl;
-//	node->lpn = db_node->modes.lpn;
-//
-//	node->proxy = db_node->modes.proxy;
-//	node->lpn = db_node->modes.lpn;
-//	node->friend = db_node->modes.friend;
-//	node->relay.mode = db_node->modes.relay.state;
-//	node->relay.cnt = db_node->modes.relay.cnt;
-//	node->relay.interval = db_node->modes.relay.interval;
-//	node->beacon = db_node->modes.beacon;
-//
-//	l_debug("relay %2.2x, proxy %2.2x, lpn %2.2x, friend %2.2x",
-//			node->relay.mode, node->proxy, node->friend, node->lpn);
-//	node->ttl = db_node->ttl;
-//	node->seq_number = db_node->seq_number;
-//
-//	num_ele = l_queue_length(db_node->elements);
-//	if (num_ele > 0xff)
-//		return false;
-//
-//	node->num_ele = num_ele;
-//	if (num_ele != 0 && !add_elements(node, db_node))
-//		return false;
-//
-//	node->primary = db_node->unicast;
-//
-//	memcpy(node->dev_uuid, db_node->uuid, 16);
-//
-//	/* Initialize configuration server model */
-//	mesh_config_srv_init(node, PRIMARY_ELE_IDX);
+	node->proxy = db_node->modes.proxy;
+	node->friend = db_node->modes.friend;
+	node->beacon = db_node->modes.beacon;
+
+	l_debug("proxy %2.2x, lpn %2.2x, friend %2.2x", node->proxy, node->friend, node->lpn);
+	node->ttl = db_node->ttl;
+	node->seq_number = db_node->seq_number;
+
+	num_ele = l_queue_length(db_node->elements);
+	if (num_ele > 0xff)
+		return false;
+
+	node->num_ele = num_ele;
+	if (num_ele != 0 && !add_elements(node, db_node))
+		return false;
+
+	node->primary = db_node->unicast;
+
+	memcpy(node->dev_uuid, db_node->uuid, NODE_UUID_LEN);
+
+	/* Initialize configuration server model */
+	mesh_config_srv_init(node, PRIMARY_ELE_IDX);
 
 	return true;
 }
@@ -1245,12 +1237,9 @@ static void convert_node_to_storage(struct mesh_node *node, struct mesh_db_node 
 {
 	const struct l_queue_entry *entry;
 
-   printf(">>>>> convert_node_to_storage()\r\n");
-
    db_node->cid = node->comp->cid;
    db_node->pid = node->comp->pid;
    db_node->vid = node->comp->vid;
-   db_node->crpl = node->comp->crpl;
 
    db_node->iv_index = mesh_net_get_iv_index(node_get_net(node));
    db_node->iv_update = mesh_net_get_iv_update(node_get_net(node));
@@ -1263,7 +1252,6 @@ static void convert_node_to_storage(struct mesh_node *node, struct mesh_db_node 
    node->friend = db_node->modes.friend;
    db_node->modes.low_power = node->lpn;
 
-   db_node->provisioned = node->provisioner;
 	db_node->modes.proxy = node->proxy;
 	db_node->seq_number = node->seq_number;
    db_node->unicast = node->primary;
