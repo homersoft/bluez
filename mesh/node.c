@@ -1396,7 +1396,7 @@ static struct l_dbus_message *stop_advertising_call(struct l_dbus *dbus,
 		return dbus_error(message, MESH_ERROR_FAILED, "Wrong path");
 
 	node = l_queue_find(nodes, match_node_uuid, uuid);
-	if (node)
+	if (!node)
 		return dbus_error(message, MESH_ERROR_DOES_NOT_EXIST, NULL);
 
 	if (!stop_advertising(node))
