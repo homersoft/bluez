@@ -326,7 +326,7 @@ bool node_init_from_storage(struct mesh_node *node, void *data)
 	struct mesh_db_node *db_node = data;
 	unsigned int num_ele;
 
-   node->comp = l_new(struct node_composition, 1);
+	node->comp = l_new(struct node_composition, 1);
 	node->comp->cid = db_node->cid;
 	node->comp->pid = db_node->pid;
 	node->comp->vid = db_node->vid;
@@ -1237,25 +1237,25 @@ static void convert_node_to_storage(struct mesh_node *node, struct mesh_db_node 
 {
 	const struct l_queue_entry *entry;
 
-   db_node->cid = node->comp->cid;
-   db_node->pid = node->comp->pid;
-   db_node->vid = node->comp->vid;
+	db_node->cid = node->comp->cid;
+	db_node->pid = node->comp->pid;
+	db_node->vid = node->comp->vid;
 
-   db_node->iv_index = mesh_net_get_iv_index(node_get_net(node));
-   db_node->iv_update = mesh_net_get_iv_update(node_get_net(node));
+	db_node->iv_index = mesh_net_get_iv_index(node_get_net(node));
+	db_node->iv_update = mesh_net_get_iv_update(node_get_net(node));
 
-   memcpy(db_node->uuid, node->dev_uuid, NODE_UUID_LEN);
-   db_node->modes.beacon = node->beacon;
-   db_node->ttl = node->ttl;
+	memcpy(db_node->uuid, node->dev_uuid, NODE_UUID_LEN);
+	db_node->modes.beacon = node->beacon;
+	db_node->ttl = node->ttl;
 
-   memcpy(db_node->dev_key, node->dev_key, NODE_DEVKEY_LEN);
-   node->friend = db_node->modes.friend;
-   db_node->modes.low_power = node->lpn;
+	memcpy(db_node->dev_key, node->dev_key, NODE_DEVKEY_LEN);
+	node->friend = db_node->modes.friend;
+	db_node->modes.low_power = node->lpn;
 
-   db_node->provisioned = node->net ? true : false;
+	db_node->provisioned = node->net ? true : false;
 	db_node->modes.proxy = node->proxy;
 	db_node->seq_number = node->seq_number;
-   db_node->unicast = node->primary;
+	db_node->unicast = node->primary;
 	db_node->elements = l_queue_new();
 
 	entry = l_queue_get_entries(node->elements);

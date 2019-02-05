@@ -49,7 +49,7 @@
 #include "mesh/storage.h"
 
 /* Define how many separators occurs in uuid during uuid to str conversion */
-#define NUM_OF_SEP_IN_UUID_STR   ((uint8_t)4)
+#define NUM_OF_SEP_IN_UUID_STR	((uint8_t)4)
 
 struct write_info {
 	json_object *jnode;
@@ -514,9 +514,9 @@ bool storage_load_nodes(const char *dir_name)
 
 bool storage_create_node_config(struct mesh_node *node, void *data)
 {
-   const uint8_t uuid_str_len = (2 * NODE_UUID_LEN) + NUM_OF_SEP_IN_UUID_STR + 1;
-   char uuid_str[uuid_str_len];
-   
+	const uint8_t uuid_str_len = (2 * NODE_UUID_LEN) + NUM_OF_SEP_IN_UUID_STR + 1;
+	char uuid_str[uuid_str_len];
+
 	struct mesh_db_node *db_node = data;
 	char name_buf[PATH_MAX];
 	char *filename;
@@ -532,7 +532,7 @@ bool storage_create_node_config(struct mesh_node *node, void *data)
 		return false;
 
 	/* Convert UUID to string */
-   l_uuid_to_string(node_uuid_get(node), &uuid_str[0], uuid_str_len);
+	l_uuid_to_string(node_uuid_get(node), &uuid_str[0], uuid_str_len);
 
 	snprintf(name_buf, PATH_MAX, "%s/%s", storage_dir, uuid_str);
 

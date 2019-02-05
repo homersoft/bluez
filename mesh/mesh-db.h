@@ -57,31 +57,31 @@ struct mesh_db_element {
 };
 
 struct mesh_db_modes {
-   bool friend;
-   bool low_power;
+	bool friend;
+	bool low_power;
 	bool proxy;
 	bool beacon;
 };
 
 struct mesh_db_node {
-   uint16_t cid;
-   uint16_t pid;
-   uint16_t vid;
-   uint16_t crpl;
+	uint16_t cid;
+	uint16_t pid;
+	uint16_t vid;
+	uint16_t crpl;
 
-   uint32_t iv_index;
-   bool     iv_update;
-   uint8_t  uuid[NODE_UUID_LEN];
-   uint8_t  ttl;
-   uint8_t  dev_key[NODE_DEVKEY_LEN];
+	uint32_t iv_index;
+	bool iv_update;
+	uint8_t uuid[NODE_UUID_LEN];
+	uint8_t ttl;
+	uint8_t dev_key[NODE_DEVKEY_LEN];
 
-   struct   l_queue *elements;
-   struct   mesh_db_modes modes;
+	struct l_queue *elements;
+	struct mesh_db_modes modes;
 
-   uint8_t  net_key[NODE_NETKEY_LEN];
-   bool     provisioned;
-   uint32_t seq_number;
-   uint16_t unicast;
+	uint8_t net_key[NODE_NETKEY_LEN];
+	bool provisioned;
+	uint32_t seq_number;
+	uint16_t unicast;
 };
 
 struct mesh_db_prov {

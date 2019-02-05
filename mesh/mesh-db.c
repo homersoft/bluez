@@ -900,7 +900,7 @@ static bool parse_models(json_object *jmodels, struct mesh_db_element *ele)
 		uint32_t id;
 		int len;
 
-      json_object *jmodel = json_object_array_get_idx(jmodels, i);
+		json_object *jmodel = json_object_array_get_idx(jmodels, i);
 		if (!jmodel)
 			goto fail;
 
@@ -908,7 +908,7 @@ static bool parse_models(json_object *jmodels, struct mesh_db_element *ele)
 		if (!ele)
 			goto fail;
 
-      char *str = (char *)json_object_get_string(jmodel);
+		char *str = (char *)json_object_get_string(jmodel);
 		len = strlen(str);
 
 		if (len != 4 && len != 8)
@@ -967,23 +967,23 @@ static bool parse_elements(json_object *jelements, struct mesh_db_node *node)
 	for (uint16_t ele_nr = 0;; ele_nr++)
 	{
 		json_object *jelement;
-      json_object *jlocation;
-      json_object *jmodels;
+		json_object *jlocation;
+		json_object *jmodels;
 
 		/* Convert integer to string */
-      char int_as_str[6];
-      sprintf(int_as_str, "%u", ele_nr);
+		char int_as_str[6];
+		sprintf(int_as_str, "%u", ele_nr);
 
-      if(!json_object_object_get_ex(jelements, int_as_str, &jelement)) {
-         /* End of elements */
-         return true;
-      }
+		if(!json_object_object_get_ex(jelements, int_as_str, &jelement)) {
+			/* End of elements */
+			return true;
+		}
 
-      int elementIndex;
-      if(!get_int(jelement, "elementIndex", &elementIndex))
+		int elementIndex;
+		if(!get_int(jelement, "elementIndex", &elementIndex))
 			goto fail;
 
-      struct mesh_db_element *ele = l_new(struct mesh_db_element, 1);
+		struct mesh_db_element *ele = l_new(struct mesh_db_element, 1);
 
 		if (!ele)
 			goto fail;
@@ -996,7 +996,7 @@ static bool parse_elements(json_object *jelements, struct mesh_db_node *node)
 			goto fail;
 
 		if(!json_object_object_get_ex(jelement, "location", &jlocation))
-		   goto fail;
+			goto fail;
 
 		char *str = (char *)json_object_get_string(jlocation);
 
@@ -1004,14 +1004,14 @@ static bool parse_elements(json_object *jelements, struct mesh_db_node *node)
 		if (sscanf(str, "%04hx", &(ele->location)) != 1)
 			goto fail;
 
-      if(!json_object_object_get_ex(jelement, "models", &jmodels))
-         goto fail;
+		if(!json_object_object_get_ex(jelement, "models", &jmodels))
+			goto fail;
 
 		if (jmodels && (json_object_get_type(jmodels) != json_type_array))
 			goto fail;
 
-      if(!parse_models(jmodels, ele))
-         goto fail;
+		if(!parse_models(jmodels, ele))
+			goto fail;
 
 		l_queue_push_tail(node->elements, ele);
 	}
@@ -1048,11 +1048,11 @@ static void parse_features(json_object *jconfig, struct mesh_db_node *node)
 	json_object *jvalue;
 	int mode;
 
-   json_object_object_get_ex(jconfig, "proxy", &jvalue);
+	json_object_object_get_ex(jconfig, "proxy", &jvalue);
 	if (jvalue) {
 		mode = get_mode(jvalue);
 		if (mode <= MESH_MODE_UNSUPPORTED)
-         node->modes.proxy = mode;
+			node->modes.proxy = mode;
 	}
 
 	json_object_object_get_ex(jconfig, "friend", &jvalue);
@@ -1073,15 +1073,15 @@ static void parse_features(json_object *jconfig, struct mesh_db_node *node)
 	if (jvalue) {
 		mode = get_mode(jvalue);
 		if (mode <= MESH_MODE_ENABLED)
-         node->modes.beacon = mode;
+			node->modes.beacon = mode;
 	}
 
-   json_object_object_get_ex(jconfig, "provisioned", &jvalue);
-   if (jvalue) {
-      mode = get_mode(jvalue);
-      if (mode <= MESH_MODE_UNSUPPORTED)
-         node->provisioned = mode;
-   }
+	json_object_object_get_ex(jconfig, "provisioned", &jvalue);
+	if (jvalue) {
+		mode = get_mode(jvalue);
+		if (mode <= MESH_MODE_UNSUPPORTED)
+			node->provisioned = mode;
+	}
 }
 
 static bool parse_composition(json_object *jcomp, struct mesh_db_node *node)
@@ -1089,7 +1089,7 @@ static bool parse_composition(json_object *jcomp, struct mesh_db_node *node)
 	json_object *jvalue;
 	char *str;
 
-   /* All the fields in node composition are mandatory */
+	/* All the fields in node composition are mandatory */
 	json_object_object_get_ex(jcomp, "cid", &jvalue);
 	if (!jvalue)
 		return false;
@@ -1171,23 +1171,23 @@ bool mesh_db_read_node(json_object *jnode, mesh_db_node_cb cb, void *user_data)
 
 bool mesh_db_write_model_id(json_object *jobj, struct mesh_db_model *mod)
 {
-   char buf[9];
-   json_object *jstring;
+	char buf[9];
+	json_object *jstring;
 
-   if (!mod->vendor) {
-      snprintf(buf, 5, "%4.4x", (uint16_t)mod->id);
-   }
+	if (!mod->vendor) {
+		snprintf(buf, 5, "%4.4x", (uint16_t)mod->id);
+	}
 	else {
-      snprintf(buf, 9, "%8.8x", mod->id);
+		snprintf(buf, 9, "%8.8x", mod->id);
 	}
 
-   jstring = json_object_new_string(buf);
+	jstring = json_object_new_string(buf);
 
-   if (!jstring)
-      return false;
+	if (!jstring)
+		return false;
 
-   json_object_array_add(jobj, jstring);
-   return true;
+	json_object_array_add(jobj, jstring);
+	return true;
 }
 
 bool mesh_db_write_uint16_hex(json_object *jobj, const char *desc,
@@ -1375,110 +1375,110 @@ static void add_model(void *a, void *b)
 	struct mesh_db_model *mod = a;
 	json_object *jmodels = b;
 
-   (void)mesh_db_write_model_id(jmodels, mod);
+	(void)mesh_db_write_model_id(jmodels, mod);
 }
 
 /* Add unprovisioned node (local) */
 bool mesh_db_add_node(json_object *jnode, struct mesh_db_node *node)
 {
 
-   struct mesh_db_modes *modes = &node->modes;
-   const struct l_queue_entry *entry;
-   json_object *jelements;
-   
-   /* CID, PID, VID */
-   if (!mesh_db_write_uint16_hex(jnode, "cid", node->cid))
-      return false;
+	struct mesh_db_modes *modes = &node->modes;
+	const struct l_queue_entry *entry;
+	json_object *jelements;
 
-   if (!mesh_db_write_uint16_hex(jnode, "pid", node->pid))
-      return false;
+	/* CID, PID, VID */
+	if (!mesh_db_write_uint16_hex(jnode, "cid", node->cid))
+		return false;
 
-   if (!mesh_db_write_uint16_hex(jnode, "vid", node->vid))
-      return false;
+	if (!mesh_db_write_uint16_hex(jnode, "pid", node->pid))
+		return false;
 
-   /* IV index and IV update flag */
-   if(!mesh_db_write_iv_index(jnode, node->iv_index, node->iv_update))
-      return false;
+	if (!mesh_db_write_uint16_hex(jnode, "vid", node->vid))
+		return false;
 
-   /* Device UUID */
-   if(!add_key(jnode, "UUID", node->uuid))
-      return false;
+	/* IV index and IV update flag */
+	if(!mesh_db_write_iv_index(jnode, node->iv_index, node->iv_update))
+		return false;
 
-   /* Beaconing state */
-   if(!mesh_db_write_bool(jnode, "beacon", modes->beacon))
-      return false;
+	/* Device UUID */
+	if(!add_key(jnode, "UUID", node->uuid))
+		return false;
 
-   /* Default TTL */
-   json_object_object_add(jnode, "defaultTTL", json_object_new_int(node->ttl));
+	/* Beaconing state */
+	if(!mesh_db_write_bool(jnode, "beacon", modes->beacon))
+		return false;
 
-   /* Device Key */
-   if(!mesh_db_write_device_key(jnode, node->dev_key))
-      return false;
+	/* Default TTL */
+	json_object_object_add(jnode, "defaultTTL", json_object_new_int(node->ttl));
 
-   /* Elements */
-   jelements = json_object_new_object();
+	/* Device Key */
+	if(!mesh_db_write_device_key(jnode, node->dev_key))
+		return false;
 
-   if(!jelements)
-      return false;
+	/* Elements */
+	jelements = json_object_new_object();
 
-   entry = l_queue_get_entries(node->elements);
+	if(!jelements)
+		return false;
 
-   for(int idx = 0; entry; entry = entry->next, idx++)
-   {
-      char int_as_str[5];
-      struct mesh_db_element *ele = entry->data;
+	entry = l_queue_get_entries(node->elements);
 
-      /* Convert idx to string value */
-      sprintf(int_as_str, "%d", idx);
+	for(int idx = 0; entry; entry = entry->next, idx++)
+	{
+		char int_as_str[5];
+		struct mesh_db_element *ele = entry->data;
 
-      json_object *jsub_elements = json_object_new_object();
+		/* Convert idx to string value */
+		sprintf(int_as_str, "%d", idx);
 
-      mesh_db_write_int(jsub_elements, "elementIndex", ele->index);
-      mesh_db_write_uint16_hex(jsub_elements, "location", ele->location);
+		json_object *jsub_elements = json_object_new_object();
 
-      json_object_object_add(jelements, &int_as_str[0], jsub_elements);
+		mesh_db_write_int(jsub_elements, "elementIndex", ele->index);
+		mesh_db_write_uint16_hex(jsub_elements, "location", ele->location);
 
-      /* Models */
-      if(l_queue_isempty(ele->models))
-         continue;
+		json_object_object_add(jelements, &int_as_str[0], jsub_elements);
 
-      json_object *jmodels = json_object_new_array();
+		/* Models */
+		if(l_queue_isempty(ele->models))
+			continue;
 
-      if(!jmodels) {
-         json_object_put(jelements);
-         return false;
-      }
+		json_object *jmodels = json_object_new_array();
 
-      json_object_object_add(jsub_elements, "models", jmodels);
-      l_queue_foreach(ele->models, add_model, jmodels);
-   }
+		if(!jmodels) {
+			json_object_put(jelements);
+			return false;
+		}
 
-   json_object_object_add(jnode, "elements", jelements);
+		json_object_object_add(jsub_elements, "models", jmodels);
+		l_queue_foreach(ele->models, add_model, jmodels);
+	}
 
-   /* Friend and low power flags */
-   if(!mesh_db_write_bool(jnode, "friend", modes->friend))
-      return false;
+	json_object_object_add(jnode, "elements", jelements);
 
-   if(!mesh_db_write_bool(jnode, "lowPower", modes->low_power))
-      return false;
+	/* Friend and low power flags */
+	if(!mesh_db_write_bool(jnode, "friend", modes->friend))
+		return false;
 
-   /* Network Key */
-   if(!add_key(jnode, "net_key", node->net_key))
-      return false;
+	if(!mesh_db_write_bool(jnode, "lowPower", modes->low_power))
+		return false;
 
-   /* Provisioned and proxy flags */
+	/* Network Key */
+	if(!add_key(jnode, "net_key", node->net_key))
+		return false;
+
+	/* Provisioned and proxy flags */
 	if (!mesh_db_write_bool(jnode, "provisioned", node->provisioned))
-      return false;
+		return false;
 
 	if (!mesh_db_write_bool(jnode, "proxy", modes->proxy))
-      return false;
+		return false;
 
 	/* Sequence number */
 	json_object_object_add(jnode, "sequenceNumber", json_object_new_int(node->seq_number));
 
-   /* Unicast address */
-   if (!mesh_db_write_uint16_hex(jnode, "unicastAddress", node->unicast))
-      return false;
+	/* Unicast address */
+	if (!mesh_db_write_uint16_hex(jnode, "unicastAddress", node->unicast))
+		return false;
 
 	return true;
 }

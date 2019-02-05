@@ -1033,10 +1033,10 @@ uint32_t mesh_net_get_iv_index(struct mesh_net *net)
 
 bool mesh_net_get_iv_update(struct mesh_net *net)
 {
-   if (!net)
-      return false;
+	if (!net)
+		return false;
 
-   return net->iv_update;
+	return net->iv_update;
 }
 
 /* TODO: net key index? */

@@ -504,7 +504,7 @@ static bool prov_complete_cb(void *user_data, uint8_t status,
 	path = join_pending->app_path;
 
 	if (status == PROV_ERR_SUCCESS &&
-	    !node_add_pending_local(join_pending->node, info, mesh.io))
+		!node_add_pending_local(join_pending->node, info, mesh.io))
 		status = PROV_ERR_UNEXPECTED_ERR;
 
 	if (status != PROV_ERR_SUCCESS) {
@@ -723,7 +723,7 @@ bool mesh_dbus_init(struct l_dbus *dbus)
 						setup_network_interface,
 						NULL, false)) {
 		l_info("Unable to register %s interface",
-			       MESH_NETWORK_INTERFACE);
+				MESH_NETWORK_INTERFACE);
 		return false;
 	}
 
