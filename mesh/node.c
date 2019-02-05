@@ -234,6 +234,8 @@ static void free_node_resources(void *data)
 					MESH_NODE_INTERFACE);
 	l_dbus_object_remove_interface(dbus_get_bus(), path,
 					MESH_PROVISIONING_INTERFACE);
+	l_dbus_object_remove_interface(dbus_get_bus(), path,
+					L_DBUS_INTERFACE_PROPERTIES);
 
 	l_dbus_unregister_object(dbus_get_bus(), path);
 
@@ -1048,6 +1050,13 @@ static bool register_node_object(struct mesh_node *node)
 		return false;
 	}
 
+	if (!l_dbus_object_add_interface(dbus_get_bus(), path,
+					L_DBUS_INTERFACE_PROPERTIES, NULL))
+	{
+		l_info("Unable to add %s object", path);
+		return false;
+	}
+
 	return true;
 }
 
@@ -1403,6 +1412,7 @@ static bool is_provisioned_getter(struct l_dbus *dbus,
 				struct l_dbus_message *message,
 				struct l_dbus_message_builder *builder, void *user_data)
 {
+	struct mesh_node *node;
 	const char *path;
 	uint8_t uuid[UUID_LEN];
 	bool is_provisioned = false;
@@ -1413,9 +1423,10 @@ static bool is_provisioned_getter(struct l_dbus *dbus,
 		goto done;
 	}
 
-	if (l_queue_find(nodes, match_node_uuid, uuid)) {
-		//TODO
-		is_provisioned = true;
+	node = l_queue_find(nodes, match_node_uuid, uuid);
+	if (node) {
+		if (node->net)
+			is_provisioned = true;
 		goto done;
 	}
 
