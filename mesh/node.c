@@ -235,6 +235,8 @@ static void free_node_resources(void *data)
 	l_dbus_object_remove_interface(dbus_get_bus(), path,
 					MESH_PROVISIONING_INTERFACE);
 
+	l_dbus_unregister_object(dbus_get_bus(), path);
+
 	l_free(node->path);
 
 	l_free(node);
