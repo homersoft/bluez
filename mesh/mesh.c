@@ -441,7 +441,8 @@ static struct l_dbus_message *create_node_call(struct l_dbus *dbus,
 		return dbus_error(msg, MESH_ERROR_INVALID_ARGS, "Wrong element indexation");
 
 	if (!create_node_request(temp_uuid, pid, cid, vid, &iter_element_models))
-		return dbus_error(msg, MESH_ERROR_FAILED, NULL);
+		return dbus_error(msg, MESH_ERROR_INVALID_ARGS,
+			"Only element 0 can implement models {0x0000, 0x0002}");
 
 	reply = l_dbus_message_new_method_return(msg);
 	l_dbus_message_set_arguments(reply, "");

@@ -1201,8 +1201,7 @@ bool create_node_request(uint8_t *uuid, uint16_t cid, uint16_t pid, uint16_t vid
 
 	set_defaults(new_node);
 
-	if (!create_node_config(new_node))
-		goto failed;
+	create_node_config(new_node);
 
 	if (!nodes)
 		nodes = l_queue_new();
