@@ -1615,24 +1615,55 @@ static bool node_elements_getter(struct l_dbus *dbus,
 				struct l_dbus_message *message,
 				struct l_dbus_message_builder *builder, void *user_data)
 {
+	const struct l_queue_entry *element_obj;
+	const struct l_queue_entry *model_obj;
 	struct mesh_node *node;
+	struct node_element *element;
+	struct mesh_model *model;
 	const char *path;
 	uint8_t uuid[UUID_LEN];
-	uint16_t elements = 0;
+	uint16_t model_id;
 
 	path = l_dbus_message_get_path(message);
 	if (!get_uuid_from_path(path, uuid))
-		goto done;
+		return false;
 
 	node = l_queue_find(nodes, match_node_uuid, uuid);
+	if (!node)
+		return false;
 
-	if (node) {
-		elements = (uint16_t) l_queue_length(node->elements);
-		goto done;
+	if (!l_dbus_message_builder_enter_array(builder, "{yaq}"))
+		return false;
+
+	for (element_obj = l_queue_get_entries(node->elements); element_obj; element_obj = element_obj->next) {
+		element = element_obj->data;
+
+		if (!l_dbus_message_builder_enter_dict(builder, "yaq"))
+			return false;
+
+		if (!l_dbus_message_builder_append_basic(builder, 'y', &(element->location)))
+			return false;
+
+		if (!l_dbus_message_builder_enter_array(builder, "q"))
+			return false;
+
+		for (model_obj = l_queue_get_entries(element->models); model_obj; model_obj = model_obj->next) {
+			model = model_obj->data;
+
+			model_id = (uint16_t) mesh_model_get_model_id(model);
+			if (!l_dbus_message_builder_append_basic(builder, 'q', &model_id))
+				return false;
+		}
+
+		if (!l_dbus_message_builder_leave_array(builder))
+			return false;
+
+		if (!l_dbus_message_builder_leave_dict(builder))
+			return false;
 	}
 
-done:
-	l_dbus_message_builder_append_basic(builder, 'q', &elements);
+	if (!l_dbus_message_builder_leave_array(builder))
+		return false;
 
 	return true;
 }
@@ -1659,7 +1690,7 @@ static void setup_node_interface(struct l_dbus_interface *interface)
 	l_dbus_interface_property(interface, "ApplicationKeys", 0, "aay",
 				node_application_keys_getter, NULL);
 
-	l_dbus_interface_property(interface, "Elements", 0, "q",
+	l_dbus_interface_property(interface, "Elements", 0, "a{yaq}",
 				node_elements_getter, NULL);
 }
 
