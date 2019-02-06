@@ -144,7 +144,7 @@ bool match_model_id(const void *a, const void *b)
 int compare_model_id(const void *a, const void *b, void *user_data)
 {
 	const struct mesh_model *new_model = a;
-	const struct mesh_model *current_model = b ;
+	const struct mesh_model *current_model = b;
 
 	return (new_model->id - current_model->id);
 }
@@ -214,25 +214,25 @@ static struct l_dbus_message *create_config_update_msg(struct mesh_node *node,
 	uint16_t model_id;
 
 	/*
-	FIXME emit signal
-	l_debug("Send \"UpdateModelConfiguration\"");
-	msg = l_dbus_message_new_method_call(dbus, owner, path,
-						MESH_ELEMENT_INTERFACE,
-						"UpdateModelConfiguration");
-
-	*builder = l_dbus_message_builder_new(msg);
-
-	model_id = (uint16_t) id;
-
-	l_dbus_message_builder_append_basic(*builder, 'q', &model_id);
-
-	l_dbus_message_builder_enter_array(*builder, "{sv}");
-
-	if ((id & VENDOR_ID_MASK) != VENDOR_ID_MASK) {
-		uint16_t vendor = id >> 16;
-		dbus_append_dict_entry_basic(*builder, "Vendor", "q", &vendor);
-	}
-	*/
+	 *FIXME emit signal
+	 *l_debug("Send \"UpdateModelConfiguration\"");
+	 *msg = l_dbus_message_new_method_call(dbus, owner, path,
+	 *					MESH_ELEMENT_INTERFACE,
+	 *					"UpdateModelConfiguration");
+	 *
+	 **builder = l_dbus_message_builder_new(msg);
+	 *
+	 *model_id = (uint16_t) id;
+	 *
+	 *l_dbus_message_builder_append_basic(*builder, 'q', &model_id);
+	 *
+	 *l_dbus_message_builder_enter_array(*builder, "{sv}");
+	 *
+	 *if ((id & VENDOR_ID_MASK) != VENDOR_ID_MASK) {
+	 *	uint16_t vendor = id >> 16;
+	 *	dbus_append_dict_entry_basic(*builder, "Vendor", "q", &vendor);
+	 *}
+	 */
 
 	return msg;
 }
@@ -272,7 +272,7 @@ static void append_dict_uint16_array(struct l_dbus_message_builder *builder,
 	for (entry = l_queue_get_entries(q); entry; entry = entry->next) {
 		uint16_t value = (uint16_t) L_PTR_TO_UINT(entry->data);
 
-		l_dbus_message_builder_append_basic(builder,'q', &value);
+		l_dbus_message_builder_append_basic(builder, 'q', &value);
 	}
 
 	l_dbus_message_builder_leave_array(builder);
@@ -718,33 +718,33 @@ static void send_msg_rcvd(struct mesh_node *node, uint8_t ele_idx, bool is_sub,
 	l_debug("Emit \"MessageReceived\" signal");
 
 	/*
-	FIXME: emit signal instead of 'that' below
-
-	msg = l_dbus_message_new_method_call(dbus, owner, path,
-				MESH_ELEMENT_INTERFACE, "MessageReceived");
-
-	builder = l_dbus_message_builder_new(msg);
-
-	if (!l_dbus_message_builder_append_basic(builder, 'q', &src))
-		goto error;
-
-	if (!l_dbus_message_builder_append_basic(builder, 'q', &key_idx))
-		goto error;
-
-	if (!l_dbus_message_builder_append_basic(builder, 'b', &is_sub))
-		goto error;
-
-	if (!dbus_append_byte_array(builder, data, size))
-		goto error;
-
-	if (!l_dbus_message_builder_finalize(builder))
-		goto error;
-
-	l_dbus_send(dbus, msg);
-
-error:
-	l_dbus_message_builder_destroy(builder);
-	*/
+	 *FIXME: emit signal instead of 'that' below
+	 *
+	 *msg = l_dbus_message_new_method_call(dbus, owner, path,
+	 *			MESH_ELEMENT_INTERFACE, "MessageReceived");
+	 *
+	 *builder = l_dbus_message_builder_new(msg);
+	 *
+	 *if (!l_dbus_message_builder_append_basic(builder, 'q', &src))
+	 *	goto error;
+	 *
+	 *if (!l_dbus_message_builder_append_basic(builder, 'q', &key_idx))
+	 *	goto error;
+	 *
+	 *if (!l_dbus_message_builder_append_basic(builder, 'b', &is_sub))
+	 *	goto error;
+	 *
+	 *if (!dbus_append_byte_array(builder, data, size))
+	 *	goto error;
+	 *
+	 *if (!l_dbus_message_builder_finalize(builder))
+	 *	goto error;
+	 *
+	 *l_dbus_send(dbus, msg);
+	 *
+	 *error:
+	 *l_dbus_message_builder_destroy(builder);
+	 */
 }
 
 bool mesh_model_rx(struct mesh_node *node, bool szmict, uint32_t seq0,
@@ -1593,6 +1593,7 @@ void model_build_config(void *model, void *msg_builder)
 	/* For vendor models, add vendor id */
 	if ((mod->id & VENDOR_ID_MASK) != VENDOR_ID_MASK) {
 		uint16_t vendor = mod->id >> 16;
+
 		dbus_append_dict_entry_basic(builder, "Vendor", "q", &vendor);
 	}
 
@@ -1603,6 +1604,7 @@ void model_build_config(void *model, void *msg_builder)
 	/* Model periodic publication interval, if present */
 	if (mod->pub) {
 		uint32_t period = convert_pub_period_to_ms(mod->pub->period);
+
 		dbus_append_dict_entry_basic(builder, "PublicationPeriod", "u",
 								&period);
 	}

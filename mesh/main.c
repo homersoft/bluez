@@ -80,7 +80,7 @@ static void request_name_callback(struct l_dbus *dbus, bool success,
 					bool queued, void *user_data)
 {
 	l_info("Request name %s",
-		success ? "success": "failed");
+		success ? "success" : "failed");
 
 	if (success)
 		dbus_init(dbus);

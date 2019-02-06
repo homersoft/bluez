@@ -402,45 +402,62 @@ static const char *prov_status_str(uint8_t status)
 }
 
 static struct l_dbus_message *create_node_call(struct l_dbus *dbus,
-					struct l_dbus_message *msg, void *user_data)
+			struct l_dbus_message *msg, void *user_data)
 {
 	uint16_t n = 0;
 	uint64_t element_bits = 0;
 	uint16_t cid, pid, vid;
-	struct l_dbus_message_iter iter_element_models, iter_temp_element_models;
-	struct l_dbus_message_iter iter_uuid, iter_sig_models, iter_vendor_models;
+
+	struct l_dbus_message_iter iter_element_models;
+	struct l_dbus_message_iter iter_temp_element_models;
+	struct l_dbus_message_iter iter_uuid;
+	struct l_dbus_message_iter iter_sig_models;
+	struct l_dbus_message_iter iter_vendor_models;
+
 	uint8_t element_idx;
 	uint16_t location;
 	uint8_t temp_uuid[UUID_LEN] = {0};
+
 	struct l_dbus_message *reply;
 
 	l_debug("Create node request");
 
-	if (!l_dbus_message_get_arguments(msg, "qqqaya{y(qaqaq)}", &cid, &pid, &vid,
-				&iter_uuid, &iter_element_models))
+	if (!l_dbus_message_get_arguments(msg, "qqqaya{y(qaqaq)}",
+			&cid, &pid, &vid,
+			&iter_uuid, &iter_element_models))
 		return dbus_error(msg, MESH_ERROR_INVALID_ARGS, NULL);
 
 	iter_temp_element_models = iter_element_models;
 
 	if (dbus_get_byte_array(&iter_uuid, temp_uuid, UUID_LEN) != UUID_LEN)
-		return dbus_error(msg, MESH_ERROR_INVALID_ARGS, "Incorrect device UUID format");
+		return dbus_error(msg,
+			MESH_ERROR_INVALID_ARGS,
+			"Incorrect device UUID format");
 
 	if (node_find_by_uuid(temp_uuid))
 		return dbus_error(msg, MESH_ERROR_ALREADY_EXISTS, NULL);
 
-	while (l_dbus_message_iter_next_entry(&iter_temp_element_models, &element_idx,
-				&location, &iter_sig_models, &iter_vendor_models))
-	{
+	while (l_dbus_message_iter_next_entry(&iter_temp_element_models,
+		&element_idx,
+		&location,
+		&iter_sig_models,
+		&iter_vendor_models)) {
+
 		if (element_idx > 63)
-			return dbus_error(msg, MESH_ERROR_INVALID_ARGS, "Max element id 63");
-		element_bits |= (1 << element_idx);
+			return dbus_error(msg,
+				MESH_ERROR_INVALID_ARGS,
+				"Max element id 63");
+
+				element_bits |= (1 << element_idx);
 		n++;
 	}
 
 	if (element_bits != ((1 << n) - 1))
-		return dbus_error(msg, MESH_ERROR_INVALID_ARGS, "Wrong element indexation");
+		return dbus_error(msg, MESH_ERROR_INVALID_ARGS,
+			"Wrong element indexation");
 
-	if (!create_node_request(temp_uuid, pid, cid, vid, &iter_element_models))
+	if (!create_node_request(temp_uuid, pid, cid, vid,
+				&iter_element_models))
 		return dbus_error(msg, MESH_ERROR_INVALID_ARGS,
 			"Only element 0 can implement models {0x0000, 0x0002}");
 
@@ -451,7 +468,7 @@ static struct l_dbus_message *create_node_call(struct l_dbus *dbus,
 }
 
 static struct l_dbus_message *delete_node_call(struct l_dbus *dbus,
-						struct l_dbus_message *msg, void *user_data)
+		struct l_dbus_message *msg, void *user_data)
 {
 	struct l_dbus_message *reply;
 	struct l_dbus_message_iter iter_uuid;
@@ -464,7 +481,9 @@ static struct l_dbus_message *delete_node_call(struct l_dbus *dbus,
 		return dbus_error(msg, MESH_ERROR_INVALID_ARGS, NULL);
 
 	if (dbus_get_byte_array(&iter_uuid, uuid, UUID_LEN) != UUID_LEN)
-		return dbus_error(msg, MESH_ERROR_INVALID_ARGS, "Incorrect device UUID format");
+		return dbus_error(msg,
+			MESH_ERROR_INVALID_ARGS,
+			"Incorrect device UUID format");
 
 	if (!delete_node(uuid))
 		return dbus_error(msg, MESH_ERROR_DOES_NOT_EXIST, NULL);
@@ -478,7 +497,8 @@ static struct l_dbus_message *delete_node_call(struct l_dbus *dbus,
 static void setup_network_interface(struct l_dbus_interface *iface)
 {
 	l_dbus_interface_method(iface, "CreateNode", 0, create_node_call, "",
-				"qqqaya{y(qaqaq)}", "cid", "pid", "vid", "uuid", "element_models");
+				"qqqaya{y(qaqaq)}", "cid", "pid",
+				"vid", "uuid", "element_models");
 
 	l_dbus_interface_method(iface, "DeleteNode", 0, delete_node_call, "",
 				"ay", "uuid");
@@ -487,9 +507,10 @@ static void setup_network_interface(struct l_dbus_interface *iface)
 bool mesh_dbus_init(struct l_dbus *dbus)
 {
 	if (!l_dbus_register_interface(dbus, MESH_NETWORK_INTERFACE,
-						setup_network_interface, NULL, false)) {
+			setup_network_interface, NULL, false)) {
+
 		l_info("Unable to register %s interface",
-			       MESH_NETWORK_INTERFACE);
+					MESH_NETWORK_INTERFACE);
 		return false;
 	}
 
