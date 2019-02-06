@@ -40,8 +40,8 @@ typedef void (*node_join_ready_func_t) (struct mesh_node *node,
 
 struct mesh_node *node_new(void);
 void node_free(struct mesh_node *node);
-bool create_node_request(uint8_t *uuid, uint16_t cid, uint16_t pid, uint16_t vid,
-							struct l_dbus_message_iter *iter_element_models);
+bool create_node_request(uint8_t *uuid, uint16_t cid, uint16_t pid,
+		uint16_t vid, struct l_dbus_message_iter *iter_element_models);
 bool delete_node(uint8_t *uuid);
 uint8_t *node_uuid_get(struct mesh_node *node);
 struct mesh_net *node_get_net(struct mesh_node *node);
