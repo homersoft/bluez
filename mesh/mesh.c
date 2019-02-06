@@ -71,7 +71,7 @@ struct bt_mesh {
 	uint8_t max_filters;
 };
 
-struct join_data{
+struct join_data {
 	struct l_dbus_message *msg;
 	struct mesh_agent *agent;
 	const char *sender;
@@ -543,8 +543,8 @@ static void node_init_cb(struct mesh_node *node, struct mesh_agent *agent)
 
 	if (!acceptor_start(num_ele, join_pending->uuid, mesh.algorithms,
 				mesh.prov_timeout, agent, prov_complete_cb,
-				&mesh))
-	{
+				&mesh)) {
+
 		reply = dbus_error(join_pending->msg, MESH_ERROR_FAILED,
 				"Failed to start provisioning acceptor");
 		goto fail;
@@ -583,7 +583,7 @@ static struct l_dbus_message *join_network_call(struct l_dbus *dbus,
 
 	join_pending = l_new(struct join_data, 1);
 
-	n = dbus_get_byte_array(&iter_uuid, join_pending->uuid,16);
+	n = dbus_get_byte_array(&iter_uuid, join_pending->uuid, NODE_UUID_LEN);
 
 	if (n != 16) {
 		l_free(join_pending);

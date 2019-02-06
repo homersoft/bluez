@@ -227,6 +227,7 @@ static struct l_dbus_message *create_config_update_msg(struct mesh_node *node,
 
 	if ((id & VENDOR_ID_MASK) != VENDOR_ID_MASK) {
 		uint16_t vendor = id >> 16;
+
 		dbus_append_dict_entry_basic(*builder, "Vendor", "q", &vendor);
 	}
 
@@ -268,7 +269,7 @@ static void append_dict_uint16_array(struct l_dbus_message_builder *builder,
 	for (entry = l_queue_get_entries(q); entry; entry = entry->next) {
 		uint16_t value = (uint16_t) L_PTR_TO_UINT(entry->data);
 
-		l_dbus_message_builder_append_basic(builder,'q', &value);
+		l_dbus_message_builder_append_basic(builder, 'q', &value);
 	}
 
 	l_dbus_message_builder_leave_array(builder);
@@ -1590,6 +1591,7 @@ void model_build_config(void *model, void *msg_builder)
 	/* For vendor models, add vendor id */
 	if ((mod->id & VENDOR_ID_MASK) != VENDOR_ID_MASK) {
 		uint16_t vendor = mod->id >> 16;
+
 		dbus_append_dict_entry_basic(builder, "Vendor", "q", &vendor);
 	}
 
@@ -1600,6 +1602,7 @@ void model_build_config(void *model, void *msg_builder)
 	/* Model periodic publication interval, if present */
 	if (mod->pub) {
 		uint32_t period = convert_pub_period_to_ms(mod->pub->period);
+
 		dbus_append_dict_entry_basic(builder, "PublicationPeriod", "u",
 								&period);
 	}

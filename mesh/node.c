@@ -212,7 +212,7 @@ static void free_node_resources(void *data)
 	struct mesh_node *node = data;
 
 	/* Unregister io callbacks */
-	if(node->net)
+	if (node->net)
 		mesh_net_detach(node->net);
 	mesh_net_free(node->net);
 
@@ -336,7 +336,9 @@ bool node_init_from_storage(struct mesh_node *node, void *data)
 	node->friend = db_node->modes.friend;
 	node->beacon = db_node->modes.beacon;
 
-	l_debug("proxy %2.2x, lpn %2.2x, friend %2.2x", node->proxy, node->friend, node->lpn);
+	l_debug("proxy %2.2x, lpn %2.2x, friend %2.2x",
+		node->proxy, node->friend, node->lpn);
+
 	node->ttl = db_node->ttl;
 	node->seq_number = db_node->seq_number;
 
@@ -1136,6 +1138,7 @@ static void add_model_from_properties(struct node_element *ele,
 
 	while (l_dbus_message_iter_next_entry(&ids, &model_id)) {
 		struct mesh_model *mod;
+
 		l_debug("model_id %4.4x", model_id);
 		mod = mesh_model_new(ele->idx, model_id);
 		l_queue_push_tail(ele->models, mod);
@@ -1158,6 +1161,7 @@ static void add_vendor_model_from_properties(struct node_element *ele,
 
 	while (l_dbus_message_iter_next_entry(property, &id_pair)) {
 		struct mesh_model *mod;
+
 		mod = mesh_model_vendor_new(ele->idx, id_pair.v, id_pair.m);
 		l_queue_push_tail(ele->models, mod);
 	}
@@ -1233,7 +1237,8 @@ static bool get_app_properties(struct mesh_node *node, const char *path,
 	return true;
 }
 
-static void convert_node_to_storage(struct mesh_node *node, struct mesh_db_node *db_node)
+static void convert_node_to_storage(struct mesh_node *node,
+	struct mesh_db_node *db_node)
 {
 	const struct l_queue_entry *entry;
 
@@ -1394,7 +1399,7 @@ static void get_managed_objects_join_cb(struct l_dbus_message *msg,
 		}
 	}
 
-	if (!node->comp){
+	if (!node->comp) {
 		l_error("Interface %s not found", MESH_APPLICATION_INTERFACE);
 		goto fail;
 	}
