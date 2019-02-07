@@ -47,6 +47,9 @@
 #include "mesh/mesh-db.h"
 #include "mesh/storage.h"
 
+/* Define how many separators occurs in uuid during uuid to str conversion */
+#define NUM_OF_SEP_IN_UUID_STR	((uint8_t)4)
+
 struct write_info {
 	json_object *jnode;
 	const char *config_name;
@@ -158,15 +161,10 @@ static bool parse_node(struct mesh_node *node, json_object *jnode)
 	if (!mesh_db_read_node(jnode, read_node_cb, node))
 		return false;
 
-	if (!mesh_db_read_net_keys(jnode, read_net_keys_cb, net))
-		return false;
-
 	if (!mesh_db_read_device_key(jnode, key_buf))
 		return false;
 
 	node_set_device_key(node, key_buf);
-
-	mesh_db_read_app_keys(jnode, read_app_keys_cb, net);
 
 	return true;
 }
@@ -515,9 +513,12 @@ bool storage_load_nodes(const char *dir_name)
 
 bool storage_create_node_config(struct mesh_node *node, void *data)
 {
+	const uint8_t uuid_str_len =
+		(2 * UUID_LEN) + NUM_OF_SEP_IN_UUID_STR + 1;
+
+	char uuid_str[uuid_str_len];
+
 	struct mesh_db_node *db_node = data;
-	uint16_t node_id;
-	uint8_t num_tries = 0;
 	char name_buf[PATH_MAX];
 	char *filename;
 	json_object *jnode;
@@ -531,17 +532,10 @@ bool storage_create_node_config(struct mesh_node *node, void *data)
 	if (!mesh_db_add_node(jnode, db_node))
 		return false;
 
-	do {
-		l_getrandom(&node_id, 2);
-		if (!l_queue_find(node_ids, simple_match,
-						L_UINT_TO_PTR(node_id)))
-			break;
-	} while (++num_tries < 10);
+	/* Convert UUID to string */
+	l_uuid_to_string(node_uuid_get(node), &uuid_str[0], uuid_str_len);
 
-	if (num_tries == 10)
-		l_error("Failed to generate unique node ID");
-
-	snprintf(name_buf, PATH_MAX, "%s/%04x", storage_dir, node_id);
+	snprintf(name_buf, PATH_MAX, "%s/%s", storage_dir, uuid_str);
 
 	/* Create a new directory and node.json file */
 	if (mkdir(name_buf, 0755) != 0)

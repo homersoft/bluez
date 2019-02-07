@@ -90,7 +90,7 @@ struct mesh_node {
 		uint8_t mode;
 	} relay;
 	uint8_t dev_uuid[UUID_LEN];
-	uint8_t dev_key[16];
+	uint8_t dev_key[DEVKEY_LEN];
 	uint8_t num_ele;
 	uint8_t ttl;
 	uint8_t lpn;
@@ -411,19 +411,15 @@ bool node_init_from_storage(struct mesh_node *node, void *data)
 	node->comp->cid = db_node->cid;
 	node->comp->pid = db_node->pid;
 	node->comp->vid = db_node->vid;
-	node->comp->crpl = db_node->crpl;
-	node->lpn = db_node->modes.lpn;
+	node->lpn = db_node->modes.low_power;
 
 	node->proxy = db_node->modes.proxy;
-	node->lpn = db_node->modes.lpn;
 	node->friend = db_node->modes.friend;
-	node->relay.mode = db_node->modes.relay.state;
-	node->relay.cnt = db_node->modes.relay.cnt;
-	node->relay.interval = db_node->modes.relay.interval;
 	node->beacon = db_node->modes.beacon;
 
-	l_debug("relay %2.2x, proxy %2.2x, lpn %2.2x, friend %2.2x",
-			node->relay.mode, node->proxy, node->friend, node->lpn);
+	l_debug("proxy %2.2x, lpn %2.2x, friend %2.2x",
+			  node->proxy, node->friend, node->lpn);
+
 	node->ttl = db_node->ttl;
 	node->seq_number = db_node->seq_number;
 
@@ -1081,28 +1077,29 @@ static void app_disc_cb(struct l_dbus *bus, void *user_data)
 }
 
 static void convert_node_to_storage(struct mesh_node *node,
-						struct mesh_db_node *db_node)
+												struct mesh_db_node *db_node)
 {
 	const struct l_queue_entry *entry;
 
 	db_node->cid = node->comp->cid;
 	db_node->pid = node->comp->pid;
 	db_node->vid = node->comp->vid;
-	db_node->crpl = node->comp->crpl;
-	db_node->modes.lpn = node->lpn;
-	db_node->modes.proxy = node->proxy;
+
+	db_node->iv_index = mesh_net_get_iv_index(node_get_net(node));
+	db_node->iv_update = mesh_net_get_iv_update(node_get_net(node));
 
 	memcpy(db_node->uuid, node->dev_uuid, UUID_LEN);
-
-	node->friend = db_node->modes.friend;
-	db_node->modes.relay.state = node->relay.mode;
-	db_node->modes.relay.cnt = node->relay.cnt;
-	db_node->modes.relay.interval = node->relay.interval;
 	db_node->modes.beacon = node->beacon;
-
 	db_node->ttl = node->ttl;
-	db_node->seq_number = node->seq_number;
 
+	memcpy(db_node->dev_key, node->dev_key, DEVKEY_LEN);
+	node->friend = db_node->modes.friend;
+	db_node->modes.low_power = node->lpn;
+
+	db_node->provisioned = node->net ? true : false;
+	db_node->modes.proxy = node->proxy;
+	db_node->seq_number = node->seq_number;
+	db_node->unicast = node->primary;
 	db_node->elements = l_queue_new();
 
 	entry = l_queue_get_entries(node->elements);

@@ -29,6 +29,9 @@ struct mesh_agent;
 #define MIN_SEQ_CACHE_TIME	(5*60)
 
 #define UUID_LEN 16
+#define DEVKEY_LEN 16
+#define NETKEY_LEN 16
+
 #define OPCODE_MAX_LEN 3
 #define PAYLOAD_MAX_LEN 379
 

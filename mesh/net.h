@@ -286,6 +286,7 @@ int mesh_net_del_key(struct mesh_net *net, uint16_t net_idx);
 int mesh_net_add_key(struct mesh_net *net, bool update,
 					uint16_t net_idx, const void *key);
 uint32_t mesh_net_get_iv_index(struct mesh_net *net);
+bool mesh_net_get_iv_update(struct mesh_net *net);
 void mesh_net_get_snb_state(struct mesh_net *net,
 					uint8_t *flags, uint32_t *iv_index);
 bool mesh_net_get_key(struct mesh_net *net, bool new_key, uint16_t idx,
