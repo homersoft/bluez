@@ -66,6 +66,27 @@ static bool add_key(json_object *jobject, const char *desc,
 	return true;
 }
 
+static bool add_uuid(json_object *jobject, const char *desc, uint8_t *uuid)
+{
+	const uint8_t NUM_OF_SEP_IN_UUID_STR = 4;
+	json_object *jstring;
+
+	const uint8_t uuid_str_len =
+		(2 * UUID_LEN) + NUM_OF_SEP_IN_UUID_STR + 1;
+
+	char uuid_str[uuid_str_len];
+
+	/* Convert UUID to string */
+	l_uuid_to_string(uuid, &uuid_str[0], uuid_str_len);
+
+	jstring = json_object_new_string(uuid_str);
+	if (!jstring)
+		return false;
+
+	json_object_object_add(jobject, desc, jstring);
+	return true;
+}
+
 static json_object *get_element_model(json_object *jnode, int ele_idx,
 						uint32_t mod_id, bool vendor)
 {
@@ -250,6 +271,27 @@ bool mesh_db_read_device_key(json_object *jobj, uint8_t key_buf[DEVKEY_LEN])
 
 	str = (char *)json_object_get_string(jvalue);
 	if (!str2hex(str, strlen(str), key_buf, DEVKEY_LEN))
+		return false;
+
+	return true;
+}
+
+bool mesh_db_read_uuid(json_object *jobj, uint8_t uuid_buf[UUID_LEN])
+{
+	json_object *jvalue;
+	const uint8_t NUM_OF_SEP_IN_UUID_STR = 4;
+	const uint8_t uuid_str_len = (2 * UUID_LEN) + NUM_OF_SEP_IN_UUID_STR;
+
+	if (!uuid_buf)
+		return false;
+
+	if (!json_object_object_get_ex(jobj, "UUID", &jvalue) ||
+		 !jvalue)
+		return false;
+
+	char *str = (char *)json_object_get_string(jvalue);
+
+	if(!l_uuid_parse(str, uuid_str_len, &uuid_buf[0]))
 		return false;
 
 	return true;
@@ -1406,7 +1448,7 @@ bool mesh_db_add_node(json_object *jnode, struct mesh_db_node *node)
 		return false;
 
 	/* Device UUID */
-	if (!add_key(jnode, "UUID", node->uuid))
+	if (!add_uuid(jnode, "UUID", node->uuid))
 		return false;
 
 	/* Beaconing state */

@@ -108,7 +108,8 @@ typedef bool (*mesh_db_node_cb)(struct mesh_db_node *node, void *user_data);
 bool mesh_db_read_node(json_object *jobj, mesh_db_node_cb cb, void *user_data);
 bool mesh_db_add_node(json_object *jnode, struct mesh_db_node *node);
 bool mesh_db_read_iv_index(json_object *jobj, uint32_t *idx, bool *update);
-bool mesh_db_read_device_key(json_object *jobj, uint8_t key_buf[16]);
+bool mesh_db_read_device_key(json_object *jobj, uint8_t key_buf[DEVKEY_LEN]);
+bool mesh_db_read_uuid(json_object *jobj, uint8_t uuid_buf[UUID_LEN]);
 bool mesh_db_read_net_transmit(json_object *jobj, uint8_t *cnt,
 							uint16_t *interval);
 bool mesh_db_write_net_transmit(json_object *jobj, uint8_t cnt,

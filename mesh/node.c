@@ -502,9 +502,14 @@ uint16_t node_get_primary(struct mesh_node *node)
 		return node->primary;
 }
 
-void node_set_device_key(struct mesh_node *node, uint8_t key[16])
+void node_set_device_key(struct mesh_node *node, uint8_t key[DEVKEY_LEN])
 {
-	memcpy(node->dev_key, key, 16);
+	memcpy(node->dev_key, key, DEVKEY_LEN);
+}
+
+void node_set_uuid(struct mesh_node *node, uint8_t uuid[UUID_LEN])
+{
+	memcpy(node->dev_uuid, uuid, UUID_LEN);
 }
 
 const uint8_t *node_get_device_key(struct mesh_node *node)

@@ -47,9 +47,6 @@
 #include "mesh/mesh-db.h"
 #include "mesh/storage.h"
 
-/* Define how many separators occurs in uuid during uuid to str conversion */
-#define NUM_OF_SEP_IN_UUID_STR	((uint8_t)4)
-
 struct write_info {
 	json_object *jnode;
 	const char *config_name;
@@ -72,7 +69,6 @@ static bool read_node_cb(struct mesh_db_node *db_node, void *user_data)
 	uint32_t seq_number;
 	uint8_t ttl, mode, cnt, num_ele;
 	uint16_t unicast, interval;
-	uint8_t *uuid;
 
 	if (!node_init_from_storage(node, db_node)) {
 		node_free(node);
@@ -109,9 +105,13 @@ static bool read_node_cb(struct mesh_db_node *db_node, void *user_data)
 		!mesh_net_register_unicast(net, unicast, num_ele))
 		return false;
 
-	uuid = node_uuid_get(node);
-	if (uuid)
-		mesh_net_id_uuid_set(net, uuid);
+	if (node_is_provisioned(node)) {
+		uint8_t *uuid = node_uuid_get(node);
+
+		if(uuid)
+			mesh_net_id_uuid_set(net, uuid);
+	}
+
 
 	return true;
 }
@@ -146,10 +146,13 @@ static bool parse_node(struct mesh_node *node, json_object *jnode)
 {
 	bool bvalue;
 	uint32_t iv_index;
-	uint8_t key_buf[16];
+	uint8_t key_buf[DEVKEY_LEN];
+	uint8_t uuid_buf[UUID_LEN];
 	uint8_t cnt;
 	uint16_t interval;
 	struct mesh_net *net = node_get_net(node);
+
+	l_debug("");
 
 	if (mesh_db_read_iv_index(jnode, &iv_index, &bvalue))
 		mesh_net_set_iv_index(net, iv_index, bvalue);
@@ -158,13 +161,19 @@ static bool parse_node(struct mesh_node *node, json_object *jnode)
 		mesh_net_transmit_params_set(net, cnt, interval);
 
 	/* Node composition/configuration info */
-	if (!mesh_db_read_node(jnode, read_node_cb, node))
+	if(!mesh_db_read_uuid(jnode, uuid_buf)) {
+		l_debug("UUID read failed");
 		return false;
+	}
 
 	if (!mesh_db_read_device_key(jnode, key_buf))
 		return false;
 
 	node_set_device_key(node, key_buf);
+	node_set_uuid(node, uuid_buf);
+
+	if (!mesh_db_read_node(jnode, read_node_cb, node))
+		return false;
 
 	return true;
 }
@@ -513,6 +522,7 @@ bool storage_load_nodes(const char *dir_name)
 
 bool storage_create_node_config(struct mesh_node *node, void *data)
 {
+	const uint8_t NUM_OF_SEP_IN_UUID_STR = 4;
 	const uint8_t uuid_str_len =
 		(2 * UUID_LEN) + NUM_OF_SEP_IN_UUID_STR + 1;
 
