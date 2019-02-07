@@ -46,7 +46,6 @@
 static const struct option main_options[] = {
 	{ "index",	required_argument,	NULL, 'i' },
 	{ "config",	optional_argument,	NULL, 'c' },
-	{ "nodetach",	no_argument,		NULL, 'n' },
 	{ "debug",	no_argument,		NULL, 'd' },
 	{ "debug-bus",	no_argument,		NULL, 'b' },
 	{ "system-bus",	no_argument,		NULL, 'S' },
@@ -61,14 +60,13 @@ static void usage(void)
 	l_info("Usage:\n"
 	       "\tmeshd [options]\n");
 	l_info("Options:\n"
-	       "\t--index <hcinum>  Use specified controller\n"
-	       "\t--config          Configuration directory\n"
-	       "\t--nodetach        Run in foreground\n"
-	       "\t--debug           Enable debug output\n"
-	       "\t--debug-bus       Enable dbus debug output\n"
-	       "\t--system-bus      Connect to system bus (default)\n"
-	       "\t--session-bus     Connect to session bus\n"
-	       "\t--help            Show %s information\n", __func__);
+	       "\t-i, --index <hcinum>  Use specified controller\n"
+	       "\t-c, --config          Configuration directory\n"
+	       "\t--debug               Enable debug output\n"
+	       "\t--debug-bus           Enable dbus debug output\n"
+	       "\t--system-bus          Connect to system bus (default)\n"
+	       "\t--session-bus         Connect to session bus\n"
+	       "\t--help                Show %s information\n", __func__);
 }
 
 static void do_debug(const char *str, void *user_data)
@@ -82,7 +80,7 @@ static void request_name_callback(struct l_dbus *dbus, bool success,
 					bool queued, void *user_data)
 {
 	l_info("Request name %s",
-		success ? "success": "failed");
+		success ? "success" : "failed");
 
 	if (success)
 		dbus_init(dbus);
@@ -120,7 +118,6 @@ static void signal_handler(uint32_t signo, void *user_data)
 int main(int argc, char *argv[])
 {
 	int status;
-	bool detached = true;
 	bool dbus_debug = false;
 	enum l_dbus_bus dbus_bus = L_DBUS_SYSTEM_BUS;
 	struct l_dbus *dbus = NULL;
@@ -136,7 +133,7 @@ int main(int argc, char *argv[])
 		int opt;
 		const char *str;
 
-		opt = getopt_long(argc, argv, "i:c:ndbsSh", main_options, NULL);
+		opt = getopt_long(argc, argv, "i:c:", main_options, NULL);
 		if (opt < 0)
 			break;
 
@@ -154,9 +151,6 @@ int main(int argc, char *argv[])
 
 			index = atoi(str);
 
-			break;
-		case 'n':
-			detached = false;
 			break;
 		case 'd':
 			l_debug_enable("*");
@@ -208,14 +202,6 @@ int main(int argc, char *argv[])
 		l_error("Failed to enable Object Manager");
 		status = EXIT_FAILURE;
 		goto done;
-	}
-
-	if (detached) {
-		if (daemon(0, 0)) {
-			perror("Failed to start meshd daemon");
-			status = EXIT_FAILURE;
-			goto done;
-		}
 	}
 
 	status = l_main_run_with_signal(signal_handler, NULL);

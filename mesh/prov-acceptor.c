@@ -371,7 +371,7 @@ static void acp_prov_rx(void *user_data, const uint8_t *data, uint16_t len)
 		goto failure;
 	}
 
-	switch (type){
+	switch (type) {
 	case PROV_INVITE: /* Prov Invite */
 		/* Prov Capabilities */
 		out = l_malloc(1 + sizeof(struct mesh_net_prov_caps));
@@ -682,13 +682,14 @@ bool acceptor_start(uint8_t num_ele, uint8_t uuid[16],
 	/* Compose Unprovisioned Beacon */
 	memcpy(beacon + 2, uuid, 16);
 	l_put_be16(caps->oob_info, beacon + 18);
-	if (caps->oob_info & OOB_INFO_URI_HASH){
+	if (caps->oob_info & OOB_INFO_URI_HASH) {
 		l_put_be32(caps->uri_hash, beacon + 20);
 		len += sizeof(uint32_t);
 	}
 
 	/* Infinitely Beacon until Canceled, or Provisioning Starts */
-	result = mesh_send_pkt(0, 500, beacon, len);
+	//FIXME
+	result = true;
 
 	if (!result)
 		goto error_fail;

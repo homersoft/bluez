@@ -22,6 +22,7 @@
 
 #define MESH_NETWORK_INTERFACE "org.bluez.mesh.Network1"
 #define MESH_NODE_INTERFACE "org.bluez.mesh.Node1"
+#define MESH_PROVISIONING_INTERFACE "org.bluez.mesh.Provisioning1"
 #define MESH_ELEMENT_INTERFACE "org.bluez.mesh.Element1"
 #define MESH_APPLICATION_INTERFACE "org.bluez.mesh.Application1"
 #define MESH_PROVISION_AGENT_INTERFACE "org.bluez.mesh.ProvisionAgent1"
