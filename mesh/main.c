@@ -54,6 +54,25 @@ static const struct option main_options[] = {
 	{ }
 };
 
+const char *CFG_DIR = NULL;
+int HCI_Idx = MGMT_INDEX_NONE;
+
+static void set_config_dir(const char *config_dir) {
+	CFG_DIR = config_dir;
+}
+
+static const char *get_config_dir(void) {
+	return CFG_DIR;
+}
+
+static void set_hci_idx(int index) {
+	HCI_Idx = index;
+}
+
+int get_hci_idx(void) {
+	return HCI_Idx;
+}
+
 static void usage(void)
 {
 	l_info("");
@@ -83,7 +102,13 @@ static void request_name_callback(struct l_dbus *dbus, bool success,
 		success ? "success" : "failed");
 
 	if (success)
+	{
 		dbus_init(dbus);
+
+		if(!mesh_init(get_hci_idx(), get_config_dir())) {
+			l_error("Failed to initialize mesh");
+		}
+	}
 	else
 		l_main_quit();
 }
@@ -178,13 +203,10 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (!mesh_init(index, config_dir)) {
-		l_error("Failed to initialize mesh");
-		status = EXIT_FAILURE;
-		goto done;
-	}
-
 	umask(0077);
+
+	set_config_dir(config_dir);
+	set_hci_idx(index);
 
 	dbus = l_dbus_new_default(dbus_bus);
 	if (!dbus) {

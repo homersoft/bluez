@@ -103,3 +103,4 @@ void node_jconfig_set(struct mesh_node *node, void *jconfig);
 void *node_jconfig_get(struct mesh_node *node);
 void node_cfg_file_set(struct mesh_node *node, char *cfg);
 char *node_cfg_file_get(struct mesh_node *node);
+bool register_node_object(struct mesh_node *node);

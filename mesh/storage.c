@@ -70,10 +70,17 @@ static bool read_node_cb(struct mesh_db_node *db_node, void *user_data)
 	uint8_t ttl, mode, cnt, num_ele;
 	uint16_t unicast, interval;
 
+	l_debug("");
+
 	if (!node_init_from_storage(node, db_node)) {
 		node_free(node);
+		l_debug("Cannot initialize from storage");
 		return false;
 	}
+
+	/* Register object in dBus */
+	if(!register_node_object(node))
+		l_debug("register node object from storage FAILED");
 
 	net = node_get_net(node);
 	seq_number = node_get_sequence_number(node);

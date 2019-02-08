@@ -433,8 +433,6 @@ bool node_init_from_storage(struct mesh_node *node, void *data)
 
 	node->primary = db_node->unicast;
 
-	memcpy(node->dev_uuid, db_node->uuid, UUID_LEN);
-
 	/* Initialize configuration server model */
 	mesh_config_srv_init(node, PRIMARY_ELE_IDX);
 
@@ -1182,6 +1180,8 @@ bool create_node_request(uint8_t *uuid, uint16_t cid, uint16_t pid,
 	struct l_dbus_message_iter iter_sig_models, iter_vendor_models;
 	uint8_t element_idx;
 	uint16_t location;
+
+	l_debug("");
 
 	new_node = l_new(struct mesh_node, 1);
 	new_node->elements = l_queue_new();
