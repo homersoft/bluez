@@ -434,6 +434,13 @@ bool node_init_from_storage(struct mesh_node *node, void *data)
 
 	node->primary = db_node->unicast;
 
+	if(db_node->provisioned) {
+		node->net = mesh_net_new(node);
+		l_info("provisioned node from storage");
+	} else {
+		l_info("unprovisioned node from storage");
+	}
+
 	/* Initialize configuration server model */
 	mesh_config_srv_init(node, PRIMARY_ELE_IDX);
 

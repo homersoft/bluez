@@ -1426,29 +1426,29 @@ static void add_model(void *a, void *b)
 }
 
 /* Add unprovisioned node (local) */
-bool mesh_db_add_node(json_object *jnode, struct mesh_db_node *node)
+bool mesh_db_add_node(json_object *jnode, struct mesh_db_node *db_node, struct mesh_node *node)
 {
 
-	struct mesh_db_modes *modes = &node->modes;
+	struct mesh_db_modes *modes = &db_node->modes;
 	const struct l_queue_entry *entry;
 	json_object *jelements;
 
 	/* CID, PID, VID */
-	if (!mesh_db_write_uint16_hex(jnode, "cid", node->cid))
+	if (!mesh_db_write_uint16_hex(jnode, "cid", db_node->cid))
 		return false;
 
-	if (!mesh_db_write_uint16_hex(jnode, "pid", node->pid))
+	if (!mesh_db_write_uint16_hex(jnode, "pid", db_node->pid))
 		return false;
 
-	if (!mesh_db_write_uint16_hex(jnode, "vid", node->vid))
+	if (!mesh_db_write_uint16_hex(jnode, "vid", db_node->vid))
 		return false;
 
 	/* IV index and IV update flag */
-	if (!mesh_db_write_iv_index(jnode, node->iv_index, node->iv_update))
+	if (!mesh_db_write_iv_index(jnode, db_node->iv_index, db_node->iv_update))
 		return false;
 
 	/* Device UUID */
-	if (!add_uuid(jnode, "UUID", node->uuid))
+	if (!add_uuid(jnode, "UUID", db_node->uuid))
 		return false;
 
 	/* Beaconing state */
@@ -1457,10 +1457,10 @@ bool mesh_db_add_node(json_object *jnode, struct mesh_db_node *node)
 
 	/* Default TTL */
 	json_object_object_add(jnode, "defaultTTL",
-								  json_object_new_int(node->ttl));
+								  json_object_new_int(db_node->ttl));
 
 	/* Device Key */
-	if (!mesh_db_write_device_key(jnode, node->dev_key))
+	if (!mesh_db_write_device_key(jnode, db_node->dev_key))
 		return false;
 
 	/* Elements */
@@ -1469,7 +1469,7 @@ bool mesh_db_add_node(json_object *jnode, struct mesh_db_node *node)
 	if (!jelements)
 		return false;
 
-	entry = l_queue_get_entries(node->elements);
+	entry = l_queue_get_entries(db_node->elements);
 
 	for (int idx = 0; entry; entry = entry->next, idx++) {
 		char int_as_str[5];
@@ -1512,11 +1512,11 @@ bool mesh_db_add_node(json_object *jnode, struct mesh_db_node *node)
 		return false;
 
 	/* Network Key */
-	if (!add_key(jnode, "net_key", node->net_key))
+	if (!add_key(jnode, "net_key", db_node->net_key))
 		return false;
 
 	/* Provisioned and proxy flags */
-	if (!mesh_db_write_bool(jnode, "provisioned", node->provisioned))
+	if (!mesh_db_write_bool(jnode, "provisioned", node_is_provisioned(node)))
 		return false;
 
 	if (!mesh_db_write_bool(jnode, "proxy", modes->proxy))
@@ -1524,10 +1524,10 @@ bool mesh_db_add_node(json_object *jnode, struct mesh_db_node *node)
 
 	/* Sequence number */
 	json_object_object_add(jnode, "sequenceNumber",
-								  json_object_new_int(node->seq_number));
+								  json_object_new_int(db_node->seq_number));
 
 	/* Unicast address */
-	if (!mesh_db_write_uint16_hex(jnode, "unicastAddress", node->unicast))
+	if (!mesh_db_write_uint16_hex(jnode, "unicastAddress", db_node->unicast))
 		return false;
 
 	return true;

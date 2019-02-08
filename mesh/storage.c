@@ -546,7 +546,7 @@ bool storage_create_node_config(struct mesh_node *node, void *data)
 
 	jnode = json_object_new_object();
 
-	if (!mesh_db_add_node(jnode, db_node))
+	if (!mesh_db_add_node(jnode, db_node, node))
 		return false;
 
 	/* Convert UUID to string */
