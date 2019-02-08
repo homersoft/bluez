@@ -510,6 +510,8 @@ bool storage_load_nodes(const char *dir_name)
 
 		if (parse_config(name_buf, filename, node_id))
 			continue;
+		else
+			l_info("cannot parse cfg file, trying with backup...");
 
 		/* Fall-back to Backup version */
 		snprintf(name_buf, PATH_MAX, "%s/%s/node.json.bak", dir_name,
@@ -518,7 +520,10 @@ bool storage_load_nodes(const char *dir_name)
 		if (parse_config(name_buf, filename, node_id)) {
 			remove(filename);
 			rename(name_buf, filename);
+			l_info("backup parsed successfully");
 			continue;
+		} else {
+			l_info("cannot parse backup config");
 		}
 
 		l_free(filename);

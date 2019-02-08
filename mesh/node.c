@@ -456,7 +456,8 @@ void node_cleanup(void *data)
 	if (node->cfg_file) {
 
 		/* Preserve the last sequence number */
-		storage_write_sequence_number(net, mesh_net_get_seq_num(net));
+		if (net)
+			storage_write_sequence_number(net, mesh_net_get_seq_num(net));
 
 		if (storage_save_config(node, true, NULL, NULL))
 			l_info("Saved final config to %s", node->cfg_file);
@@ -1106,7 +1107,7 @@ static void convert_node_to_storage(struct mesh_node *node,
 	db_node->ttl = node->ttl;
 
 	memcpy(db_node->dev_key, node->dev_key, DEVKEY_LEN);
-	node->friend = db_node->modes.friend;
+	db_node->modes.friend = node->friend;
 	db_node->modes.low_power = node->lpn;
 
 	db_node->provisioned = node->net ? true : false;
