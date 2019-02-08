@@ -190,7 +190,8 @@ struct mesh_node *node_new(void)
 	struct mesh_node *node;
 
 	node = l_new(struct mesh_node, 1);
-	node->net = mesh_net_new(node);
+	//todo:JWI
+	//node->net = mesh_net_new(node);
 
 	if (!nodes)
 		nodes = l_queue_new();

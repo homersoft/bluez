@@ -157,15 +157,15 @@ static bool parse_node(struct mesh_node *node, json_object *jnode)
 	uint8_t uuid_buf[UUID_LEN];
 	uint8_t cnt;
 	uint16_t interval;
-	struct mesh_net *net = node_get_net(node);
+	//struct mesh_net *net = node_get_net(node);
 
 	l_debug("");
-
-	if (mesh_db_read_iv_index(jnode, &iv_index, &bvalue))
-		mesh_net_set_iv_index(net, iv_index, bvalue);
-
-	if (mesh_db_read_net_transmit(jnode, &cnt, &interval))
-		mesh_net_transmit_params_set(net, cnt, interval);
+	//todo:JWI
+//	if (mesh_db_read_iv_index(jnode, &iv_index, &bvalue))
+//		mesh_net_set_iv_index(net, iv_index, bvalue);
+//
+//	if (mesh_db_read_net_transmit(jnode, &cnt, &interval))
+//		mesh_net_transmit_params_set(net, cnt, interval);
 
 	/* Node composition/configuration info */
 	if(!mesh_db_read_uuid(jnode, uuid_buf)) {
