@@ -1037,8 +1037,10 @@ void node_attach_io(struct mesh_io *io)
 	l_queue_foreach(nodes, attach_io, io);
 }
 
-static bool register_node_object(struct mesh_node *node)
+bool register_node_object(struct mesh_node *node)
 {
+	l_debug("");
+
 	char path[(UUID_LEN * 2) + MESH_NODE_PATH_PREFIX_LEN + 6] = {'\0'};
 
 	get_node_path_from_uuid(path, node->dev_uuid);
