@@ -3839,7 +3839,8 @@ void mesh_net_set_prov(struct mesh_net *net, struct mesh_prov *prov)
 	net->prov = prov;
 }
 
-bool mesh_net_init_params_from_node(struct mesh_node *node, struct mesh_db_node *db_node)
+bool mesh_net_init_params_from_node(struct mesh_node *node,
+	struct mesh_db_node *db_node)
 {
 	struct mesh_net *net = node_get_net(node);
 
@@ -3848,9 +3849,9 @@ bool mesh_net_init_params_from_node(struct mesh_node *node, struct mesh_db_node 
 
 	/* SEQ nr and TTL */
 	uint32_t seq_number = node_get_sequence_number(node);
-	mesh_net_set_seq_num(net, seq_number);
-
 	uint8_t ttl = node_default_ttl_get(node);
+
+	mesh_net_set_seq_num(net, seq_number);
 	mesh_net_set_default_ttl(net, ttl);
 
 	/* Set IV idx and IV update */
@@ -3884,7 +3885,7 @@ bool mesh_net_init_params_from_node(struct mesh_node *node, struct mesh_db_node 
 	/* UUID */
 	uint8_t *uuid = node_uuid_get(node);
 
-	if(uuid)
+	if (uuid)
 		mesh_net_id_uuid_set(net, uuid);
 
 	return true;

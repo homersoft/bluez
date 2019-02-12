@@ -291,7 +291,7 @@ bool mesh_db_read_uuid(json_object *jobj, uint8_t uuid_buf[UUID_LEN])
 
 	char *str = (char *)json_object_get_string(jvalue);
 
-	if(!l_uuid_parse(str, uuid_str_len, &uuid_buf[0]))
+	if (!l_uuid_parse(str, uuid_str_len, &uuid_buf[0]))
 		return false;
 
 	return true;
@@ -1020,7 +1020,7 @@ static bool parse_elements(json_object *jelements, struct mesh_db_node *node)
 		sprintf(int_as_str, "%u", ele_nr);
 
 		if (!json_object_object_get_ex(jelements, int_as_str,
-												 &jelement)) {
+			 &jelement)) {
 			/* End of elements */
 			return true;
 		}
@@ -1043,7 +1043,7 @@ static bool parse_elements(json_object *jelements, struct mesh_db_node *node)
 			goto fail;
 
 		if (!json_object_object_get_ex(jelement, "location",
-												 &jlocation))
+			 &jlocation))
 			goto fail;
 
 		char *str = (char *)json_object_get_string(jlocation);
@@ -1065,7 +1065,7 @@ static bool parse_elements(json_object *jelements, struct mesh_db_node *node)
 		l_queue_push_tail(node->elements, ele);
 	}
 
-	fail:
+fail:
 	l_queue_destroy(node->elements, free_element);
 	node->elements = NULL;
 
@@ -1139,11 +1139,11 @@ static bool parse_iv_idx(json_object *jcomp, struct mesh_db_node *node)
 	uint32_t iv_index;
 	bool iv_update;
 
-	if (!mesh_db_read_iv_index(jcomp, &iv_index, &iv_update)) {
-		return false;
-	} else {
+	if (mesh_db_read_iv_index(jcomp, &iv_index, &iv_update)) {
 		node->iv_index = iv_index;
 		node->iv_update = iv_update;
+	} else {
+		return false;
 	}
 
 	return true;
@@ -1153,10 +1153,10 @@ static bool parse_uuid(json_object *jcomp, struct mesh_db_node *node)
 {
 	uint8_t uuid_buf[UUID_LEN];
 
-	if(!mesh_db_read_uuid(jcomp, uuid_buf))
-		return false;
-	else
+	if (mesh_db_read_uuid(jcomp, uuid_buf))
 		memcpy(node->uuid, uuid_buf, UUID_LEN);
+	else
+		return false;
 
 	return true;
 }
@@ -1166,10 +1166,10 @@ static bool parse_keys(json_object *jcomp, struct mesh_db_node *node)
 	uint8_t key_buf[DEVKEY_LEN];
 
 	/* Get Device Key */
-	if (!mesh_db_read_device_key(jcomp, key_buf))
-		return false;
-	else
+	if (mesh_db_read_device_key(jcomp, key_buf))
 		memcpy(node->dev_key, key_buf, DEVKEY_LEN);
+	else
+		return false;
 
 	return true;
 }
@@ -1505,9 +1505,10 @@ static void add_model(void *a, void *b)
 }
 
 /* Add unprovisioned node (local) */
-bool mesh_db_add_node(json_object *jnode, struct mesh_db_node *db_node, struct mesh_node *node)
+bool mesh_db_add_node(json_object *jnode,
+	struct mesh_db_node *db_node,
+	struct mesh_node *node)
 {
-
 	struct mesh_db_modes *modes = &db_node->modes;
 	const struct l_queue_entry *entry;
 	json_object *jelements;
@@ -1523,7 +1524,8 @@ bool mesh_db_add_node(json_object *jnode, struct mesh_db_node *db_node, struct m
 		return false;
 
 	/* IV index and IV update flag */
-	if (!mesh_db_write_iv_index(jnode, db_node->iv_index, db_node->iv_update))
+	if (!mesh_db_write_iv_index(jnode, db_node->iv_index,
+		 db_node->iv_update))
 		return false;
 
 	/* Device UUID */
@@ -1552,11 +1554,11 @@ bool mesh_db_add_node(json_object *jnode, struct mesh_db_node *db_node, struct m
 
 	/* Default TTL */
 	json_object_object_add(jnode, "defaultTTL",
-								  json_object_new_int(db_node->ttl));
+		json_object_new_int(db_node->ttl));
 
 	/* Sequence number */
 	json_object_object_add(jnode, "sequenceNumber",
-								  json_object_new_int(db_node->seq_number));
+		json_object_new_int(db_node->seq_number));
 
 	/* Beaconing state */
 	if (!mesh_db_write_bool(jnode, "beacon", modes->beacon))
@@ -1571,7 +1573,8 @@ bool mesh_db_add_node(json_object *jnode, struct mesh_db_node *db_node, struct m
 		return false;
 
 	/* Provisioned and proxy flags */
-	if (!mesh_db_write_bool(jnode, "provisioned", node_is_provisioned(node)))
+	if (!mesh_db_write_bool(jnode, "provisioned",
+		 node_is_provisioned(node)))
 		return false;
 
 	/* Proxy mode */
@@ -1579,7 +1582,8 @@ bool mesh_db_add_node(json_object *jnode, struct mesh_db_node *db_node, struct m
 		return false;
 
 	/* Unicast address */
-	if (!mesh_db_write_uint16_hex(jnode, "unicastAddress", db_node->unicast))
+	if (!mesh_db_write_uint16_hex(jnode, "unicastAddress",
+		 db_node->unicast))
 		return false;
 
 	/* Elements */
@@ -1601,10 +1605,10 @@ bool mesh_db_add_node(json_object *jnode, struct mesh_db_node *db_node, struct m
 
 		mesh_db_write_int(jsub_elements, "elementIndex", ele->index);
 		mesh_db_write_uint16_hex(jsub_elements, "location",
-										 ele->location);
+			ele->location);
 
 		json_object_object_add(jelements, &int_as_str[0],
-									  jsub_elements);
+			jsub_elements);
 
 		/* Models */
 		if (l_queue_isempty(ele->models))

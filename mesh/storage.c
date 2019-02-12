@@ -75,7 +75,7 @@ static bool read_node_cb(struct mesh_db_node *db_node, void *user_data)
 	}
 
 	/* Register object in dBus */
-	if(!register_node_object(node))
+	if (!register_node_object(node))
 		l_info("register node object from storage FAILED");
 
 	if (!mesh_net_init_params_from_node(node, db_node))
@@ -279,9 +279,10 @@ bool storage_write_sequence_number(struct mesh_net *net, uint32_t seq)
 {
 	struct mesh_node *node = mesh_net_node_get(net);
 	json_object *jnode = node_jconfig_get(node);
-	bool result;
+
 	l_debug("");
-	result = mesh_db_write_int(jnode, "sequenceNumber", seq);
+	bool result = mesh_db_write_int(jnode, "sequenceNumber", seq);
+
 	if (!result)
 		return false;
 

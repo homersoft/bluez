@@ -422,7 +422,7 @@ bool node_init_from_storage(struct mesh_node *node, void *data)
 	node->friend = db_node->modes.friend;
 	node->beacon = db_node->modes.beacon;
 
-	if(db_node->provisioned) {
+	if (db_node->provisioned) {
 		node->net = mesh_net_new(node);
 		l_info("Provisioned node from storage");
 	} else {
@@ -461,7 +461,8 @@ void node_cleanup(void *data)
 
 		/* Preserve the last sequence number */
 		if (net)
-			storage_write_sequence_number(net, mesh_net_get_seq_num(net));
+			storage_write_sequence_number(net,
+				mesh_net_get_seq_num(net));
 
 		if (storage_save_config(node, true, NULL, NULL))
 			l_info("Saved final config to %s", node->cfg_file);
@@ -1095,7 +1096,7 @@ static void app_disc_cb(struct l_dbus *bus, void *user_data)
 }
 
 static void convert_node_to_storage(struct mesh_node *node,
-												struct mesh_db_node *db_node)
+	struct mesh_db_node *db_node)
 {
 	const struct l_queue_entry *entry;
 
