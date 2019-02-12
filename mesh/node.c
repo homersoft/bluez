@@ -190,8 +190,6 @@ struct mesh_node *node_new(void)
 	struct mesh_node *node;
 
 	node = l_new(struct mesh_node, 1);
-	//todo:JWI
-	//node->net = mesh_net_new(node);
 
 	if (!nodes)
 		nodes = l_queue_new();
@@ -408,22 +406,37 @@ bool node_init_from_storage(struct mesh_node *node, void *data)
 	struct mesh_db_node *db_node = data;
 	unsigned int num_ele;
 
+	/* Composition data */
 	node->comp = l_new(struct node_composition, 1);
 	node->comp->cid = db_node->cid;
 	node->comp->pid = db_node->pid;
 	node->comp->vid = db_node->vid;
-	node->lpn = db_node->modes.low_power;
 
+	/* UUID and Device Key */
+	memcpy(node->dev_uuid, db_node->uuid, UUID_LEN);
+	memcpy(node->dev_key, db_node->dev_key, DEVKEY_LEN);
+
+	/* Features */
+	node->lpn = db_node->modes.low_power;
 	node->proxy = db_node->modes.proxy;
 	node->friend = db_node->modes.friend;
 	node->beacon = db_node->modes.beacon;
 
-	l_debug("proxy %2.2x, lpn %2.2x, friend %2.2x",
-			  node->proxy, node->friend, node->lpn);
+	if(db_node->provisioned) {
+		node->net = mesh_net_new(node);
+		l_info("Provisioned node from storage");
+	} else {
+		l_info("Unprovisioned node from storage");
+	}
 
+	/* TTL and SEQ number */
 	node->ttl = db_node->ttl;
 	node->seq_number = db_node->seq_number;
 
+	/* Unicast address */
+	node->primary = db_node->unicast;
+
+	/* Elements */
 	num_ele = l_queue_length(db_node->elements);
 	if (num_ele > 0xff)
 		return false;
@@ -431,15 +444,6 @@ bool node_init_from_storage(struct mesh_node *node, void *data)
 	node->num_ele = num_ele;
 	if (num_ele != 0 && !add_elements(node, db_node))
 		return false;
-
-	node->primary = db_node->unicast;
-
-	if(db_node->provisioned) {
-		node->net = mesh_net_new(node);
-		l_info("provisioned node from storage");
-	} else {
-		l_info("unprovisioned node from storage");
-	}
 
 	/* Initialize configuration server model */
 	mesh_config_srv_init(node, PRIMARY_ELE_IDX);

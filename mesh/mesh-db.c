@@ -1133,6 +1133,47 @@ static void parse_features(json_object *jconfig, struct mesh_db_node *node)
 	}
 }
 
+static bool parse_iv_idx(json_object *jcomp, struct mesh_db_node *node)
+{
+	json_object *jvalue;
+	uint32_t iv_index;
+	bool iv_update;
+
+	if (!mesh_db_read_iv_index(jcomp, &iv_index, &iv_update)) {
+		return false;
+	} else {
+		node->iv_index = iv_index;
+		node->iv_update = iv_update;
+	}
+
+	return true;
+}
+
+static bool parse_uuid(json_object *jcomp, struct mesh_db_node *node)
+{
+	uint8_t uuid_buf[UUID_LEN];
+
+	if(!mesh_db_read_uuid(jcomp, uuid_buf))
+		return false;
+	else
+		memcpy(node->uuid, uuid_buf, UUID_LEN);
+
+	return true;
+}
+
+static bool parse_keys(json_object *jcomp, struct mesh_db_node *node)
+{
+	uint8_t key_buf[DEVKEY_LEN];
+
+	/* Get Device Key */
+	if (!mesh_db_read_device_key(jcomp, key_buf))
+		return false;
+	else
+		memcpy(node->dev_key, key_buf, DEVKEY_LEN);
+
+	return true;
+}
+
 static bool parse_composition(json_object *jcomp, struct mesh_db_node *node)
 {
 	json_object *jvalue;
@@ -1170,7 +1211,6 @@ bool mesh_db_read_node(json_object *jnode, mesh_db_node_cb cb, void *user_data)
 {
 	struct mesh_db_node node;
 	json_object *jvalue;
-	char *str;
 
 	if (!cb) {
 		l_info("Node read callback is required");
@@ -1179,40 +1219,79 @@ bool mesh_db_read_node(json_object *jnode, mesh_db_node_cb cb, void *user_data)
 
 	memset(&node, 0, sizeof(node));
 
+	/* Parse IV idx and IV update flag */
+	if (!parse_iv_idx(jnode, &node))
+		l_info("Failed to parse IV index and IV update");
+
+	/* Parse UUID */
+	if (!parse_uuid(jnode, &node)) {
+		l_info("Failed to parse uuid");
+		return false;
+	}
+
+	/* Parse keys */
+	if (!parse_keys(jnode, &node)) {
+		l_info("Failed to parse device key");
+		return false;
+	}
+
+	/* Parse Composition Data */
 	if (!parse_composition(jnode, &node)) {
 		l_info("Failed to parse local node composition");
 		return false;
 	}
 
+	/* Parse features */
 	parse_features(jnode, &node);
 
+	/* Parse unicast address */
 	json_object_object_get_ex(jnode, "unicastAddress", &jvalue);
 	if (!jvalue) {
 		l_info("Bad config: Unicast address must be present");
 		return false;
 	}
 
-	str = (char *)json_object_get_string(jvalue);
-	if (sscanf(str, "%04hx", &node.unicast) != 1)
-		return false;
+	char *str = (char *)json_object_get_string(jvalue);
 
+	if (sscanf(str, "%04hx", &node.unicast) != 1) {
+		l_info("Failed to parse unicast address");
+		return false;
+	}
+
+	/* Parse TTL */
 	json_object_object_get_ex(jnode, "defaultTTL", &jvalue);
+
 	if (jvalue) {
 		int ttl = json_object_get_int(jvalue);
 
-		if (ttl < 0 || ttl == 1 || ttl > DEFAULT_TTL)
+		if (ttl < 0 || ttl == 1 || ttl > DEFAULT_TTL) {
+			l_info("Wrong TTL parameter durong parsing data");
 			return false;
+		}
 		node.ttl = (uint8_t) ttl;
+	} else {
+		l_info("Failed to parse TTL");
 	}
 
+	/* Parse sequence number */
 	json_object_object_get_ex(jnode, "sequenceNumber", &jvalue);
+
 	if (jvalue)
 		node.seq_number = json_object_get_int(jvalue);
+	else
+		l_info("Failed to parse sequence number");
 
+	/* Parse elements */
 	json_object_object_get_ex(jnode, "elements", &jvalue);
+
 	if (jvalue && json_object_get_type(jvalue) == json_type_object) {
-		if (!parse_elements(jvalue, &node))
+
+		if (!parse_elements(jvalue, &node)) {
+			l_info("Failed to parse elements");
 			return false;
+		}
+	} else {
+		l_info("Failed to parse elements: wrong JSON object type");
 	}
 
 	return cb(&node, user_data);

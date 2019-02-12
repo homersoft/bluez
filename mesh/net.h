@@ -26,6 +26,7 @@
 
 struct mesh_io;
 struct mesh_node;
+struct mesh_db_node;
 
 #define DEV_ID	0
 
@@ -372,3 +373,4 @@ void mesh_net_transmit_params_get(struct mesh_net *net, uint8_t *count,
 							uint16_t *interval);
 struct mesh_prov *mesh_net_get_prov(struct mesh_net *net);
 void mesh_net_set_prov(struct mesh_net *net, struct mesh_prov *prov);
+bool mesh_net_init_params_from_node(struct mesh_node *node, struct mesh_db_node *db_node);

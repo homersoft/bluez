@@ -42,6 +42,7 @@
 #include "mesh/appkey.h"
 #include "mesh/prov.h"
 #include "mesh/provision.h"
+#include "mesh/mesh-db.h"
 
 #define abs_diff(a, b) ((a) > (b) ? (a) - (b) : (b) - (a))
 
@@ -3838,3 +3839,53 @@ void mesh_net_set_prov(struct mesh_net *net, struct mesh_prov *prov)
 	net->prov = prov;
 }
 
+bool mesh_net_init_params_from_node(struct mesh_node *node, struct mesh_db_node *db_node)
+{
+	struct mesh_net *net = node_get_net(node);
+
+	if (!net)
+		return false;
+
+	/* SEQ nr and TTL */
+	uint32_t seq_number = node_get_sequence_number(node);
+	mesh_net_set_seq_num(net, seq_number);
+
+	uint8_t ttl = node_default_ttl_get(node);
+	mesh_net_set_default_ttl(net, ttl);
+
+	/* Set IV idx and IV update */
+	mesh_net_set_iv_index(net, db_node->iv_index, db_node->iv_update);
+
+	/* Proxy, friend and beacon */
+	uint8_t mode = node_proxy_mode_get(node);
+
+	if (mode == MESH_MODE_ENABLED || mode == MESH_MODE_DISABLED)
+		mesh_net_set_proxy_mode(net, mode == MESH_MODE_ENABLED);
+
+	mode = node_friend_mode_get(node);
+	if (mode == MESH_MODE_ENABLED || mode == MESH_MODE_DISABLED)
+		mesh_net_set_friend_mode(net, mode == MESH_MODE_ENABLED);
+
+	mode = node_beacon_mode_get(node);
+	if (mode == MESH_MODE_ENABLED || mode == MESH_MODE_DISABLED)
+		mesh_net_set_beacon_mode(net, mode == MESH_MODE_ENABLED);
+
+	/* Unicast */
+	uint16_t unicast = node_get_primary(node);
+	uint8_t num_ele = node_get_num_elements(node);
+
+	if (!IS_UNASSIGNED(unicast) &&
+		 !mesh_net_register_unicast(net, unicast, num_ele)) {
+
+		l_info("Cannot register unicast");
+		return false;
+	}
+
+	/* UUID */
+	uint8_t *uuid = node_uuid_get(node);
+
+	if(uuid)
+		mesh_net_id_uuid_set(net, uuid);
+
+	return true;
+}

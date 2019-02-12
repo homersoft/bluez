@@ -65,60 +65,21 @@ static bool simple_match(const void *a, const void *b)
 static bool read_node_cb(struct mesh_db_node *db_node, void *user_data)
 {
 	struct mesh_node *node = user_data;
-	struct mesh_net *net;
-	uint32_t seq_number;
-	uint8_t ttl, mode, cnt, num_ele;
-	uint16_t unicast, interval;
 
 	l_debug("");
 
 	if (!node_init_from_storage(node, db_node)) {
 		node_free(node);
-		l_debug("Cannot initialize from storage");
+		l_info("Cannot initialize from storage");
 		return false;
 	}
 
 	/* Register object in dBus */
 	if(!register_node_object(node))
-		l_debug("register node object from storage FAILED");
+		l_info("register node object from storage FAILED");
 
-	net = node_get_net(node);
-	seq_number = node_get_sequence_number(node);
-	mesh_net_set_seq_num(net, seq_number);
-	ttl = node_default_ttl_get(node);
-	mesh_net_set_default_ttl(net, ttl);
-
-	mode = node_proxy_mode_get(node);
-	if (mode == MESH_MODE_ENABLED || mode == MESH_MODE_DISABLED)
-		mesh_net_set_proxy_mode(net, mode == MESH_MODE_ENABLED);
-
-	mode = node_friend_mode_get(node);
-	if (mode == MESH_MODE_ENABLED || mode == MESH_MODE_DISABLED)
-		mesh_net_set_friend_mode(net, mode == MESH_MODE_ENABLED);
-
-	mode = node_relay_mode_get(node, &cnt, &interval);
-	if (mode == MESH_MODE_ENABLED || mode == MESH_MODE_DISABLED)
-		mesh_net_set_relay_mode(net, mode == MESH_MODE_ENABLED, cnt,
-								interval);
-
-	mode = node_beacon_mode_get(node);
-	if (mode == MESH_MODE_ENABLED || mode == MESH_MODE_DISABLED)
-		mesh_net_set_beacon_mode(net, mode == MESH_MODE_ENABLED);
-
-	unicast = db_node->unicast;
-	num_ele = node_get_num_elements(node);
-
-	if (!IS_UNASSIGNED(unicast) &&
-		!mesh_net_register_unicast(net, unicast, num_ele))
-		return false;
-
-	if (node_is_provisioned(node)) {
-		uint8_t *uuid = node_uuid_get(node);
-
-		if(uuid)
-			mesh_net_id_uuid_set(net, uuid);
-	}
-
+	if (!mesh_net_init_params_from_node(node, db_node))
+		l_info("Cannot initialize mesh_net struct. Node is not provisioned");
 
 	return true;
 }
@@ -151,33 +112,7 @@ static bool read_app_keys_cb(uint16_t net_idx, uint16_t app_idx, uint8_t *key,
 
 static bool parse_node(struct mesh_node *node, json_object *jnode)
 {
-	bool bvalue;
-	uint32_t iv_index;
-	uint8_t key_buf[DEVKEY_LEN];
-	uint8_t uuid_buf[UUID_LEN];
-	uint8_t cnt;
-	uint16_t interval;
-	//struct mesh_net *net = node_get_net(node);
-
 	l_debug("");
-	//todo:JWI
-//	if (mesh_db_read_iv_index(jnode, &iv_index, &bvalue))
-//		mesh_net_set_iv_index(net, iv_index, bvalue);
-//
-//	if (mesh_db_read_net_transmit(jnode, &cnt, &interval))
-//		mesh_net_transmit_params_set(net, cnt, interval);
-
-	/* Node composition/configuration info */
-	if(!mesh_db_read_uuid(jnode, uuid_buf)) {
-		l_debug("UUID read failed");
-		return false;
-	}
-
-	if (!mesh_db_read_device_key(jnode, key_buf))
-		return false;
-
-	node_set_device_key(node, key_buf);
-	node_set_uuid(node, uuid_buf);
 
 	if (!mesh_db_read_node(jnode, read_node_cb, node))
 		return false;
@@ -511,7 +446,7 @@ bool storage_load_nodes(const char *dir_name)
 		if (parse_config(name_buf, filename, node_id))
 			continue;
 		else
-			l_info("cannot parse cfg file, trying with backup...");
+			l_info("Cannot parse config file (incorrect JSON format)");
 
 		/* Fall-back to Backup version */
 		snprintf(name_buf, PATH_MAX, "%s/%s/node.json.bak", dir_name,
@@ -523,7 +458,7 @@ bool storage_load_nodes(const char *dir_name)
 			l_info("backup parsed successfully");
 			continue;
 		} else {
-			l_info("cannot parse backup config");
+			l_info("Cannot parse backup config file (incorrect JSON format)");
 		}
 
 		l_free(filename);
