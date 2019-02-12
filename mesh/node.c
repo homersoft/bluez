@@ -1149,7 +1149,6 @@ static void convert_node_to_storage(struct mesh_node *node,
 		}
 		l_queue_push_tail(db_node->elements, db_ele);
 	}
-
 }
 
 static bool create_node_config(struct mesh_node *node)

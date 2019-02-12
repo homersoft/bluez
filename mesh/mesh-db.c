@@ -1482,7 +1482,7 @@ bool mesh_db_write_iv_index(json_object *jobj, uint32_t idx, bool update)
 {
 	int tmp = update ? 1 : 0;
 
-	if (!mesh_db_write_int(jobj, "IVindex", idx))
+	if (!mesh_db_write_uint32_hex(jobj, "IVindex", idx))
 		return false;
 
 	if (!mesh_db_write_int(jobj, "IVupdate", tmp))
@@ -1530,16 +1530,56 @@ bool mesh_db_add_node(json_object *jnode, struct mesh_db_node *db_node, struct m
 	if (!add_uuid(jnode, "UUID", db_node->uuid))
 		return false;
 
-	/* Beaconing state */
-	if (!mesh_db_write_bool(jnode, "beacon", modes->beacon))
+	/* Device Key */
+	if (!mesh_db_write_device_key(jnode, db_node->dev_key))
 		return false;
+
+	/* Network Key */
+	if (!node_get_net(node)) {
+
+		/* Network Key is not available when node is not provisioned */
+		json_object *jstring = json_object_new_string("NULL");
+
+		if (!jstring)
+			return false;
+
+		json_object_object_add(jnode, "net_key", jstring);
+	} else {
+
+		if (!add_key(jnode, "net_key", db_node->net_key))
+			return false;
+	}
 
 	/* Default TTL */
 	json_object_object_add(jnode, "defaultTTL",
 								  json_object_new_int(db_node->ttl));
 
-	/* Device Key */
-	if (!mesh_db_write_device_key(jnode, db_node->dev_key))
+	/* Sequence number */
+	json_object_object_add(jnode, "sequenceNumber",
+								  json_object_new_int(db_node->seq_number));
+
+	/* Beaconing state */
+	if (!mesh_db_write_bool(jnode, "beacon", modes->beacon))
+		return false;
+
+	/* Low power mode */
+	if (!mesh_db_write_bool(jnode, "lowPower", modes->low_power))
+		return false;
+
+	/* Friend mode */
+	if (!mesh_db_write_bool(jnode, "friend", modes->friend))
+		return false;
+
+	/* Provisioned and proxy flags */
+	if (!mesh_db_write_bool(jnode, "provisioned", node_is_provisioned(node)))
+		return false;
+
+	/* Proxy mode */
+	if (!mesh_db_write_bool(jnode, "proxy", modes->proxy))
+		return false;
+
+	/* Unicast address */
+	if (!mesh_db_write_uint16_hex(jnode, "unicastAddress", db_node->unicast))
 		return false;
 
 	/* Elements */
@@ -1582,32 +1622,6 @@ bool mesh_db_add_node(json_object *jnode, struct mesh_db_node *db_node, struct m
 	}
 
 	json_object_object_add(jnode, "elements", jelements);
-
-	/* Friend and low power flags */
-	if (!mesh_db_write_bool(jnode, "friend", modes->friend))
-	return false;
-
-	if (!mesh_db_write_bool(jnode, "lowPower", modes->low_power))
-		return false;
-
-	/* Network Key */
-	if (!add_key(jnode, "net_key", db_node->net_key))
-		return false;
-
-	/* Provisioned and proxy flags */
-	if (!mesh_db_write_bool(jnode, "provisioned", node_is_provisioned(node)))
-		return false;
-
-	if (!mesh_db_write_bool(jnode, "proxy", modes->proxy))
-		return false;
-
-	/* Sequence number */
-	json_object_object_add(jnode, "sequenceNumber",
-								  json_object_new_int(db_node->seq_number));
-
-	/* Unicast address */
-	if (!mesh_db_write_uint16_hex(jnode, "unicastAddress", db_node->unicast))
-		return false;
 
 	return true;
 }
