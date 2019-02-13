@@ -30,6 +30,9 @@ struct mesh_agent;
 
 #define KEY_LEN 16
 
+#define RELAY_RETRAN_COUNT_MAX 7
+#define RELAY_RETR_INTERVAL_STEPS_MAX 31
+
 #define OPCODE_MAX_LEN 3
 #define PAYLOAD_MAX_LEN 379
 

@@ -61,6 +61,12 @@ struct mesh_db_modes {
 	uint8_t friend;
 	uint8_t proxy;
 	uint8_t beacon;
+
+	struct {
+		uint16_t interval;
+		uint8_t cnt;
+		uint8_t mode;
+	} relay;
 };
 
 struct mesh_db_node {

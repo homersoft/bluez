@@ -3888,5 +3888,12 @@ bool mesh_net_init_params_from_node(struct mesh_node *node,
 	if (uuid)
 		mesh_net_id_uuid_set(net, uuid);
 
+	/* Relay params */
+	uint8_t rel_cnt, rel_mode;
+	uint16_t rel_interval;
+
+	rel_mode = node_relay_mode_get(node, &rel_cnt, &rel_interval);
+	mesh_net_set_relay_mode(net, (bool)rel_mode, rel_cnt, rel_interval);
+
 	return true;
 }

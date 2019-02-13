@@ -1088,7 +1088,7 @@ static int get_mode(json_object *jvalue)
 
 static void parse_features(json_object *jconfig, struct mesh_db_node *node)
 {
-	json_object *jvalue;
+	json_object *jvalue, *jrelay;
 	int mode;
 
 	json_object_object_get_ex(jconfig, "proxy", &jvalue);
@@ -1125,6 +1125,43 @@ static void parse_features(json_object *jconfig, struct mesh_db_node *node)
 		if (mode <= MESH_MODE_UNSUPPORTED)
 			node->provisioned = mode;
 	}
+
+	json_object_object_get_ex(jconfig, "relay", &jrelay);
+	if (!jrelay)
+		return;
+
+	json_object_object_get_ex(jrelay, "mode", &jvalue);
+	if (jvalue) {
+		uint8_t mode = get_mode(jvalue);
+
+		if (mode <= MESH_MODE_UNSUPPORTED)
+			node->modes.relay.mode = mode;
+		else
+			return;
+	} else
+		return;
+
+	json_object_object_get_ex(jrelay, "count", &jvalue);
+	if (!jvalue)
+		return;
+
+	uint8_t count = json_object_get_int(jvalue);
+
+	if (count > RELAY_RETRAN_COUNT_MAX)
+		count = RELAY_RETRAN_COUNT_MAX;
+
+	node->modes.relay.cnt = count;
+
+	json_object_object_get_ex(jrelay, "interval", &jvalue);
+	if (!jvalue)
+		return;
+
+	uint16_t interval = json_object_get_int(jvalue);
+
+	if (interval > RELAY_RETR_INTERVAL_STEPS_MAX)
+		interval = RELAY_RETR_INTERVAL_STEPS_MAX;
+
+	node->modes.relay.interval = interval;
 }
 
 static bool parse_iv_idx(json_object *jcomp, struct mesh_db_node *node)
@@ -1372,9 +1409,9 @@ static const char *mode_to_string(int mode)
 {
 	switch (mode) {
 	case MESH_MODE_DISABLED:
-		return "disabled";
+		return "false";
 	case MESH_MODE_ENABLED:
-		return "enabled";
+		return "true";
 	default:
 		return "unsupported";
 	}
@@ -1578,6 +1615,11 @@ bool mesh_db_add_node(json_object *jnode,
 	/* Unicast address */
 	if (!mesh_db_write_uint16_hex(jnode, "unicastAddress",
 		 db_node->unicast))
+		return false;
+
+	/* Relay related parameters */
+	if (!mesh_db_write_relay_mode(jnode, db_node->modes.relay.mode,
+		 db_node->modes.relay.cnt, db_node->modes.relay.interval))
 		return false;
 
 	/* Elements */

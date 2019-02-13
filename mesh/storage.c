@@ -378,7 +378,7 @@ bool storage_save_config(struct mesh_node *node, bool no_wait,
 	info = l_new(struct write_info, 1);
 	if (!info)
 		return false;
-	l_debug("");
+
 	info->jnode = node_jconfig_get(node);
 	info->config_name = node_cfg_file_get(node);
 	info->cb = cb;
@@ -476,7 +476,7 @@ bool storage_load_nodes(const char *dir_name)
 		if (parse_config(name_buf, filename, node_id)) {
 			remove(filename);
 			rename(name_buf, filename);
-			l_info("backup parsed successfully");
+			l_debug("backup parsed successfully");
 			continue;
 		} else {
 			l_info("Cannot parse backup config file (incorrect JSON format)");

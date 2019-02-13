@@ -422,6 +422,11 @@ bool node_init_from_storage(struct mesh_node *node, void *data)
 	node->friend = db_node->modes.friend;
 	node->beacon = db_node->modes.beacon;
 
+	/* Relay */
+	node->relay.mode = db_node->modes.relay.mode;
+	node->relay.cnt = db_node->modes.relay.cnt;
+	node->relay.interval = db_node->modes.relay.interval;
+
 	if (db_node->provisioned) {
 		node->net = mesh_net_new(node);
 		l_info("Provisioned node from storage");
@@ -435,6 +440,11 @@ bool node_init_from_storage(struct mesh_node *node, void *data)
 
 	/* Unicast address */
 	node->primary = db_node->unicast;
+
+	/* Relay params */
+	node->relay.mode = db_node->modes.relay.mode;
+	node->relay.cnt = db_node->modes.relay.cnt;
+	node->relay.interval = db_node->modes.relay.interval;
 
 	/* Elements */
 	num_ele = l_queue_length(db_node->elements);
@@ -1118,6 +1128,10 @@ static void convert_node_to_storage(struct mesh_node *node,
 	db_node->seq_number = node->seq_number;
 	db_node->unicast = node->primary;
 	db_node->elements = l_queue_new();
+
+	db_node->modes.relay.mode = node->relay.mode;
+	db_node->modes.relay.cnt = node->relay.cnt;
+	db_node->modes.relay.interval = node->relay.interval;
 
 	entry = l_queue_get_entries(node->elements);
 
