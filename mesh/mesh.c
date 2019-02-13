@@ -416,7 +416,7 @@ static struct l_dbus_message *create_node_call(struct l_dbus *dbus,
 
 	uint8_t element_idx;
 	uint16_t location;
-	uint8_t temp_uuid[UUID_LEN] = {0};
+	uint8_t temp_uuid[KEY_LEN] = {0};
 
 	struct l_dbus_message *reply;
 
@@ -429,7 +429,7 @@ static struct l_dbus_message *create_node_call(struct l_dbus *dbus,
 
 	iter_temp_element_models = iter_element_models;
 
-	if (dbus_get_byte_array(&iter_uuid, temp_uuid, UUID_LEN) != UUID_LEN)
+	if (dbus_get_byte_array(&iter_uuid, temp_uuid, KEY_LEN) != KEY_LEN)
 		return dbus_error(msg,
 			MESH_ERROR_INVALID_ARGS,
 			"Incorrect device UUID format");
@@ -472,7 +472,7 @@ static struct l_dbus_message *delete_node_call(struct l_dbus *dbus,
 {
 	struct l_dbus_message *reply;
 	struct l_dbus_message_iter iter_uuid;
-	uint8_t uuid[UUID_LEN];
+	uint8_t uuid[KEY_LEN];
 	uint32_t n;
 
 	l_debug("Delete Node");
@@ -480,7 +480,7 @@ static struct l_dbus_message *delete_node_call(struct l_dbus *dbus,
 	if (!l_dbus_message_get_arguments(msg, "ay", &iter_uuid))
 		return dbus_error(msg, MESH_ERROR_INVALID_ARGS, NULL);
 
-	if (dbus_get_byte_array(&iter_uuid, uuid, UUID_LEN) != UUID_LEN)
+	if (dbus_get_byte_array(&iter_uuid, uuid, KEY_LEN) != KEY_LEN)
 		return dbus_error(msg,
 			MESH_ERROR_INVALID_ARGS,
 			"Incorrect device UUID format");

@@ -54,6 +54,12 @@ static const struct option main_options[] = {
 	{ }
 };
 
+struct mesh_config {
+	int hci_idx;
+	char *cfg_dir;
+	struct l_dbus *dbus;
+};
+
 static void usage(void)
 {
 	l_info("");
@@ -79,22 +85,27 @@ static void do_debug(const char *str, void *user_data)
 static void request_name_callback(struct l_dbus *dbus, bool success,
 					bool queued, void *user_data)
 {
+	struct mesh_config *cfg = user_data;
+
 	l_info("Request name %s",
 		success ? "success" : "failed");
 
-	if (success)
+	if (success) {
 		dbus_init(dbus);
-	else
+
+		if (!mesh_init(cfg->hci_idx, cfg->cfg_dir))
+			l_error("Failed to initialize mesh");
+	} else
 		l_main_quit();
 }
 
 static void ready_callback(void *user_data)
 {
-	struct l_dbus *dbus = user_data;
+	struct mesh_config *cfg = user_data;
 
 	l_info("D-Bus ready");
-	l_dbus_name_acquire(dbus, BLUEZ_MESH_NAME, false, false, false,
-						request_name_callback, NULL);
+	l_dbus_name_acquire(cfg->dbus, BLUEZ_MESH_NAME, false, false, false,
+						request_name_callback, cfg);
 
 }
 
@@ -123,6 +134,7 @@ int main(int argc, char *argv[])
 	struct l_dbus *dbus = NULL;
 	const char *config_dir = NULL;
 	int index = MGMT_INDEX_NONE;
+	struct mesh_config cfg;
 
 	if (!l_main_init())
 		return -1;
@@ -178,13 +190,10 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (!mesh_init(index, config_dir)) {
-		l_error("Failed to initialize mesh");
-		status = EXIT_FAILURE;
-		goto done;
-	}
-
 	umask(0077);
+
+	cfg.cfg_dir = (char *)config_dir;
+	cfg.hci_idx = index;
 
 	dbus = l_dbus_new_default(dbus_bus);
 	if (!dbus) {
@@ -193,9 +202,12 @@ int main(int argc, char *argv[])
 		goto done;
 	}
 
+	cfg.dbus = dbus;
+
 	if (dbus_debug)
 		l_dbus_set_debug(dbus, do_debug, "[DBUS] ", NULL);
-	l_dbus_set_ready_handler(dbus, ready_callback, dbus, NULL);
+
+	l_dbus_set_ready_handler(dbus, ready_callback, &cfg, NULL);
 	l_dbus_set_disconnect_handler(dbus, disconnect_callback, NULL, NULL);
 
 	if (!l_dbus_object_manager_enable(dbus)) {

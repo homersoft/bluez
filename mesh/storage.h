@@ -20,8 +20,11 @@
 
 #include <json-c/json.h>
 
+#define UUID_LEN	((uint8_t) (2 * KEY_LEN) + 4)
+
 struct mesh_net;
 struct mesh_node;
+typedef void (*mesh_status_func_t)(void *user_data, bool result);
 
 bool storage_load_nodes(const char *dir);
 bool storage_create_node_config(struct mesh_node *node, void *db_node);

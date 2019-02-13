@@ -65,50 +65,21 @@ static bool simple_match(const void *a, const void *b)
 static bool read_node_cb(struct mesh_db_node *db_node, void *user_data)
 {
 	struct mesh_node *node = user_data;
-	struct mesh_net *net;
-	uint32_t seq_number;
-	uint8_t ttl, mode, cnt, num_ele;
-	uint16_t unicast, interval;
-	uint8_t *uuid;
 
 	if (!node_init_from_storage(node, db_node)) {
 		node_free(node);
+		l_info("Cannot initialize from storage");
 		return false;
 	}
 
-	net = node_get_net(node);
-	seq_number = node_get_sequence_number(node);
-	mesh_net_set_seq_num(net, seq_number);
-	ttl = node_default_ttl_get(node);
-	mesh_net_set_default_ttl(net, ttl);
-
-	mode = node_proxy_mode_get(node);
-	if (mode == MESH_MODE_ENABLED || mode == MESH_MODE_DISABLED)
-		mesh_net_set_proxy_mode(net, mode == MESH_MODE_ENABLED);
-
-	mode = node_friend_mode_get(node);
-	if (mode == MESH_MODE_ENABLED || mode == MESH_MODE_DISABLED)
-		mesh_net_set_friend_mode(net, mode == MESH_MODE_ENABLED);
-
-	mode = node_relay_mode_get(node, &cnt, &interval);
-	if (mode == MESH_MODE_ENABLED || mode == MESH_MODE_DISABLED)
-		mesh_net_set_relay_mode(net, mode == MESH_MODE_ENABLED, cnt,
-								interval);
-
-	mode = node_beacon_mode_get(node);
-	if (mode == MESH_MODE_ENABLED || mode == MESH_MODE_DISABLED)
-		mesh_net_set_beacon_mode(net, mode == MESH_MODE_ENABLED);
-
-	unicast = db_node->unicast;
-	num_ele = node_get_num_elements(node);
-
-	if (!IS_UNASSIGNED(unicast) &&
-		!mesh_net_register_unicast(net, unicast, num_ele))
+	/* Register object in dBus */
+	if (!register_node_object(node)) {
+		l_info("register node object from storage FAILED");
 		return false;
+	}
 
-	uuid = node_uuid_get(node);
-	if (uuid)
-		mesh_net_id_uuid_set(net, uuid);
+	if (!mesh_net_init_params_from_node(node, db_node))
+		l_info("Cannot initialize mesh_net struct. Node is not provisioned");
 
 	return true;
 }
@@ -141,32 +112,8 @@ static bool read_app_keys_cb(uint16_t net_idx, uint16_t app_idx, uint8_t *key,
 
 static bool parse_node(struct mesh_node *node, json_object *jnode)
 {
-	bool bvalue;
-	uint32_t iv_index;
-	uint8_t key_buf[16];
-	uint8_t cnt;
-	uint16_t interval;
-	struct mesh_net *net = node_get_net(node);
-
-	if (mesh_db_read_iv_index(jnode, &iv_index, &bvalue))
-		mesh_net_set_iv_index(net, iv_index, bvalue);
-
-	if (mesh_db_read_net_transmit(jnode, &cnt, &interval))
-		mesh_net_transmit_params_set(net, cnt, interval);
-
-	/* Node composition/configuration info */
 	if (!mesh_db_read_node(jnode, read_node_cb, node))
 		return false;
-
-	if (!mesh_db_read_net_keys(jnode, read_net_keys_cb, net))
-		return false;
-
-	if (!mesh_db_read_device_key(jnode, key_buf))
-		return false;
-
-	node_set_device_key(node, key_buf);
-
-	mesh_db_read_app_keys(jnode, read_app_keys_cb, net);
 
 	return true;
 }
@@ -177,7 +124,6 @@ static bool parse_config(char *in_file, char *out_file, uint16_t node_id)
 	char *str;
 	struct stat st;
 	ssize_t sz;
-	json_object *jnode = NULL;
 	bool result = false;
 	struct mesh_node *node;
 
@@ -204,7 +150,33 @@ static bool parse_config(char *in_file, char *out_file, uint16_t node_id)
 		goto done;
 	}
 
-	jnode = json_tokener_parse(str);
+	struct json_tokener *jtok = json_tokener_new();
+	enum json_tokener_error jerr;
+	json_object *jnode = NULL;
+
+	do {
+		jnode = json_tokener_parse_ex(jtok, str, strlen(str));
+	} while ((jerr = json_tokener_get_error(jtok))
+					== json_tokener_continue);
+
+	if (jerr != json_tokener_success) {
+		l_info("Json parsing error: %s\n",
+			json_tokener_error_desc(jerr));
+		return false;
+	}
+
+	if (jtok->char_offset < strlen(str)) {
+		/*
+		 * Handle extra characters after parsed object as desired.
+		 * e.g. issue an error, parse another object
+		 * from that point, etc...
+		 */
+		l_info("Json parsing error - additional characters found\r\n");
+		return false;
+	}
+
+	json_tokener_free(jtok);
+
 	if (!jnode)
 		goto done;
 
@@ -330,9 +302,9 @@ bool storage_write_sequence_number(struct mesh_net *net, uint32_t seq)
 {
 	struct mesh_node *node = mesh_net_node_get(net);
 	json_object *jnode = node_jconfig_get(node);
-	bool result;
-	l_debug("");
-	result = mesh_db_write_int(jnode, "sequenceNumber", seq);
+
+	bool result = mesh_db_write_int(jnode, "sequenceNumber", seq);
+
 	if (!result)
 		return false;
 
@@ -406,7 +378,7 @@ bool storage_save_config(struct mesh_node *node, bool no_wait,
 	info = l_new(struct write_info, 1);
 	if (!info)
 		return false;
-	l_debug("");
+
 	info->jnode = node_jconfig_get(node);
 	info->config_name = node_cfg_file_get(node);
 	info->cb = cb;
@@ -504,7 +476,10 @@ bool storage_load_nodes(const char *dir_name)
 		if (parse_config(name_buf, filename, node_id)) {
 			remove(filename);
 			rename(name_buf, filename);
+			l_debug("backup parsed successfully");
 			continue;
+		} else {
+			l_info("Cannot parse backup config file (incorrect JSON format)");
 		}
 
 		l_free(filename);
@@ -515,9 +490,9 @@ bool storage_load_nodes(const char *dir_name)
 
 bool storage_create_node_config(struct mesh_node *node, void *data)
 {
+	char uuid_str[UUID_LEN + 1];
+
 	struct mesh_db_node *db_node = data;
-	uint16_t node_id;
-	uint8_t num_tries = 0;
 	char name_buf[PATH_MAX];
 	char *filename;
 	json_object *jnode;
@@ -528,20 +503,13 @@ bool storage_create_node_config(struct mesh_node *node, void *data)
 
 	jnode = json_object_new_object();
 
-	if (!mesh_db_add_node(jnode, db_node))
+	if (!mesh_db_add_node(jnode, db_node, node))
 		return false;
 
-	do {
-		l_getrandom(&node_id, 2);
-		if (!l_queue_find(node_ids, simple_match,
-						L_UINT_TO_PTR(node_id)))
-			break;
-	} while (++num_tries < 10);
+	/* Convert UUID to string */
+	l_uuid_to_string(node_uuid_get(node), &uuid_str[0], sizeof(uuid_str));
 
-	if (num_tries == 10)
-		l_error("Failed to generate unique node ID");
-
-	snprintf(name_buf, PATH_MAX, "%s/%04x", storage_dir, node_id);
+	snprintf(name_buf, PATH_MAX, "%s/%s", storage_dir, uuid_str);
 
 	/* Create a new directory and node.json file */
 	if (mkdir(name_buf, 0755) != 0)

@@ -28,7 +28,11 @@ struct mesh_agent;
 #define MIN_SEQ_CACHE		(2*MIN_SEQ_TRIGGER)
 #define MIN_SEQ_CACHE_TIME	(5*60)
 
-#define UUID_LEN 16
+#define KEY_LEN 16
+
+#define RELAY_RETRAN_COUNT_MAX 7
+#define RELAY_RETR_INTERVAL_STEPS_MAX 31
+
 #define OPCODE_MAX_LEN 3
 #define PAYLOAD_MAX_LEN 379
 
@@ -52,7 +56,8 @@ bool node_app_key_delete(struct mesh_net *net, uint16_t addr,
 				uint16_t net_idx, uint16_t idx);
 uint16_t node_get_primary(struct mesh_node *node);
 uint16_t node_get_primary_net_idx(struct mesh_node *node);
-void node_set_device_key(struct mesh_node *node, uint8_t key[16]);
+void node_set_device_key(struct mesh_node *node, uint8_t key[KEY_LEN]);
+void node_set_uuid(struct mesh_node *node, uint8_t uuid[KEY_LEN]);
 const uint8_t *node_get_device_key(struct mesh_node *node);
 void node_set_num_elements(struct mesh_node *node, uint8_t num_ele);
 uint8_t node_get_num_elements(struct mesh_node *node);
@@ -99,3 +104,4 @@ void node_jconfig_set(struct mesh_node *node, void *jconfig);
 void *node_jconfig_get(struct mesh_node *node);
 void node_cfg_file_set(struct mesh_node *node, char *cfg);
 char *node_cfg_file_get(struct mesh_node *node);
+bool register_node_object(struct mesh_node *node);

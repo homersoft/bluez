@@ -26,6 +26,7 @@
 
 struct mesh_io;
 struct mesh_node;
+struct mesh_db_node;
 
 #define DEV_ID	0
 
@@ -286,6 +287,7 @@ int mesh_net_del_key(struct mesh_net *net, uint16_t net_idx);
 int mesh_net_add_key(struct mesh_net *net, bool update,
 					uint16_t net_idx, const void *key);
 uint32_t mesh_net_get_iv_index(struct mesh_net *net);
+bool mesh_net_get_iv_update(struct mesh_net *net);
 void mesh_net_get_snb_state(struct mesh_net *net,
 					uint8_t *flags, uint32_t *iv_index);
 bool mesh_net_get_key(struct mesh_net *net, bool new_key, uint16_t idx,
@@ -371,3 +373,5 @@ void mesh_net_transmit_params_get(struct mesh_net *net, uint8_t *count,
 							uint16_t *interval);
 struct mesh_prov *mesh_net_get_prov(struct mesh_net *net);
 void mesh_net_set_prov(struct mesh_net *net, struct mesh_prov *prov);
+bool mesh_net_init_params_from_node(struct mesh_node *node,
+				struct mesh_db_node *db_node);

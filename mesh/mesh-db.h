@@ -19,6 +19,7 @@
  */
 
 #include <json-c/json.h>
+#include "node.h"
 
 struct mesh_db_sub {
 	bool virt;
@@ -56,29 +57,37 @@ struct mesh_db_element {
 };
 
 struct mesh_db_modes {
-	struct {
-		uint16_t interval;
-		uint8_t cnt;
-		uint8_t state;
-	} relay;
-	uint8_t lpn;
+	uint8_t low_power;
 	uint8_t friend;
 	uint8_t proxy;
 	uint8_t beacon;
+
+	struct {
+		uint16_t interval;
+		uint8_t cnt;
+		uint8_t mode;
+	} relay;
 };
 
 struct mesh_db_node {
-	bool provisioner;
-	uint32_t seq_number;
-	struct mesh_db_modes modes;
 	uint16_t cid;
 	uint16_t pid;
 	uint16_t vid;
 	uint16_t crpl;
-	uint16_t unicast;
+
+	uint32_t iv_index;
+	bool iv_update;
+	uint8_t uuid[KEY_LEN];
 	uint8_t ttl;
+	uint8_t dev_key[KEY_LEN];
+
 	struct l_queue *elements;
-	uint8_t uuid[16];
+	struct mesh_db_modes modes;
+
+	uint8_t net_key[KEY_LEN];
+	bool provisioned;
+	uint32_t seq_number;
+	uint16_t unicast;
 };
 
 struct mesh_db_prov {
@@ -103,9 +112,11 @@ typedef bool (*mesh_db_app_key_cb)(uint16_t idx, uint16_t net_idx,
 typedef bool (*mesh_db_node_cb)(struct mesh_db_node *node, void *user_data);
 
 bool mesh_db_read_node(json_object *jobj, mesh_db_node_cb cb, void *user_data);
-bool mesh_db_add_node(json_object *jnode, struct mesh_db_node *node);
+bool mesh_db_add_node(json_object *jnode, struct mesh_db_node *db_node,
+							struct mesh_node *node);
 bool mesh_db_read_iv_index(json_object *jobj, uint32_t *idx, bool *update);
-bool mesh_db_read_device_key(json_object *jobj, uint8_t key_buf[16]);
+bool mesh_db_read_device_key(json_object *jobj, uint8_t key_buf[KEY_LEN]);
+bool mesh_db_read_uuid(json_object *jobj, uint8_t uuid_buf[KEY_LEN]);
 bool mesh_db_read_net_transmit(json_object *jobj, uint8_t *cnt,
 							uint16_t *interval);
 bool mesh_db_write_net_transmit(json_object *jobj, uint8_t cnt,
@@ -120,6 +131,7 @@ bool mesh_db_write_network_key(json_object *jobj, uint16_t idx, uint8_t *key,
 bool mesh_db_write_app_key(json_object *jobj, uint16_t net_idx,
 			uint16_t app_idx, uint8_t *key, uint8_t *new_key);
 bool mesh_db_write_int(json_object *jobj, const char *keyword, int value);
+bool mesh_db_write_model_id(json_object *jobj, struct mesh_db_model *mod);
 bool mesh_db_write_uint16_hex(json_object *jobj, const char *desc,
 								uint16_t value);
 bool mesh_db_write_uint32_hex(json_object *jobj, const char *desc,
