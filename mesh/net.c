@@ -837,12 +837,12 @@ char *mesh_net_id_name(struct mesh_net *net)
 	return NULL;
 }
 
-bool mesh_net_id_uuid_set(struct mesh_net *net, uint8_t uuid[UUID_LEN])
+bool mesh_net_id_uuid_set(struct mesh_net *net, uint8_t uuid[KEY_LEN])
 {
 	if (!net)
 		return false;
 
-	memcpy(net->id_uuid, uuid, UUID_LEN);
+	memcpy(net->id_uuid, uuid, KEY_LEN);
 
 	return true;
 }

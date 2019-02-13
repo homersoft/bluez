@@ -71,14 +71,14 @@ struct mesh_db_node {
 
 	uint32_t iv_index;
 	bool iv_update;
-	uint8_t uuid[UUID_LEN];
+	uint8_t uuid[KEY_LEN];
 	uint8_t ttl;
-	uint8_t dev_key[DEVKEY_LEN];
+	uint8_t dev_key[KEY_LEN];
 
 	struct l_queue *elements;
 	struct mesh_db_modes modes;
 
-	uint8_t net_key[NETKEY_LEN];
+	uint8_t net_key[KEY_LEN];
 	bool provisioned;
 	uint32_t seq_number;
 	uint16_t unicast;
@@ -109,8 +109,8 @@ bool mesh_db_read_node(json_object *jobj, mesh_db_node_cb cb, void *user_data);
 bool mesh_db_add_node(json_object *jnode, struct mesh_db_node *db_node,
 							struct mesh_node *node);
 bool mesh_db_read_iv_index(json_object *jobj, uint32_t *idx, bool *update);
-bool mesh_db_read_device_key(json_object *jobj, uint8_t key_buf[DEVKEY_LEN]);
-bool mesh_db_read_uuid(json_object *jobj, uint8_t uuid_buf[UUID_LEN]);
+bool mesh_db_read_device_key(json_object *jobj, uint8_t key_buf[KEY_LEN]);
+bool mesh_db_read_uuid(json_object *jobj, uint8_t uuid_buf[KEY_LEN]);
 bool mesh_db_read_net_transmit(json_object *jobj, uint8_t *cnt,
 							uint16_t *interval);
 bool mesh_db_write_net_transmit(json_object *jobj, uint8_t cnt,

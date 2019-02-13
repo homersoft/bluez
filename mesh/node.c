@@ -89,8 +89,8 @@ struct mesh_node {
 		uint8_t cnt;
 		uint8_t mode;
 	} relay;
-	uint8_t dev_uuid[UUID_LEN];
-	uint8_t dev_key[DEVKEY_LEN];
+	uint8_t dev_uuid[KEY_LEN];
+	uint8_t dev_key[KEY_LEN];
 	uint8_t num_ele;
 	uint8_t ttl;
 	uint8_t lpn;
@@ -116,7 +116,7 @@ static bool match_node_uuid(const void *a, const void *b)
 	const struct mesh_node *node = a;
 	const uint8_t *uuid = b;
 
-	return (memcmp(node->dev_uuid, uuid, UUID_LEN) == 0);
+	return (memcmp(node->dev_uuid, uuid, KEY_LEN) == 0);
 }
 
 static bool match_token(const void *a, const void *b)
@@ -151,7 +151,7 @@ struct mesh_node *node_find_by_addr(uint16_t addr)
 	return l_queue_find(nodes, match_node_unicast, L_UINT_TO_PTR(addr));
 }
 
-struct mesh_node *node_find_by_uuid(uint8_t uuid[UUID_LEN])
+struct mesh_node *node_find_by_uuid(uint8_t uuid[KEY_LEN])
 {
 	return l_queue_find(nodes, match_node_uuid, uuid);
 }
@@ -175,13 +175,13 @@ void replace_dash_with_underscore(char *src, uint32_t len)
 
 void get_node_path_from_uuid(char *path, uint8_t *uuid)
 {
-	char uuid_string[(UUID_LEN * 2) + 5] = {'\0'};
+	char uuid_string[(KEY_LEN * 2) + 5] = {'\0'};
 
-	l_uuid_to_string(uuid, uuid_string, ((UUID_LEN * 2) + 5));
+	l_uuid_to_string(uuid, uuid_string, ((KEY_LEN * 2) + 5));
 
-	replace_dash_with_underscore(uuid_string, (UUID_LEN * 2) + 5);
+	replace_dash_with_underscore(uuid_string, (KEY_LEN * 2) + 5);
 
-	snprintf(path, ((UUID_LEN * 2) + MESH_NODE_PATH_PREFIX_LEN + 5), "%s%s",
+	snprintf(path, ((KEY_LEN * 2) + MESH_NODE_PATH_PREFIX_LEN + 5), "%s%s",
 		MESH_NODE_PATH_PREFIX, uuid_string);
 }
 
@@ -225,7 +225,7 @@ static void free_node_resources_simple(void *data)
 static void free_node_resources(void *data)
 {
 	struct mesh_node *node = data;
-	char path[(UUID_LEN * 2) + MESH_NODE_PATH_PREFIX_LEN + 6] = {'\0'};
+	char path[(KEY_LEN * 2) + MESH_NODE_PATH_PREFIX_LEN + 6] = {'\0'};
 
 	get_node_path_from_uuid(path, node->dev_uuid);
 
@@ -413,8 +413,8 @@ bool node_init_from_storage(struct mesh_node *node, void *data)
 	node->comp->vid = db_node->vid;
 
 	/* UUID and Device Key */
-	memcpy(node->dev_uuid, db_node->uuid, UUID_LEN);
-	memcpy(node->dev_key, db_node->dev_key, DEVKEY_LEN);
+	memcpy(node->dev_uuid, db_node->uuid, KEY_LEN);
+	memcpy(node->dev_key, db_node->dev_key, KEY_LEN);
 
 	/* Features */
 	node->lpn = db_node->modes.low_power;
@@ -514,14 +514,14 @@ uint16_t node_get_primary(struct mesh_node *node)
 		return node->primary;
 }
 
-void node_set_device_key(struct mesh_node *node, uint8_t key[DEVKEY_LEN])
+void node_set_device_key(struct mesh_node *node, uint8_t key[KEY_LEN])
 {
-	memcpy(node->dev_key, key, DEVKEY_LEN);
+	memcpy(node->dev_key, key, KEY_LEN);
 }
 
-void node_set_uuid(struct mesh_node *node, uint8_t uuid[UUID_LEN])
+void node_set_uuid(struct mesh_node *node, uint8_t uuid[KEY_LEN])
 {
-	memcpy(node->dev_uuid, uuid, UUID_LEN);
+	memcpy(node->dev_uuid, uuid, KEY_LEN);
 }
 
 const uint8_t *node_get_device_key(struct mesh_node *node)
@@ -1053,9 +1053,7 @@ void node_attach_io(struct mesh_io *io)
 
 bool register_node_object(struct mesh_node *node)
 {
-	l_debug("");
-
-	char path[(UUID_LEN * 2) + MESH_NODE_PATH_PREFIX_LEN + 6] = {'\0'};
+	char path[(KEY_LEN * 2) + MESH_NODE_PATH_PREFIX_LEN + 6] = {'\0'};
 
 	get_node_path_from_uuid(path, node->dev_uuid);
 
@@ -1107,11 +1105,11 @@ static void convert_node_to_storage(struct mesh_node *node,
 	db_node->iv_index = mesh_net_get_iv_index(node_get_net(node));
 	db_node->iv_update = mesh_net_get_iv_update(node_get_net(node));
 
-	memcpy(db_node->uuid, node->dev_uuid, UUID_LEN);
+	memcpy(db_node->uuid, node->dev_uuid, KEY_LEN);
 	db_node->modes.beacon = node->beacon;
 	db_node->ttl = node->ttl;
 
-	memcpy(db_node->dev_key, node->dev_key, DEVKEY_LEN);
+	memcpy(db_node->dev_key, node->dev_key, KEY_LEN);
 	db_node->modes.friend = node->friend;
 	db_node->modes.low_power = node->lpn;
 
@@ -1196,11 +1194,9 @@ bool create_node_request(uint8_t *uuid, uint16_t cid, uint16_t pid,
 	uint8_t element_idx;
 	uint16_t location;
 
-	l_debug("");
-
 	new_node = l_new(struct mesh_node, 1);
 	new_node->elements = l_queue_new();
-	memcpy(new_node->dev_uuid, uuid, UUID_LEN);
+	memcpy(new_node->dev_uuid, uuid, KEY_LEN);
 
 	while (l_dbus_message_iter_next_entry(iter_element_models,
 				&element_idx, &location,
@@ -1304,7 +1300,7 @@ bool get_uuid_from_path(const char *path, uint8_t *uuid)
 				&uuid[8], &uuid[9], &uuid[10], &uuid[11],
 				&uuid[12], &uuid[13], &uuid[14], &uuid[15]);
 
-	if (n != UUID_LEN)
+	if (n != KEY_LEN)
 		return false;
 
 	return true;
@@ -1318,7 +1314,7 @@ static struct l_dbus_message *provision_call(struct l_dbus *dbus,
 	struct l_dbus_message_iter iter_network_key;
 	struct mesh_node *node;
 	const char *path;
-	uint8_t uuid[UUID_LEN];
+	uint8_t uuid[KEY_LEN];
 	uint8_t network_key[16];
 	uint16_t addr;
 	uint32_t n;
@@ -1358,7 +1354,7 @@ static struct l_dbus_message *unprovision_call(struct l_dbus *dbus,
 	struct l_dbus_message *reply;
 	struct mesh_node *node;
 	const char *path;
-	uint8_t uuid[UUID_LEN];
+	uint8_t uuid[KEY_LEN];
 
 	l_debug("Unprovision");
 
@@ -1386,7 +1382,7 @@ static struct l_dbus_message *start_advertising_call(struct l_dbus *dbus,
 	struct l_dbus_message *reply;
 	struct mesh_node *node;
 	const char *path;
-	uint8_t uuid[UUID_LEN];
+	uint8_t uuid[KEY_LEN];
 
 	l_debug("Start advertising as unprovisioned node");
 
@@ -1414,7 +1410,7 @@ static struct l_dbus_message *stop_advertising_call(struct l_dbus *dbus,
 	struct l_dbus_message *reply;
 	struct mesh_node *node;
 	const char *path;
-	uint8_t uuid[UUID_LEN];
+	uint8_t uuid[KEY_LEN];
 
 	l_debug("Stop advertising as unprovisioned node");
 
@@ -1442,7 +1438,7 @@ static bool is_provisioned_getter(struct l_dbus *dbus,
 {
 	struct mesh_node *node;
 	const char *path;
-	uint8_t uuid[UUID_LEN];
+	uint8_t uuid[KEY_LEN];
 	bool is_provisioned = false;
 
 	path = l_dbus_message_get_path(message);
@@ -1471,7 +1467,7 @@ static bool is_advertising_getter(struct l_dbus *dbus,
 {
 	struct mesh_node *node;
 	const char *path;
-	uint8_t uuid[UUID_LEN];
+	uint8_t uuid[KEY_LEN];
 	bool is_advertising = false;
 
 	path = l_dbus_message_get_path(message);
@@ -1521,7 +1517,7 @@ static struct l_dbus_message *send_message_call(struct l_dbus *dbus,
 	struct l_dbus_message_iter iter_opcode, iter_payload;
 	struct mesh_node *node;
 	const char *path;
-	uint8_t uuid[UUID_LEN];
+	uint8_t uuid[KEY_LEN];
 	uint8_t opcode[OPCODE_MAX_LEN];
 	uint8_t *payload;
 	uint16_t element, dest, key_index, len;
@@ -1564,7 +1560,7 @@ static bool node_address_getter(struct l_dbus *dbus,
 {
 	struct mesh_node *node;
 	const char *path;
-	uint8_t uuid[UUID_LEN];
+	uint8_t uuid[KEY_LEN];
 	uint16_t addr = 0;
 
 	path = l_dbus_message_get_path(message);
@@ -1603,7 +1599,7 @@ static bool node_device_key_getter(struct l_dbus *dbus,
 {
 	struct mesh_node *node;
 	const char *path;
-	uint8_t uuid[UUID_LEN];
+	uint8_t uuid[KEY_LEN];
 	const uint8_t *device_key;
 
 	path = l_dbus_message_get_path(message);
@@ -1656,7 +1652,7 @@ static bool node_elements_getter(struct l_dbus *dbus,
 	struct node_element *element;
 	struct mesh_model *model;
 	const char *path;
-	uint8_t uuid[UUID_LEN];
+	uint8_t uuid[KEY_LEN];
 	uint16_t model_id;
 
 	path = l_dbus_message_get_path(message);

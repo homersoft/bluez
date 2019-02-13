@@ -34,6 +34,7 @@
 #include "mesh/util.h"
 
 #include "mesh/mesh-db.h"
+#include "mesh/storage.h"
 
 #define CHECK_KEY_IDX_RANGE(x) (((x) >= 0) && ((x) <= 4095))
 
@@ -68,16 +69,11 @@ static bool add_key(json_object *jobject, const char *desc,
 
 static bool add_uuid(json_object *jobject, const char *desc, uint8_t *uuid)
 {
-	const uint8_t NUM_OF_SEP_IN_UUID_STR = 4;
 	json_object *jstring;
-
-	const uint8_t uuid_str_len =
-		(2 * UUID_LEN) + NUM_OF_SEP_IN_UUID_STR + 1;
-
-	char uuid_str[uuid_str_len];
+	char uuid_str[UUID_LEN + 1];
 
 	/* Convert UUID to string */
-	l_uuid_to_string(uuid, &uuid_str[0], uuid_str_len);
+	l_uuid_to_string(uuid, &uuid_str[0], sizeof(uuid_str));
 
 	jstring = json_object_new_string(uuid_str);
 	if (!jstring)
@@ -257,7 +253,7 @@ bool mesh_db_read_iv_index(json_object *jobj, uint32_t *idx, bool *update)
 	return true;
 }
 
-bool mesh_db_read_device_key(json_object *jobj, uint8_t key_buf[DEVKEY_LEN])
+bool mesh_db_read_device_key(json_object *jobj, uint8_t key_buf[KEY_LEN])
 {
 	json_object *jvalue;
 	char *str;
@@ -270,17 +266,15 @@ bool mesh_db_read_device_key(json_object *jobj, uint8_t key_buf[DEVKEY_LEN])
 		return false;
 
 	str = (char *)json_object_get_string(jvalue);
-	if (!str2hex(str, strlen(str), key_buf, DEVKEY_LEN))
+	if (!str2hex(str, strlen(str), key_buf, KEY_LEN))
 		return false;
 
 	return true;
 }
 
-bool mesh_db_read_uuid(json_object *jobj, uint8_t uuid_buf[UUID_LEN])
+bool mesh_db_read_uuid(json_object *jobj, uint8_t uuid_buf[KEY_LEN])
 {
 	json_object *jvalue;
-	const uint8_t NUM_OF_SEP_IN_UUID_STR = 4;
-	const uint8_t uuid_str_len = (2 * UUID_LEN) + NUM_OF_SEP_IN_UUID_STR;
 
 	if (!uuid_buf)
 		return false;
@@ -291,7 +285,7 @@ bool mesh_db_read_uuid(json_object *jobj, uint8_t uuid_buf[UUID_LEN])
 
 	char *str = (char *)json_object_get_string(jvalue);
 
-	if (!l_uuid_parse(str, uuid_str_len, &uuid_buf[0]))
+	if (!l_uuid_parse(str, UUID_LEN, &uuid_buf[0]))
 		return false;
 
 	return true;
@@ -1151,10 +1145,10 @@ static bool parse_iv_idx(json_object *jcomp, struct mesh_db_node *node)
 
 static bool parse_uuid(json_object *jcomp, struct mesh_db_node *node)
 {
-	uint8_t uuid_buf[UUID_LEN];
+	uint8_t uuid_buf[KEY_LEN];
 
 	if (mesh_db_read_uuid(jcomp, uuid_buf))
-		memcpy(node->uuid, uuid_buf, UUID_LEN);
+		memcpy(node->uuid, uuid_buf, KEY_LEN);
 	else
 		return false;
 
@@ -1163,11 +1157,11 @@ static bool parse_uuid(json_object *jcomp, struct mesh_db_node *node)
 
 static bool parse_keys(json_object *jcomp, struct mesh_db_node *node)
 {
-	uint8_t key_buf[DEVKEY_LEN];
+	uint8_t key_buf[KEY_LEN];
 
 	/* Get Device Key */
 	if (mesh_db_read_device_key(jcomp, key_buf))
-		memcpy(node->dev_key, key_buf, DEVKEY_LEN);
+		memcpy(node->dev_key, key_buf, KEY_LEN);
 	else
 		return false;
 
