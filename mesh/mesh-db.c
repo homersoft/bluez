@@ -1421,7 +1421,10 @@ bool mesh_db_write_mode(json_object *jobj, const char *keyword, int value)
 {
 	json_object *jstring;
 
-	jstring = json_object_new_string(mode_to_string(value));
+	if (value == 0)
+		jstring = json_object_new_boolean(false);
+	else
+		jstring = json_object_new_boolean(true);
 
 	if (!jstring)
 		return false;
