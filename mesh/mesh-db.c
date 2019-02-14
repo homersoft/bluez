@@ -1312,6 +1312,14 @@ bool mesh_db_read_node(json_object *jnode, mesh_db_node_cb cb, void *user_data)
 	else
 		l_info("Failed to parse sequence number");
 
+	/* Parse advertising */
+	json_object_object_get_ex(jnode, "advertising", &jvalue);
+
+	if (jvalue)
+		node.is_advertising = json_object_get_boolean(jvalue);
+	else
+		l_info("Failed to parse advertising state");
+
 	/* Parse elements */
 	json_object_object_get_ex(jnode, "elements", &jvalue);
 
@@ -1623,6 +1631,10 @@ bool mesh_db_add_node(json_object *jnode,
 	/* Relay related parameters */
 	if (!mesh_db_write_relay_mode(jnode, db_node->modes.relay.mode,
 		 db_node->modes.relay.cnt, db_node->modes.relay.interval))
+		return false;
+
+	/* Advertising state */
+	if (!mesh_db_write_bool(jnode, "advertising", db_node->is_advertising))
 		return false;
 
 	/* Elements */

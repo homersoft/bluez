@@ -438,6 +438,9 @@ bool node_init_from_storage(struct mesh_node *node, void *data)
 	node->ttl = db_node->ttl;
 	node->seq_number = db_node->seq_number;
 
+	/* Advertising state */
+	node->is_advertising = db_node->is_advertising;
+
 	/* Unicast address */
 	node->primary = db_node->unicast;
 
@@ -1132,6 +1135,8 @@ static void convert_node_to_storage(struct mesh_node *node,
 	db_node->modes.relay.mode = node->relay.mode;
 	db_node->modes.relay.cnt = node->relay.cnt;
 	db_node->modes.relay.interval = node->relay.interval;
+
+	db_node->is_advertising = node->is_advertising;
 
 	entry = l_queue_get_entries(node->elements);
 
