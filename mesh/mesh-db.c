@@ -1250,15 +1250,15 @@ bool mesh_db_read_node(json_object *jnode, mesh_db_node_cb cb, void *user_data)
 
 	memset(&node, 0, sizeof(node));
 
-	/* Parse IV idx and IV update flag */
-	if (!parse_iv_idx(jnode, &node))
-		l_info("Failed to parse IV index and IV update");
-
 	/* Parse UUID */
 	if (!parse_uuid(jnode, &node)) {
 		l_info("Failed to parse uuid");
 		return false;
 	}
+
+	/* Parse IV idx and IV update flag */
+	if (!parse_iv_idx(jnode, &node))
+		l_info("Failed to parse IV index and IV update");
 
 	/* Parse keys */
 	if (!parse_keys(jnode, &node)) {
