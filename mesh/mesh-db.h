@@ -85,7 +85,10 @@ struct mesh_db_node {
 	struct mesh_db_modes modes;
 
 	uint8_t net_key[KEY_LEN];
+
 	bool provisioned;
+	bool is_advertising;
+
 	uint32_t seq_number;
 	uint16_t unicast;
 };

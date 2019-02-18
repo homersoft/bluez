@@ -438,6 +438,9 @@ bool node_init_from_storage(struct mesh_node *node, void *data)
 	node->ttl = db_node->ttl;
 	node->seq_number = db_node->seq_number;
 
+	/* Advertising state */
+	node->is_advertising = db_node->is_advertising;
+
 	/* Unicast address */
 	node->primary = db_node->unicast;
 
@@ -1133,6 +1136,8 @@ static void convert_node_to_storage(struct mesh_node *node,
 	db_node->modes.relay.cnt = node->relay.cnt;
 	db_node->modes.relay.interval = node->relay.interval;
 
+	db_node->is_advertising = node->is_advertising;
+
 	entry = l_queue_get_entries(node->elements);
 
 	for (; entry; entry = entry->next) {
@@ -1422,8 +1427,12 @@ static struct l_dbus_message *start_advertising_call(struct l_dbus *dbus,
 	if (!start_advertising(node))
 		return dbus_error(message, MESH_ERROR_FAILED, NULL);
 
-	reply = l_dbus_message_new_method_return(message);
-	l_dbus_message_set_arguments(reply, "");
+	node->is_advertising = true;
+
+	/* Update advertising state in JSON file */
+	if (!mesh_db_write_bool(node->jconfig, "advertising",
+			node->is_advertising))
+		return false;
 
 	return reply;
 }
@@ -1449,6 +1458,16 @@ static struct l_dbus_message *stop_advertising_call(struct l_dbus *dbus,
 
 	if (!stop_advertising(node))
 		return dbus_error(message, MESH_ERROR_FAILED, NULL);
+
+	/* Update advertising state in JSON file */
+	if (!mesh_db_write_bool(node->jconfig, "advertising",
+			node->is_advertising))
+		return false;
+
+	/* Update advertising state in JSON file */
+	if (!mesh_db_write_bool(node->jconfig, "advertising",
+			node->is_advertising))
+		return false;
 
 	reply = l_dbus_message_new_method_return(message);
 	l_dbus_message_set_arguments(reply, "");
@@ -1787,16 +1806,13 @@ bool node_add_pending_local(struct mesh_node *node, void *prov_node_info,
 
 	node->net = mesh_net_new(node);
 
-	if (!nodes)
-		nodes = l_queue_new();
-
-	l_queue_push_tail(nodes, node);
-
+	/* Update IV index and IV update in Json file */
 	if (!storage_set_iv_index(node->net, info->iv_index, ivu))
 		return false;
 
 	mesh_net_set_iv_index(node->net, info->iv_index, ivu);
 
+    /* Update unicast address in Json file */
 	if (!mesh_db_write_uint16_hex(node->jconfig, "unicastAddress",
 								info->unicast))
 		return false;
@@ -1804,16 +1820,23 @@ bool node_add_pending_local(struct mesh_node *node, void *prov_node_info,
 	node->primary = info->unicast;
 	mesh_net_register_unicast(node->net, info->unicast, node->num_ele);
 
-	memcpy(node->dev_key, info->device_key, 16);
+    /* Update device key in Json file */
+	memcpy(node->dev_key, info->device_key, KEY_LEN);
 	if (!mesh_db_write_device_key(node->jconfig, info->device_key))
 		return false;
 
+    /* Update network key parameters in Json file */
 	if (mesh_net_add_key(node->net, kr, info->net_index,
 			info->net_key) != MESH_STATUS_SUCCESS)
 		return false;
 
 	if (!storage_net_key_add(node->net, info->net_index, info->net_key,
 			kr ? KEY_REFRESH_PHASE_TWO : KEY_REFRESH_PHASE_NONE))
+		return false;
+
+	/* Update provisioned state in Json file */
+	if (!mesh_db_write_bool(node->jconfig, "provisioned",
+			node_is_provisioned(node)))
 		return false;
 
 	if (!storage_save_config(node, true, NULL, NULL))

@@ -418,7 +418,7 @@ bool mesh_db_read_net_keys(json_object *jobj, mesh_db_net_key_cb cb,
 }
 
 bool mesh_db_net_key_add(json_object *jobj, uint16_t idx,
-					const uint8_t key[16], int phase)
+					const uint8_t key[KEY_LEN], int phase)
 {
 	json_object *jarray, *jentry = NULL, *jstring;
 	char buf[5];
@@ -429,7 +429,7 @@ bool mesh_db_net_key_add(json_object *jobj, uint16_t idx,
 		jentry = get_key_object(jarray, idx);
 
 	if (jentry) {
-		uint8_t buf[16];
+		uint8_t buf[KEY_LEN];
 		json_object *jvalue;
 		char *str;
 
@@ -442,7 +442,7 @@ bool mesh_db_net_key_add(json_object *jobj, uint16_t idx,
 			return false;
 
 		/* If the same key, return success */
-		if (memcmp(key, buf, 16) == 0)
+		if (memcmp(key, buf, KEY_LEN) == 0)
 			return true;
 
 		return false;
@@ -470,7 +470,7 @@ bool mesh_db_net_key_add(json_object *jobj, uint16_t idx,
 
 		/* If Key Refresh underway, add placeholder for "Old Key" */
 		if (phase != KEY_REFRESH_PHASE_NONE) {
-			uint8_t buf[16];
+			uint8_t buf[KEY_LEN];
 			uint8_t i;
 
 			/* Flip Bits to differentiate */
@@ -1250,15 +1250,15 @@ bool mesh_db_read_node(json_object *jnode, mesh_db_node_cb cb, void *user_data)
 
 	memset(&node, 0, sizeof(node));
 
-	/* Parse IV idx and IV update flag */
-	if (!parse_iv_idx(jnode, &node))
-		l_info("Failed to parse IV index and IV update");
-
 	/* Parse UUID */
 	if (!parse_uuid(jnode, &node)) {
 		l_info("Failed to parse uuid");
 		return false;
 	}
+
+	/* Parse IV idx and IV update flag */
+	if (!parse_iv_idx(jnode, &node))
+		l_info("Failed to parse IV index and IV update");
 
 	/* Parse keys */
 	if (!parse_keys(jnode, &node)) {
@@ -1311,6 +1311,14 @@ bool mesh_db_read_node(json_object *jnode, mesh_db_node_cb cb, void *user_data)
 		node.seq_number = json_object_get_int(jvalue);
 	else
 		l_info("Failed to parse sequence number");
+
+	/* Parse advertising */
+	json_object_object_get_ex(jnode, "advertising", &jvalue);
+
+	if (jvalue)
+		node.is_advertising = json_object_get_boolean(jvalue);
+	else
+		l_info("Failed to parse advertising state");
 
 	/* Parse elements */
 	json_object_object_get_ex(jnode, "elements", &jvalue);
@@ -1570,22 +1578,6 @@ bool mesh_db_add_node(json_object *jnode,
 	if (!mesh_db_write_device_key(jnode, db_node->dev_key))
 		return false;
 
-	/* Network Key */
-	if (!node_get_net(node)) {
-
-		/* Network Key is not available when node is not provisioned */
-		json_object *jstring = json_object_new_string("NULL");
-
-		if (!jstring)
-			return false;
-
-		json_object_object_add(jnode, "net_key", jstring);
-	} else {
-
-		if (!add_key(jnode, "net_key", db_node->net_key))
-			return false;
-	}
-
 	/* Default TTL */
 	json_object_object_add(jnode, "defaultTTL",
 		json_object_new_int(db_node->ttl));
@@ -1623,6 +1615,10 @@ bool mesh_db_add_node(json_object *jnode,
 	/* Relay related parameters */
 	if (!mesh_db_write_relay_mode(jnode, db_node->modes.relay.mode,
 		 db_node->modes.relay.cnt, db_node->modes.relay.interval))
+		return false;
+
+	/* Advertising state */
+	if (!mesh_db_write_bool(jnode, "advertising", db_node->is_advertising))
 		return false;
 
 	/* Elements */

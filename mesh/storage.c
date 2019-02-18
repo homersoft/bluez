@@ -446,6 +446,7 @@ bool storage_load_nodes(const char *dir_name)
 
 	while ((entry = readdir(dir)) != NULL) {
 		char name_buf[PATH_MAX];
+		char name_with_uuid_buf[PATH_MAX + UUID_LEN];
 		char *filename;
 		uint32_t node_id;
 		size_t len;
@@ -457,6 +458,9 @@ bool storage_load_nodes(const char *dir_name)
 			continue;
 
 		snprintf(name_buf, PATH_MAX, "%s/%s/node.json", dir_name,
+								entry->d_name);
+
+		snprintf(name_with_uuid_buf, PATH_MAX + UUID_LEN, "%s/%s", dir_name,
 								entry->d_name);
 
 		l_queue_push_tail(node_ids, L_UINT_TO_PTR(node_id));
@@ -479,9 +483,13 @@ bool storage_load_nodes(const char *dir_name)
 			l_debug("backup parsed successfully");
 			continue;
 		} else {
-			l_info("Cannot parse backup config file (incorrect JSON format)");
-		}
+            l_info("Cannot parse backup config file (incorrect JSON format)");
 
+            /* Remove node.json, node.json.bak and its directory */
+            remove(filename);
+		    remove(name_buf);
+		    remove(name_with_uuid_buf);
+		}
 		l_free(filename);
 	}
 
