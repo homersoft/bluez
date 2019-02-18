@@ -1265,9 +1265,13 @@ bool delete_node(uint8_t *uuid)
 
 }
 
-bool provision_node(struct mesh_node *node, uint8_t *network_key, uint16_t addr)
+bool provision_node(struct mesh_node *node, uint8_t *network_key, uint16_t addr,
+					uint32_t iv_index)
 {
-	//TODO
+	struct mesh_prov_node_info *info;
+
+	info = l_malloc(sizeof(struct mesh_prov_node_info));
+
 	return true;
 }
 
@@ -1331,12 +1335,13 @@ static struct l_dbus_message *provision_call(struct l_dbus *dbus,
 	uint8_t uuid[KEY_LEN];
 	uint8_t network_key[16];
 	uint16_t addr;
+	uint32_t iv_index;
 	uint32_t n;
 
 	l_debug("Provision");
 
-	if (!l_dbus_message_get_arguments(message, "ayq",
-			&iter_network_key, &addr))
+	if (!l_dbus_message_get_arguments(message, "ayqu",
+			&iter_network_key, &addr, &iv_index))
 		return dbus_error(message, MESH_ERROR_INVALID_ARGS, NULL);
 
 	n = dbus_get_byte_array(&iter_network_key, network_key, 16);
@@ -1352,7 +1357,7 @@ static struct l_dbus_message *provision_call(struct l_dbus *dbus,
 	if (!node)
 		return dbus_error(message, MESH_ERROR_DOES_NOT_EXIST, NULL);
 
-	if (!provision_node(node, network_key, addr))
+	if (!provision_node(node, network_key, addr, iv_index))
 		return dbus_error(message, MESH_ERROR_FAILED, NULL);
 
 	reply = l_dbus_message_new_method_return(message);
@@ -1505,7 +1510,7 @@ done:
 static void setup_provisioning_interface(struct l_dbus_interface *interface)
 {
 	l_dbus_interface_method(interface, "Provision", 0,
-				provision_call, "", "ayq", "net_key", "addr");
+				provision_call, "", "ayqu", "net_key", "addr", "iv_index");
 
 	l_dbus_interface_method(interface, "Unprovision", 0,
 				unprovision_call, "", "");
