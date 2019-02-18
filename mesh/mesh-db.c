@@ -418,7 +418,7 @@ bool mesh_db_read_net_keys(json_object *jobj, mesh_db_net_key_cb cb,
 }
 
 bool mesh_db_net_key_add(json_object *jobj, uint16_t idx,
-					const uint8_t key[16], int phase)
+					const uint8_t key[KEY_LEN], int phase)
 {
 	json_object *jarray, *jentry = NULL, *jstring;
 	char buf[5];
@@ -429,7 +429,7 @@ bool mesh_db_net_key_add(json_object *jobj, uint16_t idx,
 		jentry = get_key_object(jarray, idx);
 
 	if (jentry) {
-		uint8_t buf[16];
+		uint8_t buf[KEY_LEN];
 		json_object *jvalue;
 		char *str;
 
@@ -442,7 +442,7 @@ bool mesh_db_net_key_add(json_object *jobj, uint16_t idx,
 			return false;
 
 		/* If the same key, return success */
-		if (memcmp(key, buf, 16) == 0)
+		if (memcmp(key, buf, KEY_LEN) == 0)
 			return true;
 
 		return false;
@@ -470,7 +470,7 @@ bool mesh_db_net_key_add(json_object *jobj, uint16_t idx,
 
 		/* If Key Refresh underway, add placeholder for "Old Key" */
 		if (phase != KEY_REFRESH_PHASE_NONE) {
-			uint8_t buf[16];
+			uint8_t buf[KEY_LEN];
 			uint8_t i;
 
 			/* Flip Bits to differentiate */
@@ -1577,22 +1577,6 @@ bool mesh_db_add_node(json_object *jnode,
 	/* Device Key */
 	if (!mesh_db_write_device_key(jnode, db_node->dev_key))
 		return false;
-
-	/* Network Key */
-	if (!node_get_net(node)) {
-
-		/* Network Key is not available when node is not provisioned */
-		json_object *jstring = json_object_new_string("NULL");
-
-		if (!jstring)
-			return false;
-
-		json_object_object_add(jnode, "net_key", jstring);
-	} else {
-
-		if (!add_key(jnode, "net_key", db_node->net_key))
-			return false;
-	}
 
 	/* Default TTL */
 	json_object_object_add(jnode, "defaultTTL",
