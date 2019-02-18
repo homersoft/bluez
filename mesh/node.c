@@ -1271,8 +1271,14 @@ bool provision_node(struct mesh_node *node, uint8_t *network_key, uint16_t addr,
 	struct mesh_prov_node_info *info;
 
 	info = l_malloc(sizeof(struct mesh_prov_node_info));
+	info->iv_index = iv_index;
+	info->unicast = addr;
+	info->net_index = 0;
+	memcpy(info->net_key, network_key, KEY_LEN);
+	l_getrandom(info->device_key, KEY_LEN);
+	info->flags = 0;
 
-	return true;
+	return node_add_pending_local(node, info, get_mesh_io());
 }
 
 bool unprovision_node(struct mesh_node *node)

@@ -30,6 +30,7 @@
 
 typedef void (*prov_rx_cb_t)(void *user_data, const uint8_t *data,
 								uint16_t len);
+struct mesh_io *get_mesh_io(void);
 bool mesh_init(uint16_t index, const char *in_config_name);
 void mesh_cleanup(void);
 bool mesh_dbus_init(struct l_dbus *dbus);

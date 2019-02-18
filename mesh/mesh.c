@@ -110,6 +110,11 @@ static void start_io(uint16_t index)
 	node_attach_io(io);
 }
 
+struct mesh_io *get_mesh_io(void)
+{
+	return mesh.io;
+}
+
 /* Used for any outbound traffic that doesn't have Friendship Constraints */
 /* This includes Beacons, Provisioning and unrestricted Network Traffic */
 bool mesh_send_pkt(uint8_t count, uint16_t interval,
