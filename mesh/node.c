@@ -1415,11 +1415,12 @@ static struct l_dbus_message *start_advertising_call(struct l_dbus *dbus,
 
 	if (!start_advertising(node))
 		return dbus_error(message, MESH_ERROR_FAILED, NULL);
-	
+
 	node->is_advertising = true;
 
 	/* Update advertising state in JSON file */
-	if (!mesh_db_write_bool(node->jconfig, "advertising", node->is_advertising))
+	if (!mesh_db_write_bool(node->jconfig, "advertising",
+			node->is_advertising))
 		return false;
 
 	return reply;
@@ -1448,11 +1449,13 @@ static struct l_dbus_message *stop_advertising_call(struct l_dbus *dbus,
 		return dbus_error(message, MESH_ERROR_FAILED, NULL);
 
 	/* Update advertising state in JSON file */
-	if (!mesh_db_write_bool(node->jconfig, "advertising", node->is_advertising))
+	if (!mesh_db_write_bool(node->jconfig, "advertising",
+			node->is_advertising))
 		return false;
 
 	/* Update advertising state in JSON file */
-	if (!mesh_db_write_bool(node->jconfig, "advertising", node->is_advertising))
+	if (!mesh_db_write_bool(node->jconfig, "advertising",
+			node->is_advertising))
 		return false;
 
 	reply = l_dbus_message_new_method_return(message);
@@ -1820,10 +1823,10 @@ bool node_add_pending_local(struct mesh_node *node, void *prov_node_info,
 			kr ? KEY_REFRESH_PHASE_TWO : KEY_REFRESH_PHASE_NONE))
 		return false;
 
-    /* Update provisioned state in Json file */
-    if (!mesh_db_write_bool(node->jconfig, "provisioned",
-                            node_is_provisioned(node)))
-        return false;
+	/* Update provisioned state in Json file */
+	if (!mesh_db_write_bool(node->jconfig, "provisioned",
+			node_is_provisioned(node)))
+		return false;
 
 	if (!storage_save_config(node, true, NULL, NULL))
 		return false;
