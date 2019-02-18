@@ -1296,7 +1296,7 @@ bool mesh_db_read_node(json_object *jnode, mesh_db_node_cb cb, void *user_data)
 		int ttl = json_object_get_int(jvalue);
 
 		if (ttl < 0 || ttl == 1 || ttl > DEFAULT_TTL) {
-			l_info("Wrong TTL parameter durong parsing data");
+			l_info("Wrong TTL parameter during parsing data");
 			return false;
 		}
 		node.ttl = (uint8_t) ttl;
@@ -1429,7 +1429,7 @@ bool mesh_db_write_mode(json_object *jobj, const char *keyword, int value)
 {
 	json_object *jstring;
 
-	if (value == 0)
+	if (value != MESH_MODE_ENABLED)
 		jstring = json_object_new_boolean(false);
 	else
 		jstring = json_object_new_boolean(true);
@@ -1587,15 +1587,15 @@ bool mesh_db_add_node(json_object *jnode,
 		json_object_new_int(db_node->seq_number));
 
 	/* Beaconing state */
-	if (!mesh_db_write_bool(jnode, "beacon", modes->beacon))
+	if (!mesh_db_write_mode(jnode, "beacon", modes->beacon))
 		return false;
 
 	/* Low power mode */
-	if (!mesh_db_write_bool(jnode, "lowPower", modes->low_power))
+	if (!mesh_db_write_mode(jnode, "lowPower", modes->low_power))
 		return false;
 
 	/* Friend mode */
-	if (!mesh_db_write_bool(jnode, "friend", modes->friend))
+	if (!mesh_db_write_mode(jnode, "friend", modes->friend))
 		return false;
 
 	/* Provisioned and proxy flags */
@@ -1604,7 +1604,7 @@ bool mesh_db_add_node(json_object *jnode,
 		return false;
 
 	/* Proxy mode */
-	if (!mesh_db_write_bool(jnode, "proxy", modes->proxy))
+	if (!mesh_db_write_mode(jnode, "proxy", modes->proxy))
 		return false;
 
 	/* Unicast address */
