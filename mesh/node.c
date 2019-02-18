@@ -1781,11 +1781,6 @@ bool node_add_pending_local(struct mesh_node *node, void *prov_node_info,
 
 	node->net = mesh_net_new(node);
 
-	if (!nodes)
-		nodes = l_queue_new();
-
-	l_queue_push_tail(nodes, node);
-
 	if (!storage_set_iv_index(node->net, info->iv_index, ivu))
 		return false;
 
