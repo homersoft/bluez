@@ -212,9 +212,10 @@ static void free_node_resources_simple(void *data)
 	struct mesh_node *node = data;
 
 	/* Unregister io callbacks */
-	if (node->net)
+	if (node->net) {
 		mesh_net_detach(node->net);
-	mesh_net_free(node->net);
+		mesh_net_free(node->net);
+	}
 
 	l_queue_destroy(node->elements, element_free);
 	l_free(node->comp);
@@ -1274,6 +1275,13 @@ bool provision_node(struct mesh_node *node, uint8_t *network_key, uint16_t addr,
 					uint32_t iv_index)
 {
 	struct mesh_prov_node_info *info;
+	char *str;
+
+	if (node->net)
+		return false;
+
+	str = l_util_hexstring(network_key, KEY_LEN);
+	l_debug("Provisioning node with netkey: %s", str);
 
 	info = l_malloc(sizeof(struct mesh_prov_node_info));
 	info->iv_index = iv_index;
@@ -1288,8 +1296,15 @@ bool provision_node(struct mesh_node *node, uint8_t *network_key, uint16_t addr,
 
 bool unprovision_node(struct mesh_node *node)
 {
-	//TODO
-	return true;
+	/* Unregister io callbacks */
+	if (node->net) {
+		mesh_net_detach(node->net);
+		mesh_net_free(node->net);
+		node->net = NULL;
+		return true;
+	}
+
+	return false;
 }
 
 bool start_advertising(struct mesh_node *node)
