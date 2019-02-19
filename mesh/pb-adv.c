@@ -341,7 +341,7 @@ static void pb_adv_packet(void *user_data, const uint8_t *pkt, uint16_t len)
 			return;
 		}
 
-		switch(type & 0x03) {
+		switch (type & 0x03) {
 		case 0x00:
 			session->peer_msg_num = msg_num;
 			session->exp_len = l_get_be16(pkt);

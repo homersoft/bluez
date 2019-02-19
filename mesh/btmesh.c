@@ -57,7 +57,7 @@ static const char **optargs[] = {
 	&save_option,
 };
 
-static const char *help[] = {
+static const char * const help[] = {
 	"Specify adapter index",
 	"Specify input configuration file",
 	"Specify output configuration file"

@@ -52,8 +52,7 @@ struct error_entry {
  * Important: The entries in this table are ordered to enum
  * values in mesh_error_t (error.h)
  */
-static struct error_entry error_table[] =
-{
+static struct error_entry error_table[] = {
 	{ NULL, NULL },
 	{ ERROR_INTERFACE ".Failed", "Operation failed" },
 	{ ERROR_INTERFACE ".NotAuthorized", "Permission denied"},

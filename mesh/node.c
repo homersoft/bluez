@@ -1555,7 +1555,8 @@ done:
 static void setup_provisioning_interface(struct l_dbus_interface *interface)
 {
 	l_dbus_interface_method(interface, "Provision", 0,
-				provision_call, "", "ayqu", "net_key", "addr", "iv_index");
+				provision_call, "", "ayqu", "net_key", "addr",
+				"iv_index");
 
 	l_dbus_interface_method(interface, "Unprovision", 0,
 				unprovision_call, "", "");
