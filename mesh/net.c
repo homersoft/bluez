@@ -2962,6 +2962,8 @@ struct mesh_io *mesh_net_detach(struct mesh_net *net)
 
 	io = net->io;
 
+	mesh_net_set_beacon_mode(net, false);
+	l_queue_remove(nets, net);
 	mesh_io_send_cancel(net->io, &type, 1);
 	mesh_io_deregister_recv_cb(io, MESH_IO_FILTER_BEACON);
 	mesh_io_deregister_recv_cb(io, MESH_IO_FILTER_NET);

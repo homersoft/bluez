@@ -1276,6 +1276,7 @@ bool provision_node(struct mesh_node *node, uint8_t *network_key, uint16_t addr,
 {
 	struct mesh_prov_node_info *info;
 	char *str;
+	bool status = false;
 
 	if (node->net)
 		return false;
@@ -1283,7 +1284,7 @@ bool provision_node(struct mesh_node *node, uint8_t *network_key, uint16_t addr,
 	str = l_util_hexstring(network_key, KEY_LEN);
 	l_debug("Provisioning node with netkey: %s", str);
 
-	info = l_malloc(sizeof(struct mesh_prov_node_info));
+	info = l_new(struct mesh_prov_node_info, 1);
 	info->iv_index = iv_index;
 	info->unicast = addr;
 	info->net_index = 0;
@@ -1291,7 +1292,11 @@ bool provision_node(struct mesh_node *node, uint8_t *network_key, uint16_t addr,
 	l_getrandom(info->device_key, KEY_LEN);
 	info->flags = 0;
 
-	return node_add_pending_local(node, info, get_mesh_io());
+	status = node_add_pending_local(node, info, get_mesh_io());
+
+	l_free(info);
+
+	return status;
 }
 
 bool unprovision_node(struct mesh_node *node)
