@@ -110,7 +110,7 @@ static void start_io(uint16_t index)
 	node_attach_io(io);
 }
 
-struct mesh_io *get_mesh_io(void)
+struct mesh_io *mesh_get_io(void)
 {
 	return mesh.io;
 }

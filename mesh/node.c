@@ -1278,14 +1278,10 @@ bool provision_node(struct mesh_node *node, uint8_t *network_key, uint16_t addr,
 					uint32_t iv_index)
 {
 	struct mesh_prov_node_info *info;
-	char *str;
 	bool status = false;
 
 	if (node->net)
 		return false;
-
-	str = l_util_hexstring(network_key, KEY_LEN);
-	l_debug("Provisioning node with netkey: %s", str);
 
 	info = l_new(struct mesh_prov_node_info, 1);
 	info->iv_index = iv_index;
@@ -1295,7 +1291,7 @@ bool provision_node(struct mesh_node *node, uint8_t *network_key, uint16_t addr,
 	l_getrandom(info->device_key, KEY_LEN);
 	info->flags = 0;
 
-	status = node_add_pending_local(node, info, get_mesh_io());
+	status = node_add_pending_local(node, info, mesh_get_io());
 
 	l_free(info);
 
@@ -1836,7 +1832,7 @@ bool node_add_pending_local(struct mesh_node *node, void *prov_node_info,
 
 	mesh_net_set_iv_index(node->net, info->iv_index, ivu);
 
-    /* Update unicast address in Json file */
+	/* Update unicast address in Json file */
 	if (!mesh_db_write_uint16_hex(node->jconfig, "unicastAddress",
 								info->unicast))
 		return false;
@@ -1844,12 +1840,12 @@ bool node_add_pending_local(struct mesh_node *node, void *prov_node_info,
 	node->primary = info->unicast;
 	mesh_net_register_unicast(node->net, info->unicast, node->num_ele);
 
-    /* Update device key in Json file */
+	/* Update device key in Json file */
 	memcpy(node->dev_key, info->device_key, KEY_LEN);
 	if (!mesh_db_write_device_key(node->jconfig, info->device_key))
 		return false;
 
-    /* Update network key parameters in Json file */
+	/* Update network key parameters in Json file */
 	if (mesh_net_add_key(node->net, kr, info->net_index,
 			info->net_key) != MESH_STATUS_SUCCESS)
 		return false;
