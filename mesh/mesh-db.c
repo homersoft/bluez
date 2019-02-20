@@ -1275,20 +1275,6 @@ bool mesh_db_read_node(json_object *jnode, mesh_db_node_cb cb, void *user_data)
 	/* Parse features */
 	parse_features(jnode, &node);
 
-	/* Parse unicast address */
-	json_object_object_get_ex(jnode, "unicastAddress", &jvalue);
-	if (!jvalue) {
-		l_info("Bad config: Unicast address must be present");
-		return false;
-	}
-
-	char *str = (char *)json_object_get_string(jvalue);
-
-	if (sscanf(str, "%04hx", &node.unicast) != 1) {
-		l_info("Failed to parse unicast address");
-		return false;
-	}
-
 	/* Parse TTL */
 	json_object_object_get_ex(jnode, "defaultTTL", &jvalue);
 
