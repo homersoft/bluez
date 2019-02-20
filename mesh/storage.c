@@ -321,7 +321,8 @@ bool storage_write_sequence_number(struct mesh_net *net, uint32_t seq)
 	return result;
 }
 
-bool storage_write_provisioned_state(struct mesh_node *node) {
+bool storage_write_provisioned_state(struct mesh_node *node)
+{
 
 	json_object *jnode = node_jconfig_get(node);
 	bool prov_state = node_is_provisioned(node);

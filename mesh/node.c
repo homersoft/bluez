@@ -477,7 +477,7 @@ void node_cleanup(void *data)
 		if (net)
 			storage_write_sequence_number(net,
 				mesh_net_get_seq_num(net));
-		
+
 		if (!storage_write_provisioned_state(node))
 			l_debug("cannot write provisioned state to Json file");
 
