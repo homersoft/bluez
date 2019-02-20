@@ -1607,11 +1607,6 @@ bool mesh_db_add_node(json_object *jnode,
 	if (!mesh_db_write_mode(jnode, "proxy", modes->proxy))
 		return false;
 
-	/* Unicast address */
-	if (!mesh_db_write_uint16_hex(jnode, "unicastAddress",
-		 db_node->unicast))
-		return false;
-
 	/* Relay related parameters */
 	if (!mesh_db_write_relay_mode(jnode, db_node->modes.relay.mode,
 		 db_node->modes.relay.cnt, db_node->modes.relay.interval))
