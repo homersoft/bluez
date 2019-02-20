@@ -92,8 +92,10 @@ static bool read_net_keys_cb(uint16_t idx, uint8_t *key, uint8_t *new_key,
 	if (!net)
 		return false;
 
-	if (mesh_net_add_key(net, false, idx, key) != MESH_STATUS_SUCCESS)
+	if (mesh_net_add_key(net, false, idx, key) != MESH_STATUS_SUCCESS) {
+		l_debug("cannot add net key");
 		return false;
+	}
 	/* TODO: handle restoring key refresh phase and new keys */
 
 	return true;
@@ -115,6 +117,12 @@ static bool parse_node(struct mesh_node *node, json_object *jnode)
 	if (!mesh_db_read_node(jnode, read_node_cb, node))
 		return false;
 
+	struct mesh_net *net = node_get_net(node);
+
+	if (net) {
+		if (!mesh_db_read_net_keys(jnode, read_net_keys_cb, net))
+			return false;
+	}
 	return true;
 }
 
