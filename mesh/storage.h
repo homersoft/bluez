@@ -51,5 +51,7 @@ bool storage_app_key_del(struct mesh_net *net, uint16_t net_idx,
 bool storage_write_sequence_number(struct mesh_net *net, uint32_t seq);
 bool storage_set_iv_index(struct mesh_net *net, uint32_t iv_index,
 								bool update);
+bool storage_write_provisioned_state(struct mesh_node *node);
+
 bool storage_set_device_key(struct mesh_node *node, uint8_t dev_key[16]);
 bool storage_set_unicast(struct mesh_node *node, uint16_t unicast);

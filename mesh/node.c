@@ -477,6 +477,9 @@ void node_cleanup(void *data)
 		if (net)
 			storage_write_sequence_number(net,
 				mesh_net_get_seq_num(net));
+		
+		if (!storage_write_provisioned_state(node))
+			l_debug("cannot write provisioned state to Json file");
 
 		if (storage_save_config(node, true, NULL, NULL))
 			l_info("Saved final config to %s", node->cfg_file);
@@ -498,7 +501,7 @@ void node_cleanup_all(void)
 
 bool node_is_provisioned(struct mesh_node *node)
 {
-	return (!IS_UNASSIGNED(node->primary));
+	return node->net;
 }
 
 bool node_app_key_delete(struct mesh_net *net, uint16_t addr,

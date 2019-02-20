@@ -321,6 +321,17 @@ bool storage_write_sequence_number(struct mesh_net *net, uint32_t seq)
 	return result;
 }
 
+bool storage_write_provisioned_state(struct mesh_node *node) {
+
+	json_object *jnode = node_jconfig_get(node);
+	bool prov_state = node_is_provisioned(node);
+
+	if (!mesh_db_write_bool(jnode, "provisioned", prov_state))
+		return false;
+
+	return true;
+}
+
 static bool save_config(json_object *jnode, const char *config_name)
 {
 	FILE *outfile;
