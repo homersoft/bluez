@@ -1308,9 +1308,11 @@ bool unprovision_node(struct mesh_node *node)
 
 		/* Remove net_key and unicast from storage */
 		json_object *jnode = node_jconfig_get(node);
+
 		mesh_db_remove_property(jnode, "unicastAddress");
 		mesh_db_remove_property(jnode, "netKeys");
-		mesh_db_write_bool(jnode, "provisioned", node_is_provisioned(node));
+		mesh_db_write_bool(jnode, "provisioned",
+				node_is_provisioned(node));
 
 		if (!storage_save_config(node, true, NULL, NULL))
 			return false;
