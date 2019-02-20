@@ -93,7 +93,7 @@ static bool read_net_keys_cb(uint16_t idx, uint8_t *key, uint8_t *new_key,
 		return false;
 
 	if (mesh_net_add_key(net, false, idx, key) != MESH_STATUS_SUCCESS) {
-		l_debug("cannot add net key");
+		l_error("cannot add net key");
 		return false;
 	}
 	/* TODO: handle restoring key refresh phase and new keys */
@@ -465,8 +465,8 @@ bool storage_load_nodes(const char *dir_name)
 	node_ids = l_queue_new();
 
 	while ((entry = readdir(dir)) != NULL) {
-		char name_buf[PATH_MAX];
-		char name_with_uuid_buf[PATH_MAX + UUID_LEN];
+		char name_buf[PATH_MAX - UUID_LEN];
+		char name_with_uuid_buf[PATH_MAX];
 		char *filename;
 		uint32_t node_id;
 		size_t len;
