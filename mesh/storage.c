@@ -465,8 +465,7 @@ bool storage_load_nodes(const char *dir_name)
 	node_ids = l_queue_new();
 
 	while ((entry = readdir(dir)) != NULL) {
-		char name_buf[PATH_MAX - UUID_LEN];
-		char name_with_uuid_buf[PATH_MAX];
+		char name_buf[PATH_MAX];
 		char *filename;
 		uint32_t node_id;
 		size_t len;
@@ -477,11 +476,8 @@ bool storage_load_nodes(const char *dir_name)
 		if (sscanf(entry->d_name, "%04x", &node_id) != 1)
 			continue;
 
-		snprintf(name_buf, PATH_MAX - UUID_LEN, "%s/%s/node.json",
+		snprintf(name_buf, PATH_MAX, "%s/%s/node.json",
 				dir_name, entry->d_name);
-
-		snprintf(name_with_uuid_buf, PATH_MAX, "%s/%s",
-					dir_name, entry->d_name);
 
 		l_queue_push_tail(node_ids, L_UINT_TO_PTR(node_id));
 
@@ -494,7 +490,7 @@ bool storage_load_nodes(const char *dir_name)
 			continue;
 
 		/* Fall-back to Backup version */
-		snprintf(name_buf, PATH_MAX - UUID_LEN, "%s/%s/node.json.bak",
+		snprintf(name_buf, PATH_MAX, "%s/%s/node.json.bak",
 				dir_name, entry->d_name);
 
 		if (parse_config(name_buf, filename, node_id)) {
@@ -508,7 +504,7 @@ bool storage_load_nodes(const char *dir_name)
 			/* Remove node.json, node.json.bak and its directory */
 			remove(filename);
 			remove(name_buf);
-			remove(name_with_uuid_buf);
+			remove(dirname(name_buf));
 		}
 		l_free(filename);
 	}
