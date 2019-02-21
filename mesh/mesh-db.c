@@ -1275,6 +1275,17 @@ bool mesh_db_read_node(json_object *jnode, mesh_db_node_cb cb, void *user_data)
 	/* Parse features */
 	parse_features(jnode, &node);
 
+	/* Parse unicast */
+	json_object_object_get_ex(jnode, "unicastAddress", &jvalue);
+
+	if (jvalue) {
+		char *str = (char *)json_object_get_string(jvalue);
+
+		if (sscanf(str, "%04hx", &node.unicast) != 1)
+			l_error("Failed to parse unicast address");
+	} else
+		l_info("Unicast address not available - node is not provisioned");
+
 	/* Parse TTL */
 	json_object_object_get_ex(jnode, "defaultTTL", &jvalue);
 
