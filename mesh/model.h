@@ -124,6 +124,10 @@ int mesh_model_sub_ovr(struct mesh_node *node, uint16_t addr, uint32_t id,
 int mesh_model_sub_get(struct mesh_node *node, uint16_t addr, uint32_t id,
 			uint8_t *buf, uint16_t buf_size, uint16_t *size);
 uint16_t mesh_model_cfg_blk(uint8_t *pkt);
+bool mesh_model_send_direct(struct mesh_node *node, uint16_t src,
+							uint16_t target, uint8_t *dev_key,
+							uint8_t ttl, const void *msg,
+							uint16_t msg_len);
 bool mesh_model_send(struct mesh_node *node, uint16_t src, uint16_t target,
 					uint16_t app_idx, uint8_t ttl,
 					const void *msg, uint16_t msg_len);

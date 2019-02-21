@@ -945,6 +945,21 @@ int mesh_model_publish(struct mesh_node *node, uint32_t mod_id,
 
 }
 
+bool mesh_model_send_direct(struct mesh_node *node, uint16_t src,
+							uint16_t target, uint8_t *dev_key,
+							uint8_t ttl, const void *msg,
+							uint16_t msg_len)
+{
+	if (src == 0)
+		src = node_get_primary(node);
+
+	if (IS_UNASSIGNED(target))
+		return false;
+
+	return msg_send(node, false, src, target, APP_ID_DEV, dev_key, NULL, ttl,
+			msg, msg_len);
+}
+
 bool mesh_model_send(struct mesh_node *node, uint16_t src, uint16_t target,
 					uint16_t app_idx, uint8_t ttl,
 					const void *msg, uint16_t msg_len)

@@ -1339,20 +1339,38 @@ bool stop_advertising(struct mesh_node *node)
 
 bool send_message(struct mesh_node *node, uint16_t element, uint16_t dest,
 		uint8_t *opcode, uint16_t opcode_len, uint8_t *payload,
-		uint16_t payload_len, uint16_t key_index)
+		uint16_t payload_len, struct l_dbus_message_iter *key_variant)
 {
 	uint8_t data[MESH_MAX_OPCODE + MESH_MAX_ACCESS_PAYLOAD];
 	uint16_t data_len = opcode_len + payload_len;
-	uint16_t src;
+	uint16_t src, key_idx;
+	struct l_dbus_message_iter device_key_iter;
+	uint8_t device_key[KEY_LEN];
+	uint8_t device_key_len;
 
 	src = node_get_primary(node) + element;
 
 	memcpy(data, opcode, opcode_len);
 	memcpy((data + opcode_len), payload, payload_len);
 
-	return mesh_model_send(node, src, dest, key_index,
-				mesh_net_get_default_ttl(node->net),
-				data, data_len);
+	if (l_dbus_message_iter_get_variant(key_variant, "q", &key_idx))
+		return mesh_model_send(node, src, dest, key_idx,
+					mesh_net_get_default_ttl(node->net),
+					data, data_len);
+
+	if (l_dbus_message_iter_get_variant(key_variant, "ay",
+				&device_key_iter)) {
+		device_key_len = dbus_get_byte_array(&device_key_iter,
+							device_key, KEY_LEN);
+		if (KEY_LEN != device_key_len)
+			return false;
+		return mesh_model_send_direct(node, src, dest, device_key,
+					mesh_net_get_default_ttl(node->net),
+					data, data_len);
+	}
+
+	/* key variant parsing failed */
+	return false;
 }
 
 bool get_uuid_from_path(const char *path, uint8_t *uuid)
@@ -1601,12 +1619,13 @@ static struct l_dbus_message *send_message_call(struct l_dbus *dbus,
 {
 	struct l_dbus_message *reply;
 	struct l_dbus_message_iter iter_opcode, iter_payload;
+	struct l_dbus_message_iter key_variant;
 	struct mesh_node *node;
 	const char *path;
 	uint8_t uuid[KEY_LEN];
 	uint8_t opcode[MESH_MAX_OPCODE];
 	uint8_t payload[MESH_MAX_ACCESS_PAYLOAD];
-	uint16_t element, dest, key_index, payload_len, opcode_len;
+	uint16_t element, dest, payload_len, opcode_len;
 
 	l_info("Send message call");
 
@@ -1614,8 +1633,8 @@ static struct l_dbus_message *send_message_call(struct l_dbus *dbus,
 	if (!get_uuid_from_path(path, uuid))
 		return dbus_error(message, MESH_ERROR_FAILED, "Wrong path");
 
-	if (!l_dbus_message_get_arguments(message, "qqayayq", &element, &dest,
-			&iter_opcode, &iter_payload, &key_index)) {
+	if (!l_dbus_message_get_arguments(message, "qqayayv", &element, &dest,
+			&iter_opcode, &iter_payload, &key_variant)) {
 		return dbus_error(message, MESH_ERROR_INVALID_ARGS, NULL);
 	}
 
@@ -1628,7 +1647,7 @@ static struct l_dbus_message *send_message_call(struct l_dbus *dbus,
 		return dbus_error(message, MESH_ERROR_DOES_NOT_EXIST, NULL);
 
 	if (!send_message(node, element, dest, opcode, opcode_len, payload,
-						payload_len, key_index))
+						payload_len, &key_variant))
 		return dbus_error(message, MESH_ERROR_FAILED, NULL);
 
 	reply = l_dbus_message_new_method_return(message);
@@ -1790,8 +1809,8 @@ static bool node_elements_getter(struct l_dbus *dbus,
 static void setup_node_interface(struct l_dbus_interface *interface)
 {
 	l_dbus_interface_method(interface, "SendMessage", 0,
-				send_message_call, "", "qqayayq", "element",
-				"dest", "opcode", "payload", "key_index");
+				send_message_call, "", "qqayayv", "element",
+				"dest", "opcode", "payload", "key_variant");
 
 	l_dbus_interface_signal(interface, "MessageReceived", 0,
 				"qqayayq", "element", "source", "opcode",
