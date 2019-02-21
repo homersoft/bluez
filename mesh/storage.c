@@ -92,8 +92,10 @@ static bool read_net_keys_cb(uint16_t idx, uint8_t *key, uint8_t *new_key,
 	if (!net)
 		return false;
 
-	if (mesh_net_add_key(net, false, idx, key) != MESH_STATUS_SUCCESS)
+	if (mesh_net_add_key(net, false, idx, key) != MESH_STATUS_SUCCESS) {
+		l_error("cannot add net key");
 		return false;
+	}
 	/* TODO: handle restoring key refresh phase and new keys */
 
 	return true;
@@ -115,6 +117,12 @@ static bool parse_node(struct mesh_node *node, json_object *jnode)
 	if (!mesh_db_read_node(jnode, read_node_cb, node))
 		return false;
 
+	struct mesh_net *net = node_get_net(node);
+
+	if (net) {
+		if (!mesh_db_read_net_keys(jnode, read_net_keys_cb, net))
+			return false;
+	}
 	return true;
 }
 
@@ -313,6 +321,18 @@ bool storage_write_sequence_number(struct mesh_net *net, uint32_t seq)
 	return result;
 }
 
+bool storage_write_provisioned_state(struct mesh_node *node)
+{
+
+	json_object *jnode = node_jconfig_get(node);
+	bool prov_state = node_is_provisioned(node);
+
+	if (!mesh_db_write_bool(jnode, "provisioned", prov_state))
+		return false;
+
+	return true;
+}
+
 static bool save_config(json_object *jnode, const char *config_name)
 {
 	FILE *outfile;
@@ -456,8 +476,8 @@ bool storage_load_nodes(const char *dir_name)
 		if (sscanf(entry->d_name, "%04x", &node_id) != 1)
 			continue;
 
-		snprintf(name_buf, PATH_MAX, "%s/%s/node.json", dir_name,
-								entry->d_name);
+		snprintf(name_buf, PATH_MAX, "%s/%s/node.json",
+				dir_name, entry->d_name);
 
 		l_queue_push_tail(node_ids, L_UINT_TO_PTR(node_id));
 
@@ -470,8 +490,8 @@ bool storage_load_nodes(const char *dir_name)
 			continue;
 
 		/* Fall-back to Backup version */
-		snprintf(name_buf, PATH_MAX, "%s/%s/node.json.bak", dir_name,
-								entry->d_name);
+		snprintf(name_buf, PATH_MAX, "%s/%s/node.json.bak",
+				dir_name, entry->d_name);
 
 		if (parse_config(name_buf, filename, node_id)) {
 			remove(filename);
@@ -480,8 +500,12 @@ bool storage_load_nodes(const char *dir_name)
 			continue;
 		} else {
 			l_info("Cannot parse backup config file (incorrect JSON format)");
-		}
 
+			/* Remove node.json, node.json.bak and its directory */
+			remove(filename);
+			remove(name_buf);
+			remove(dirname(name_buf));
+		}
 		l_free(filename);
 	}
 

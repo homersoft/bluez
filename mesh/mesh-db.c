@@ -418,7 +418,7 @@ bool mesh_db_read_net_keys(json_object *jobj, mesh_db_net_key_cb cb,
 }
 
 bool mesh_db_net_key_add(json_object *jobj, uint16_t idx,
-					const uint8_t key[16], int phase)
+					const uint8_t key[KEY_LEN], int phase)
 {
 	json_object *jarray, *jentry = NULL, *jstring;
 	char buf[5];
@@ -429,7 +429,7 @@ bool mesh_db_net_key_add(json_object *jobj, uint16_t idx,
 		jentry = get_key_object(jarray, idx);
 
 	if (jentry) {
-		uint8_t buf[16];
+		uint8_t buf[KEY_LEN];
 		json_object *jvalue;
 		char *str;
 
@@ -442,7 +442,7 @@ bool mesh_db_net_key_add(json_object *jobj, uint16_t idx,
 			return false;
 
 		/* If the same key, return success */
-		if (memcmp(key, buf, 16) == 0)
+		if (memcmp(key, buf, KEY_LEN) == 0)
 			return true;
 
 		return false;
@@ -470,7 +470,7 @@ bool mesh_db_net_key_add(json_object *jobj, uint16_t idx,
 
 		/* If Key Refresh underway, add placeholder for "Old Key" */
 		if (phase != KEY_REFRESH_PHASE_NONE) {
-			uint8_t buf[16];
+			uint8_t buf[KEY_LEN];
 			uint8_t i;
 
 			/* Flip Bits to differentiate */
@@ -1275,20 +1275,6 @@ bool mesh_db_read_node(json_object *jnode, mesh_db_node_cb cb, void *user_data)
 	/* Parse features */
 	parse_features(jnode, &node);
 
-	/* Parse unicast address */
-	json_object_object_get_ex(jnode, "unicastAddress", &jvalue);
-	if (!jvalue) {
-		l_info("Bad config: Unicast address must be present");
-		return false;
-	}
-
-	char *str = (char *)json_object_get_string(jvalue);
-
-	if (sscanf(str, "%04hx", &node.unicast) != 1) {
-		l_info("Failed to parse unicast address");
-		return false;
-	}
-
 	/* Parse TTL */
 	json_object_object_get_ex(jnode, "defaultTTL", &jvalue);
 
@@ -1296,7 +1282,7 @@ bool mesh_db_read_node(json_object *jnode, mesh_db_node_cb cb, void *user_data)
 		int ttl = json_object_get_int(jvalue);
 
 		if (ttl < 0 || ttl == 1 || ttl > DEFAULT_TTL) {
-			l_info("Wrong TTL parameter durong parsing data");
+			l_info("Wrong TTL parameter during parsing data");
 			return false;
 		}
 		node.ttl = (uint8_t) ttl;
@@ -1311,6 +1297,14 @@ bool mesh_db_read_node(json_object *jnode, mesh_db_node_cb cb, void *user_data)
 		node.seq_number = json_object_get_int(jvalue);
 	else
 		l_info("Failed to parse sequence number");
+
+	/* Parse advertising */
+	json_object_object_get_ex(jnode, "advertising", &jvalue);
+
+	if (jvalue)
+		node.is_advertising = json_object_get_boolean(jvalue);
+	else
+		l_info("Failed to parse advertising state");
 
 	/* Parse elements */
 	json_object_object_get_ex(jnode, "elements", &jvalue);
@@ -1421,7 +1415,7 @@ bool mesh_db_write_mode(json_object *jobj, const char *keyword, int value)
 {
 	json_object *jstring;
 
-	if (value == 0)
+	if (value != MESH_MODE_ENABLED)
 		jstring = json_object_new_boolean(false);
 	else
 		jstring = json_object_new_boolean(true);
@@ -1570,22 +1564,6 @@ bool mesh_db_add_node(json_object *jnode,
 	if (!mesh_db_write_device_key(jnode, db_node->dev_key))
 		return false;
 
-	/* Network Key */
-	if (!node_get_net(node)) {
-
-		/* Network Key is not available when node is not provisioned */
-		json_object *jstring = json_object_new_string("NULL");
-
-		if (!jstring)
-			return false;
-
-		json_object_object_add(jnode, "net_key", jstring);
-	} else {
-
-		if (!add_key(jnode, "net_key", db_node->net_key))
-			return false;
-	}
-
 	/* Default TTL */
 	json_object_object_add(jnode, "defaultTTL",
 		json_object_new_int(db_node->ttl));
@@ -1595,15 +1573,15 @@ bool mesh_db_add_node(json_object *jnode,
 		json_object_new_int(db_node->seq_number));
 
 	/* Beaconing state */
-	if (!mesh_db_write_bool(jnode, "beacon", modes->beacon))
+	if (!mesh_db_write_mode(jnode, "beacon", modes->beacon))
 		return false;
 
 	/* Low power mode */
-	if (!mesh_db_write_bool(jnode, "lowPower", modes->low_power))
+	if (!mesh_db_write_mode(jnode, "lowPower", modes->low_power))
 		return false;
 
 	/* Friend mode */
-	if (!mesh_db_write_bool(jnode, "friend", modes->friend))
+	if (!mesh_db_write_mode(jnode, "friend", modes->friend))
 		return false;
 
 	/* Provisioned and proxy flags */
@@ -1612,17 +1590,16 @@ bool mesh_db_add_node(json_object *jnode,
 		return false;
 
 	/* Proxy mode */
-	if (!mesh_db_write_bool(jnode, "proxy", modes->proxy))
-		return false;
-
-	/* Unicast address */
-	if (!mesh_db_write_uint16_hex(jnode, "unicastAddress",
-		 db_node->unicast))
+	if (!mesh_db_write_mode(jnode, "proxy", modes->proxy))
 		return false;
 
 	/* Relay related parameters */
 	if (!mesh_db_write_relay_mode(jnode, db_node->modes.relay.mode,
 		 db_node->modes.relay.cnt, db_node->modes.relay.interval))
+		return false;
+
+	/* Advertising state */
+	if (!mesh_db_write_bool(jnode, "advertising", db_node->is_advertising))
 		return false;
 
 	/* Elements */

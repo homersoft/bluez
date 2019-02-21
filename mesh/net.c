@@ -2655,7 +2655,14 @@ static void update_iv_kr_state(struct mesh_subnet *subnet, uint32_t iv_index,
 			net->iv_upd_state = IV_UPD_NORMAL;
 		}
 
+		/* Set iv_idx and iv_update in storage */
 		storage_set_iv_index(net, iv_index, net->iv_upd_state);
+
+		/* Save config to the Json file */
+		struct mesh_node *node = mesh_net_node_get(net);
+		json_object *jnode = node_jconfig_get(node);
+
+		storage_save_config(node, true, NULL, NULL);
 
 		/* Figure out the key refresh phase */
 		if (kr_transition) {
@@ -2962,6 +2969,8 @@ struct mesh_io *mesh_net_detach(struct mesh_net *net)
 
 	io = net->io;
 
+	mesh_net_set_beacon_mode(net, false);
+	l_queue_remove(nets, net);
 	mesh_io_send_cancel(net->io, &type, 1);
 	mesh_io_deregister_recv_cb(io, MESH_IO_FILTER_BEACON);
 	mesh_io_deregister_recv_cb(io, MESH_IO_FILTER_NET);

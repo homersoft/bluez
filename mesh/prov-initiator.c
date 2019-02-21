@@ -161,7 +161,6 @@ static void int_prov_open(void *user_data, prov_trans_tx_t trans_tx,
 
 	prov->conf_inputs.invite.attention = invite[1];
 	prov->trans_tx(prov->trans_data, invite, sizeof(invite));
-	return;
 }
 
 static void swap_u256_bytes(uint8_t *u256)
