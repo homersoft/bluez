@@ -30,6 +30,7 @@ struct mesh_model;
 #define	VIRTUAL_BASE			0x10000
 
 #define MESH_MAX_ACCESS_PAYLOAD		380
+#define MESH_MAX_OPCODE			3
 
 #define MESH_STATUS_SUCCESS		0x00
 #define MESH_STATUS_INVALID_ADDRESS	0x01

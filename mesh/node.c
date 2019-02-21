@@ -1338,11 +1338,21 @@ bool stop_advertising(struct mesh_node *node)
 }
 
 bool send_message(struct mesh_node *node, uint16_t element, uint16_t dest,
-		uint8_t *opcode, uint8_t *payload, uint16_t len,
-		uint16_t key_index)
+		uint8_t *opcode, uint16_t opcode_len, uint8_t *payload,
+		uint16_t payload_len, uint16_t key_index)
 {
-	//TODO
-	return true;
+	uint8_t data[MESH_MAX_OPCODE + MESH_MAX_ACCESS_PAYLOAD];
+	uint16_t data_len = opcode_len + payload_len;
+	uint16_t src;
+
+	src = node_get_primary(node) + element;
+
+	memcpy(data, opcode, opcode_len);
+	memcpy((data + opcode_len), payload, payload_len);
+
+	return mesh_model_send(node, src, dest, key_index,
+				mesh_net_get_default_ttl(node->net),
+				data, data_len);
 }
 
 bool get_uuid_from_path(const char *path, uint8_t *uuid)
@@ -1594,9 +1604,9 @@ static struct l_dbus_message *send_message_call(struct l_dbus *dbus,
 	struct mesh_node *node;
 	const char *path;
 	uint8_t uuid[KEY_LEN];
-	uint8_t opcode[OPCODE_MAX_LEN];
-	uint8_t *payload;
-	uint16_t element, dest, key_index, len;
+	uint8_t opcode[MESH_MAX_OPCODE];
+	uint8_t payload[MESH_MAX_ACCESS_PAYLOAD];
+	uint16_t element, dest, key_index, payload_len, opcode_len;
 
 	l_info("Send message call");
 
@@ -1609,19 +1619,17 @@ static struct l_dbus_message *send_message_call(struct l_dbus *dbus,
 		return dbus_error(message, MESH_ERROR_INVALID_ARGS, NULL);
 	}
 
-	payload = l_new(uint8_t, PAYLOAD_MAX_LEN);
-
-	dbus_get_byte_array(&iter_opcode, opcode, OPCODE_MAX_LEN);
-	len = dbus_get_byte_array(&iter_payload, payload, PAYLOAD_MAX_LEN);
+	opcode_len = dbus_get_byte_array(&iter_opcode, opcode, MESH_MAX_OPCODE);
+	payload_len = dbus_get_byte_array(&iter_payload, payload,
+						MESH_MAX_ACCESS_PAYLOAD);
 
 	node = l_queue_find(nodes, match_node_uuid, uuid);
 	if (!node)
 		return dbus_error(message, MESH_ERROR_DOES_NOT_EXIST, NULL);
 
-	if (!send_message(node, element, dest, opcode, payload, len, key_index))
+	if (!send_message(node, element, dest, opcode, opcode_len, payload,
+						payload_len, key_index))
 		return dbus_error(message, MESH_ERROR_FAILED, NULL);
-
-	l_free(payload);
 
 	reply = l_dbus_message_new_method_return(message);
 	l_dbus_message_set_arguments(reply, "");

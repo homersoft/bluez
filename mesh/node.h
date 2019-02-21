@@ -33,8 +33,6 @@ struct mesh_agent;
 #define RELAY_RETRAN_COUNT_MAX 7
 #define RELAY_RETR_INTERVAL_STEPS_MAX 31
 
-#define OPCODE_MAX_LEN 3
-#define PAYLOAD_MAX_LEN 379
 
 typedef void (*node_attach_ready_func_t) (int status, char *node_path,
 								uint64_t token);
