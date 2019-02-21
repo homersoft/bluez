@@ -2655,7 +2655,14 @@ static void update_iv_kr_state(struct mesh_subnet *subnet, uint32_t iv_index,
 			net->iv_upd_state = IV_UPD_NORMAL;
 		}
 
+		/* Set iv_idx and iv_update in storage */
 		storage_set_iv_index(net, iv_index, net->iv_upd_state);
+
+		/* Save config to the Json file */
+		struct mesh_node *node = mesh_net_node_get(net);
+		json_object *jnode = node_jconfig_get(node);
+
+		storage_save_config(node, true, NULL, NULL);
 
 		/* Figure out the key refresh phase */
 		if (kr_transition) {
