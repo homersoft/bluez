@@ -28,6 +28,9 @@ struct mesh_agent;
 #define MIN_SEQ_CACHE		(2*MIN_SEQ_TRIGGER)
 #define MIN_SEQ_CACHE_TIME	(5*60)
 
+#define MESH_NODE_PATH_PREFIX "/org/bluez/mesh/node_"
+#define MESH_NODE_PATH_PREFIX_LEN 21
+
 #define KEY_LEN 16
 
 #define RELAY_RETRAN_COUNT_MAX 7
@@ -103,3 +106,5 @@ void *node_jconfig_get(struct mesh_node *node);
 void node_cfg_file_set(struct mesh_node *node, char *cfg);
 char *node_cfg_file_get(struct mesh_node *node);
 bool register_node_object(struct mesh_node *node);
+void get_node_path_from_uuid(char *path, uint8_t *uuid);
+

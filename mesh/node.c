@@ -46,9 +46,6 @@
 
 #define MIN_COMP_SIZE 14
 
-#define MESH_NODE_PATH_PREFIX "/org/bluez/mesh/node_"
-#define MESH_NODE_PATH_PREFIX_LEN 21
-
 /* Default element location: unknown */
 #define DEFAULT_LOCATION 0x0000
 
@@ -1362,7 +1359,7 @@ bool send_message(struct mesh_node *node, uint16_t element, uint16_t dest,
 				&device_key_iter)) {
 		device_key_len = dbus_get_byte_array(&device_key_iter,
 							device_key, KEY_LEN);
-		if (KEY_LEN != device_key_len)
+		if (device_key_len != KEY_LEN)
 			return false;
 		return mesh_model_send_direct(node, src, dest, device_key,
 					mesh_net_get_default_ttl(node->net),

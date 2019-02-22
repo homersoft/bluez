@@ -707,44 +707,78 @@ static int add_sub(struct mesh_net *net, struct mesh_model *mod,
 	return MESH_STATUS_SUCCESS;
 }
 
+static bool msg_builder_append_from_array(
+				struct l_dbus_message_builder *builder,
+				const uint8_t *data,
+				uint16_t data_len)
+{
+	if (!l_dbus_message_builder_enter_array(builder, "y"))
+		return false;
+
+	for (uint16_t i = 0; i < data_len; i++) {
+		if (!l_dbus_message_builder_append_basic(builder,
+				'y', &(data[i])))
+			return false;
+	}
+
+	if (!l_dbus_message_builder_leave_array(builder))
+		return false;
+
+	return true;
+}
+
 static void send_msg_rcvd(struct mesh_node *node, uint8_t ele_idx, bool is_sub,
 					uint16_t src, uint16_t key_idx,
 					uint16_t size, const uint8_t *data)
 {
-	struct l_dbus *dbus = dbus_get_bus();
 	struct l_dbus_message *msg;
 	struct l_dbus_message_builder *builder;
+	struct l_dbus *dbus = dbus_get_bus();
+
+	char path[(KEY_LEN * 2) + MESH_NODE_PATH_PREFIX_LEN + 6] = {'\0'};
 
 	l_debug("Emit \"MessageReceived\" signal");
 
-	/*
-	 *FIXME: emit signal instead of 'that' below
-	 *
-	 *msg = l_dbus_message_new_method_call(dbus, owner, path,
-	 *			MESH_ELEMENT_INTERFACE, "MessageReceived");
-	 *
-	 *builder = l_dbus_message_builder_new(msg);
-	 *
-	 *if (!l_dbus_message_builder_append_basic(builder, 'q', &src))
-	 *	goto error;
-	 *
-	 *if (!l_dbus_message_builder_append_basic(builder, 'q', &key_idx))
-	 *	goto error;
-	 *
-	 *if (!l_dbus_message_builder_append_basic(builder, 'b', &is_sub))
-	 *	goto error;
-	 *
-	 *if (!dbus_append_byte_array(builder, data, size))
-	 *	goto error;
-	 *
-	 *if (!l_dbus_message_builder_finalize(builder))
-	 *	goto error;
-	 *
-	 *l_dbus_send(dbus, msg);
-	 *
-	 *error:
-	 *l_dbus_message_builder_destroy(builder);
-	 */
+	get_node_path_from_uuid(path, node_uuid_get(node));
+
+	msg = l_dbus_message_new_signal(dbus, path,
+			MESH_NODE_INTERFACE, "MessageReceived");
+	builder = l_dbus_message_builder_new(msg);
+
+	(void)is_sub;
+
+	/* Add element index */
+	if (!l_dbus_message_builder_append_basic(builder, 'q', &ele_idx))
+		goto error;
+
+	/* Add src address */
+	if (!l_dbus_message_builder_append_basic(builder, 'q', &src))
+		goto error;
+
+	const uint8_t opcode[] = {0, 0}; //todo:JWI opcode and payload detection
+
+	/* Add opcode values */
+	if (!msg_builder_append_from_array(builder, opcode, sizeof(opcode)))
+		goto error;
+
+	/* Add payload */
+	if (!msg_builder_append_from_array(builder, data, size))
+		goto error;
+
+	/* Add key index */
+	if (!l_dbus_message_builder_append_basic(builder, 'y', &key_idx))
+		goto error;
+
+	/* Finalize builder */
+	if (!l_dbus_message_builder_finalize(builder))
+		goto error;
+
+	/* Emit signal */
+	l_dbus_send(dbus, msg);
+
+error:
+	l_error("MessageReceived signal\r\n");
+	l_dbus_message_builder_destroy(builder);
 }
 
 bool mesh_model_rx(struct mesh_node *node, bool szmict, uint32_t seq0,
@@ -946,9 +980,9 @@ int mesh_model_publish(struct mesh_node *node, uint32_t mod_id,
 }
 
 bool mesh_model_send_direct(struct mesh_node *node, uint16_t src,
-							uint16_t target, uint8_t *dev_key,
-							uint8_t ttl, const void *msg,
-							uint16_t msg_len)
+		uint16_t target, uint8_t *dev_key,
+		uint8_t ttl, const void *msg,
+		uint16_t msg_len)
 {
 	if (src == 0)
 		src = node_get_primary(node);
@@ -956,8 +990,8 @@ bool mesh_model_send_direct(struct mesh_node *node, uint16_t src,
 	if (IS_UNASSIGNED(target))
 		return false;
 
-	return msg_send(node, false, src, target, APP_ID_DEV, dev_key, NULL, ttl,
-			msg, msg_len);
+	return msg_send(node, false, src, target,
+			APP_ID_DEV, dev_key, NULL, ttl, msg, msg_len);
 }
 
 bool mesh_model_send(struct mesh_node *node, uint16_t src, uint16_t target,
