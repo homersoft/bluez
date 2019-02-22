@@ -1563,9 +1563,14 @@ bool mesh_db_add_node(json_object *jnode,
 		return false;
 
 	/* IV index and IV update flag */
-	if (!mesh_db_write_iv_index(jnode, db_node->iv_index,
-		 db_node->iv_update))
-		return false;
+	if (node_is_provisioned(node)) {
+		if (!mesh_db_write_iv_index(jnode, db_node->iv_index,
+				db_node->iv_update))
+			return false;
+	} else {
+		json_object_object_add(jnode, "IVindex", NULL);
+		json_object_object_add(jnode, "IVupdate", NULL);
+	}
 
 	/* Device UUID */
 	if (!add_uuid(jnode, "UUID", db_node->uuid))
@@ -1576,8 +1581,11 @@ bool mesh_db_add_node(json_object *jnode,
 		return false;
 
 	/* Default TTL */
-	json_object_object_add(jnode, "defaultTTL",
-		json_object_new_int(db_node->ttl));
+	if (node_is_provisioned(node))
+		json_object_object_add(jnode, "defaultTTL",
+				json_object_new_int(db_node->ttl));
+	else
+		json_object_object_add(jnode, "defaultTTL", NULL);
 
 	/* Sequence number */
 	json_object_object_add(jnode, "sequenceNumber",
