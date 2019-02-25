@@ -439,6 +439,11 @@ static struct l_dbus_message *create_node_call(struct l_dbus *dbus,
 			MESH_ERROR_INVALID_ARGS,
 			"Incorrect device UUID format");
 
+	if (!l_uuid_is_valid(temp_uuid))
+		return dbus_error(msg,
+			MESH_ERROR_INVALID_ARGS,
+			"Incorrect device UUID format");
+
 	if (node_find_by_uuid(temp_uuid))
 		return dbus_error(msg, MESH_ERROR_ALREADY_EXISTS, NULL);
 
