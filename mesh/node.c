@@ -1425,6 +1425,9 @@ static struct l_dbus_message *provision_call(struct l_dbus *dbus,
 	if (!node)
 		return dbus_error(message, MESH_ERROR_DOES_NOT_EXIST, NULL);
 
+	if (node->net)
+		return dbus_error(message, MESH_ERROR_FAILED, "Provisioned");
+
 	if (!provision_node(node, network_key, addr, iv_index))
 		return dbus_error(message, MESH_ERROR_FAILED, NULL);
 
@@ -1480,6 +1483,9 @@ static struct l_dbus_message *start_advertising_call(struct l_dbus *dbus,
 	node = l_queue_find(nodes, match_node_uuid, uuid);
 	if (!node)
 		return dbus_error(message, MESH_ERROR_DOES_NOT_EXIST, NULL);
+
+	if (node->net)
+		return dbus_error(message, MESH_ERROR_FAILED, "Provisioned");
 
 	if (!start_advertising(node))
 		return dbus_error(message, MESH_ERROR_FAILED, NULL);
