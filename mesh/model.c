@@ -707,26 +707,6 @@ static int add_sub(struct mesh_net *net, struct mesh_model *mod,
 	return MESH_STATUS_SUCCESS;
 }
 
-static bool msg_builder_append_from_array(
-				struct l_dbus_message_builder *builder,
-				const uint8_t *data,
-				uint16_t data_len)
-{
-	if (!l_dbus_message_builder_enter_array(builder, "y"))
-		return false;
-
-	for (uint16_t i = 0; i < data_len; i++) {
-		if (!l_dbus_message_builder_append_basic(builder,
-				'y', &(data[i])))
-			return false;
-	}
-
-	if (!l_dbus_message_builder_leave_array(builder))
-		return false;
-
-	return true;
-}
-
 static void send_msg_rcvd(struct mesh_node *node, uint8_t ele_idx, bool is_sub,
 					uint16_t src, uint16_t key_idx,
 					uint16_t size, const uint8_t *data)
@@ -758,11 +738,11 @@ static void send_msg_rcvd(struct mesh_node *node, uint8_t ele_idx, bool is_sub,
 	const uint8_t opcode[] = {0, 0}; //todo:JWI opcode and payload detection
 
 	/* Add opcode values */
-	if (!msg_builder_append_from_array(builder, opcode, sizeof(opcode)))
+	if (!dbus_append_byte_array(builder, opcode, sizeof(opcode)))
 		goto error;
 
 	/* Add payload */
-	if (!msg_builder_append_from_array(builder, data, size))
+	if (!dbus_append_byte_array(builder, data, size))
 		goto error;
 
 	/* Add key index */
