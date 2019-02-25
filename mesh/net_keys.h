@@ -19,6 +19,7 @@
 
 bool net_key_confirm(uint32_t id, const uint8_t master[16]);
 bool net_key_retrieve(uint32_t id, uint8_t *master);
+bool net_key_get(uint32_t key_id, uint8_t *net_key);
 uint32_t net_key_add(const uint8_t master[16]);
 uint32_t net_key_frnd_add(uint32_t master_id, uint16_t lpn, uint16_t frnd,
 					uint16_t lp_cnt, uint16_t fn_cnt);

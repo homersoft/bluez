@@ -43,6 +43,7 @@
 #include "mesh/dbus.h"
 #include "mesh/agent.h"
 #include "mesh/node.h"
+#include "mesh/net_keys.h"
 
 #define MIN_COMP_SIZE 14
 
@@ -1684,9 +1685,26 @@ static bool node_network_key_getter(struct l_dbus *dbus,
 				struct l_dbus_message_builder *builder,
 				void *user_data)
 {
-	const uint8_t network_key[16] = {0};
+	struct mesh_node *node;
+	const char *path;
+	uint8_t uuid[KEY_LEN];
+	uint32_t net_key_id;
+	uint8_t network_key[16] = {0};
 
-	//TODO - create api to get network key from node
+	path = l_dbus_message_get_path(message);
+	if (!get_uuid_from_path(path, uuid))
+		return false;
+
+	node = l_queue_find(nodes, match_node_uuid, uuid);
+	if (!node)
+		return false;
+
+	if (!mesh_net_get_key(node->net, false, 0, &net_key_id))
+		return false;
+
+	if (!net_key_get(net_key_id, network_key))
+		return false;
+
 	dbus_append_byte_array(builder, network_key, 16);
 
 	return true;
