@@ -714,6 +714,9 @@ static void send_msg_rcvd(struct mesh_node *node, uint8_t ele_idx, bool is_sub,
 	struct l_dbus_message *msg;
 	struct l_dbus_message_builder *builder;
 	struct l_dbus *dbus = dbus_get_bus();
+	uint16_t opcode_len;
+	uint32_t opcode;
+	uint8_t opcode_data[MESH_MAX_OPCODE];
 
 	char path[(KEY_LEN * 2) + MESH_NODE_PATH_PREFIX_LEN + 6] = {'\0'};
 
@@ -735,14 +738,25 @@ static void send_msg_rcvd(struct mesh_node *node, uint8_t ele_idx, bool is_sub,
 	if (!l_dbus_message_builder_append_basic(builder, 'q', &src))
 		goto error;
 
-	const uint8_t opcode[] = {0, 0}; //todo:JWI opcode and payload detection
+	/* Get opcode */
+	if (!mesh_model_opcode_get(data, size, &opcode, &opcode_len))
+		goto error;
+
+	if (opcode_len > MESH_MAX_OPCODE)
+		goto error;
+
+	for (int i = opcode_len - 1; i >= 0; i--) {
+		opcode_data[i] = opcode & 0xFF;
+		opcode >>= 8;
+	}
 
 	/* Add opcode values */
-	if (!dbus_append_byte_array(builder, opcode, sizeof(opcode)))
+	if (!dbus_append_byte_array(builder, &opcode_data[0], opcode_len))
 		goto error;
 
 	/* Add payload */
-	if (!dbus_append_byte_array(builder, data, size))
+	if (!dbus_append_byte_array(builder, &data[opcode_len],
+			size - opcode_len))
 		goto error;
 
 	/* Add key index */
