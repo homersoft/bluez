@@ -1699,19 +1699,27 @@ static bool node_network_key_getter(struct l_dbus *dbus,
 
 	path = l_dbus_message_get_path(message);
 	if (!get_uuid_from_path(path, uuid))
-		return false;
+		goto failed;
 
 	node = l_queue_find(nodes, match_node_uuid, uuid);
 	if (!node)
-		return false;
+		goto failed;
+
+	if (!node->net)
+		goto failed;
 
 	if (!mesh_net_get_key(node->net, false, 0, &net_key_id))
-		return false;
+		goto failed;
 
 	if (!net_key_get(net_key_id, network_key))
-		return false;
+		goto failed;
 
 	dbus_append_byte_array(builder, network_key, 16);
+
+	return true;
+
+failed:
+	dbus_append_byte_array(builder, network_key, 0);
 
 	return true;
 }
@@ -1728,13 +1736,23 @@ static bool node_device_key_getter(struct l_dbus *dbus,
 
 	path = l_dbus_message_get_path(message);
 	if (!get_uuid_from_path(path, uuid))
-		return false;
+		goto failed;
 
 	node = l_queue_find(nodes, match_node_uuid, uuid);
-	if (node)
-		device_key = node_get_device_key(node);
+	if (!node)
+		goto failed;
+
+	if (!node->net)
+		goto failed;
+
+	device_key = node_get_device_key(node);
 
 	dbus_append_byte_array(builder, device_key, 16);
+
+	return true;
+
+failed:
+	dbus_append_byte_array(builder, device_key, 0);
 
 	return true;
 }
@@ -1755,9 +1773,8 @@ static bool node_application_keys_getter(struct l_dbus *dbus,
 	if (!l_dbus_message_builder_enter_array(builder, "ay"))
 		return false;
 
-	for (i = 0; i < 2; i++)
-		if (!dbus_append_byte_array(builder, app_keys[i], 16))
-			return false;
+	if (!dbus_append_byte_array(builder, app_keys[i], 0))
+		return false;
 
 	if (!l_dbus_message_builder_leave_array(builder))
 		return false;
