@@ -1490,12 +1490,13 @@ static struct l_dbus_message *start_advertising_call(struct l_dbus *dbus,
 	if (!start_advertising(node))
 		return dbus_error(message, MESH_ERROR_FAILED, NULL);
 
-	node->is_advertising = true;
-
 	/* Update advertising state in JSON file */
 	if (!mesh_db_write_bool(node->jconfig, "advertising",
 			node->is_advertising))
-		return false;
+		return dbus_error(message, MESH_ERROR_FAILED, NULL);
+
+	reply = l_dbus_message_new_method_return(message);
+	l_dbus_message_set_arguments(reply, "");
 
 	return reply;
 }
