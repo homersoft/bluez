@@ -1816,7 +1816,7 @@ static bool node_elements_getter(struct l_dbus *dbus,
 			return false;
 
 		if (!l_dbus_message_builder_append_basic(builder, 'y',
-				&(element->location)))
+				&(element->idx)))
 			return false;
 
 		if (!l_dbus_message_builder_enter_array(builder, "q"))
