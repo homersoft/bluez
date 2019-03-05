@@ -31,6 +31,8 @@ uint32_t dbus_get_byte_array(struct l_dbus_message_iter *array, uint8_t *buf,
 							uint32_t max_len);
 bool dbus_append_byte_array(struct l_dbus_message_builder *builder,
 						const uint8_t *data, int len);
+bool dbus_append_byte_array2d(struct l_dbus_message_builder *builder,
+						uint8_t **data, unsigned int count, int len);
 void dbus_append_dict_entry_basic(struct l_dbus_message_builder *builder,
 					const char *key, const char *signature,
 					const void *data);

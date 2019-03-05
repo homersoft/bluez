@@ -1758,29 +1758,93 @@ failed:
 	return true;
 }
 
+static void free_app_keys(uint8_t **app_keys, unsigned int app_keys_count)
+{
+	unsigned int i;
+
+	for (i = 0; i < app_keys_count; i++) {
+		l_free(app_keys[i]);
+		app_keys[i] = NULL;
+	}
+
+	l_free(app_keys);
+}
+
+static void get_app_keys(struct l_queue *app_keys_queue, uint8_t **app_keys)
+{
+	unsigned int app_keys_count;
+	unsigned int i = 0;
+	const struct l_queue_entry *entry;
+	struct mesh_app_key *app_key;
+
+	app_keys_count = l_queue_length(app_keys_queue);
+
+	for (entry = l_queue_get_entries(app_keys_queue);
+			 entry; entry = entry->next) {
+		app_key = (struct mesh_app_key *) entry;
+		appkey_get_key_value(app_key, app_keys[i]);
+		i++;
+	}
+}
+
 static bool node_application_keys_getter(struct l_dbus *dbus,
 				struct l_dbus_message *message,
 				struct l_dbus_message_builder *builder,
 				void *user_data)
 {
-	const uint8_t app_keys[2][16] = {
-		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-		{0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1}
-	};
-	int i;
+	struct mesh_node *node;
+	struct l_queue *app_keys_queue;
+	unsigned int app_keys_count;
+	const char *path;
+	uint8_t uuid[KEY_LEN];
+	uint8_t **app_keys;
+	unsigned int i;
+	bool status = true;
 
-	//TODO - create api to get application keys from node
+	path = l_dbus_message_get_path(message);
+	if (!get_uuid_from_path(path, uuid))
+		goto failed;
 
-	if (!l_dbus_message_builder_enter_array(builder, "ay"))
-		return false;
+	node = l_queue_find(nodes, match_node_uuid, uuid);
+	if (!node)
+		goto failed;
 
-	if (!dbus_append_byte_array(builder, app_keys[i], 0))
-		return false;
+	if (!node->net)
+		goto failed;
 
-	if (!l_dbus_message_builder_leave_array(builder))
-		return false;
+	app_keys_queue = mesh_net_get_app_keys(node->net);
+	if (!app_keys_queue)
+		goto failed;
 
-	return true;
+	app_keys_count = l_queue_length(app_keys_queue);
+	if (0 == app_keys_count)
+		goto failed;
+
+	app_keys = (uint8_t **) l_new(uint8_t*, app_keys_count);
+	for (i = 0; i < app_keys_count; i++) {
+		app_keys[i] = l_new(uint8_t, KEY_LEN);
+	}
+
+	get_app_keys(app_keys_queue, app_keys);
+
+	if (!dbus_append_byte_array2d(builder, app_keys, app_keys_count, KEY_LEN))
+		status = false;
+
+	goto flush;
+
+failed:
+	app_keys_count = 1;
+	app_keys = (uint8_t **) l_new(uint8_t*, app_keys_count);
+	app_keys[0] = l_new(uint8_t, KEY_LEN);
+
+	if (!dbus_append_byte_array2d(builder, app_keys, app_keys_count, 0))
+		status = false;
+
+	goto flush;
+
+flush:
+	free_app_keys(app_keys, app_keys_count);
+	return status;
 }
 
 static bool node_elements_getter(struct l_dbus *dbus,

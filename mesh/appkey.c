@@ -270,6 +270,11 @@ static bool set_key(struct mesh_app_key *key, uint16_t app_idx,
 	return true;
 }
 
+void appkey_get_key_value(struct mesh_app_key *key, uint8_t *key_value)
+{
+	memcpy(key_value, key->key, (sizeof(uint8_t) * 16));
+}
+
 void appkey_key_free(void *data)
 {
 	struct mesh_app_key *key = data;
