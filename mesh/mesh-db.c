@@ -312,8 +312,8 @@ bool mesh_db_read_app_keys(json_object *jobj, mesh_db_app_key_cb cb,
 		int app_idx, net_idx;
 		bool key_refresh = false;
 		char *str;
-		uint8_t key[16];
-		uint8_t new_key[16];
+		uint8_t key[KEY_LEN];
+		uint8_t new_key[KEY_LEN];
 
 		jtemp = json_object_array_get_idx(jarray, i);
 
@@ -332,7 +332,7 @@ bool mesh_db_read_app_keys(json_object *jobj, mesh_db_app_key_cb cb,
 		json_object_object_get_ex(jtemp, "oldKey", &jvalue);
 		if (jvalue) {
 			str = (char *)json_object_get_string(jvalue);
-			if (!str2hex(str, strlen(str), key, 16))
+			if (!str2hex(str, strlen(str), key, KEY_LEN))
 				return false;
 			key_refresh = true;
 		}
@@ -342,7 +342,7 @@ bool mesh_db_read_app_keys(json_object *jobj, mesh_db_app_key_cb cb,
 			return false;
 
 		str = (char *)json_object_get_string(jvalue);
-		if (!str2hex(str, strlen(str), key_refresh ? new_key : key, 16))
+		if (!str2hex(str, strlen(str), key_refresh ? new_key : key, KEY_LEN))
 			return false;
 
 		if (!cb((uint16_t)net_idx, (uint16_t) app_idx, key,

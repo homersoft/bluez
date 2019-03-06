@@ -35,14 +35,15 @@
 #include "mesh/model.h"
 #include "mesh/storage.h"
 #include "mesh/appkey.h"
+#include <stdio.h>
 
 struct mesh_app_key {
 	struct l_queue *replay_cache;
 	uint16_t net_idx;
 	uint16_t app_idx;
-	uint8_t key[16];
+	uint8_t key[KEY_LEN];
 	uint8_t key_id;
-	uint8_t new_key[16];
+	uint8_t new_key[KEY_LEN];
 	uint8_t new_key_id;
 };
 

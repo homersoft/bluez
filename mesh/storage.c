@@ -122,6 +122,9 @@ static bool parse_node(struct mesh_node *node, json_object *jnode)
 	if (net) {
 		if (!mesh_db_read_net_keys(jnode, read_net_keys_cb, net))
 			return false;
+
+		/* Application keys are possible but not required */
+		mesh_db_read_app_keys(jnode, read_app_keys_cb, net);
 	}
 	return true;
 }
