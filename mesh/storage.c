@@ -114,6 +114,8 @@ static bool read_app_keys_cb(uint16_t net_idx, uint16_t app_idx, uint8_t *key,
 
 static bool parse_node(struct mesh_node *node, json_object *jnode)
 {
+	uint8_t dev_key_buf[KEY_LEN];
+
 	if (!mesh_db_read_node(jnode, read_node_cb, node))
 		return false;
 
@@ -125,6 +127,10 @@ static bool parse_node(struct mesh_node *node, json_object *jnode)
 
 		/* Application keys are possible but not required */
 		mesh_db_read_app_keys(jnode, read_app_keys_cb, net);
+
+		/* Device key is possible but not required */
+		if (mesh_db_read_device_key(jnode, dev_key_buf))
+			node_set_device_key(node, dev_key_buf);
 	}
 	return true;
 }
