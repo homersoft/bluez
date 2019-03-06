@@ -246,7 +246,7 @@ static struct mesh_app_key *app_key_new(void)
 {
 	struct mesh_app_key *key = l_new(struct mesh_app_key, 1);
 
-	key->new_key_id = 0xFF;
+	key->new_key_id = NET_NID_INVALID;
 	key->replay_cache = l_queue_new();
 	return key;
 }
@@ -270,9 +270,27 @@ static bool set_key(struct mesh_app_key *key, uint16_t app_idx,
 	return true;
 }
 
-void appkey_get_key_value(struct mesh_app_key *key, uint8_t *key_value)
+bool appkey_get_key_value(struct mesh_app_key *app_key, struct mesh_net *net,
+				uint8_t *key_value)
 {
-	memcpy(key_value, key->key, (sizeof(uint8_t) * 16));
+	uint8_t phase;
+
+	if (mesh_net_key_refresh_phase_get(net, app_key->net_idx, &phase) !=
+							MESH_STATUS_SUCCESS)
+		return false;
+
+	if (phase != KEY_REFRESH_PHASE_TWO) {
+		memcpy(key_value, app_key->key, (sizeof(uint8_t) * 16));
+		goto success;
+	}
+
+	if (app_key->new_key_id == NET_NID_INVALID)
+		return false;
+
+	memcpy(key_value, app_key->new_key, (sizeof(uint8_t) * 16));
+
+success:
+	return true;
 }
 
 void appkey_key_free(void *data)

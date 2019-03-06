@@ -1770,7 +1770,8 @@ static void free_app_keys(uint8_t **app_keys, unsigned int app_keys_count)
 	l_free(app_keys);
 }
 
-static void get_app_keys(struct l_queue *app_keys_queue, uint8_t **app_keys)
+static bool get_app_keys(struct mesh_net *net, struct l_queue *app_keys_queue,
+				uint8_t **app_keys)
 {
 	unsigned int app_keys_count;
 	unsigned int i = 0;
@@ -1781,10 +1782,13 @@ static void get_app_keys(struct l_queue *app_keys_queue, uint8_t **app_keys)
 
 	for (entry = l_queue_get_entries(app_keys_queue);
 			 entry; entry = entry->next) {
-		app_key = (struct mesh_app_key *) entry;
-		appkey_get_key_value(app_key, app_keys[i]);
+		app_key = (struct mesh_app_key *) entry->data;
+		if (!appkey_get_key_value(app_key, net, app_keys[i]))
+			return false;
 		i++;
 	}
+
+	return true;
 }
 
 static bool node_application_keys_getter(struct l_dbus *dbus,
@@ -1825,7 +1829,8 @@ static bool node_application_keys_getter(struct l_dbus *dbus,
 		app_keys[i] = l_new(uint8_t, KEY_LEN);
 	}
 
-	get_app_keys(app_keys_queue, app_keys);
+	if (!get_app_keys(node->net, app_keys_queue, app_keys))
+		status = false;
 
 	if (!dbus_append_byte_array2d(builder, app_keys, app_keys_count, KEY_LEN))
 		status = false;
