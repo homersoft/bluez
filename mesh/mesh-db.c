@@ -342,7 +342,8 @@ bool mesh_db_read_app_keys(json_object *jobj, mesh_db_app_key_cb cb,
 			return false;
 
 		str = (char *)json_object_get_string(jvalue);
-		if (!str2hex(str, strlen(str), key_refresh ? new_key : key, KEY_LEN))
+		if (!str2hex(str, strlen(str),
+				key_refresh ? new_key : key, KEY_LEN))
 			return false;
 
 		if (!cb((uint16_t)net_idx, (uint16_t) app_idx, key,
