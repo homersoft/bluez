@@ -310,6 +310,8 @@ bool mesh_db_read_app_keys(json_object *jobj, mesh_db_app_key_cb cb,
 	for (i = 0; i < len; ++i) {
 		json_object *jtemp, *jvalue;
 		int app_idx, net_idx;
+		uint8_t app_idx_buf[2], net_idx_buf[2];
+
 		bool key_refresh = false;
 		char *str;
 		uint8_t key[KEY_LEN];
@@ -317,18 +319,36 @@ bool mesh_db_read_app_keys(json_object *jobj, mesh_db_app_key_cb cb,
 
 		jtemp = json_object_array_get_idx(jarray, i);
 
-		if (!get_int(jtemp, "index", &app_idx))
+		/* Get app index */
+		json_object_object_get_ex(jtemp, "index", &jvalue);
+		if (!jvalue)
 			return false;
+
+		str = (char *)json_object_get_string(jvalue);
+		if (!str2hex(str, strlen(str), &app_idx_buf[0], 2))
+			return false;
+
+		app_idx = (app_idx_buf[0] << 8 & 0xFF00) | (app_idx_buf[1] & 0x00FF);
+		l_info(">>read_app_idx = %d", app_idx);
 
 		if (!CHECK_KEY_IDX_RANGE(app_idx))
 			return false;
 
-		if (!get_int(jtemp, "boundNetKey", &net_idx))
+		/* Get net index */
+		json_object_object_get_ex(jtemp, "boundNetKey", &jvalue);
+		if (!jvalue)
 			return false;
+
+		str = (char *)json_object_get_string(jvalue);
+		if (!str2hex(str, strlen(str), &net_idx_buf[0], 2))
+			return false;
+
+		net_idx = (net_idx_buf[0] << 8 & 0xFF00) | (net_idx_buf[1] & 0x00FF);
 
 		if (!CHECK_KEY_IDX_RANGE(net_idx))
 			return false;
 
+		/* Get old key if exists */
 		json_object_object_get_ex(jtemp, "oldKey", &jvalue);
 		if (jvalue) {
 			str = (char *)json_object_get_string(jvalue);
@@ -554,7 +574,7 @@ bool mesh_db_write_device_key(json_object *jnode, uint8_t *key)
 }
 
 bool mesh_db_app_key_add(json_object *jobj, uint16_t net_idx, uint16_t app_idx,
-			 const uint8_t key[16], bool update)
+			 const uint8_t key[KEY_LEN], bool update)
 {
 	json_object *jarray, *jentry = NULL, *jstring = NULL;
 	char buf[5];
@@ -571,7 +591,7 @@ bool mesh_db_app_key_add(json_object *jobj, uint16_t net_idx, uint16_t app_idx,
 		return false;
 
 	if (jentry) {
-		uint8_t buf[16];
+		uint8_t buf[KEY_LEN];
 		json_object *jvalue;
 		char *str;
 
@@ -584,7 +604,7 @@ bool mesh_db_app_key_add(json_object *jobj, uint16_t net_idx, uint16_t app_idx,
 			return false;
 
 		/* If the same key, return success */
-		if (memcmp(key, buf, 16) == 0)
+		if (memcmp(key, buf, KEY_LEN) == 0)
 			return true;
 
 		return false;
