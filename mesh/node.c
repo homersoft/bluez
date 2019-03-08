@@ -598,6 +598,9 @@ bool node_default_ttl_set(struct mesh_node *node, uint8_t ttl)
 		mesh_net_set_default_ttl(node->net, ttl);
 	}
 
+	if (!storage_save_config(node, true, NULL, NULL))
+		return false;
+
 	return res;
 }
 
@@ -1821,18 +1824,19 @@ static bool node_application_keys_getter(struct l_dbus *dbus,
 		goto failed;
 
 	app_keys_count = l_queue_length(app_keys_queue);
-	if (0 == app_keys_count)
+	if (app_keys_count == 0)
 		goto failed;
 
 	app_keys = (uint8_t **) l_new(uint8_t*, app_keys_count);
-	for (i = 0; i < app_keys_count; i++) {
+
+	for (i = 0; i < app_keys_count; i++)
 		app_keys[i] = l_new(uint8_t, KEY_LEN);
-	}
 
 	if (!get_app_keys(node->net, app_keys_queue, app_keys))
 		status = false;
 
-	if (!dbus_append_byte_array2d(builder, app_keys, app_keys_count, KEY_LEN))
+	if (!dbus_append_byte_array2d(builder, app_keys,
+			app_keys_count, KEY_LEN))
 		status = false;
 
 	goto flush;
