@@ -536,7 +536,13 @@ bool storage_create_node_config(struct mesh_node *node, void *data)
 	snprintf(name_buf, PATH_MAX, "%s/%s", storage_dir, uuid_str);
 
 	/* Create a new directory and node.json file */
-	if (mkdir(name_buf, 0755) != 0)
+
+	/* FIXME: Mode 0775 is a workaround for bluez-tests.
+	 *
+	 * For now we need to create group-writable storage directories, so that
+	 * tests can manipulate the files.
+	 */
+	if (mkdir(name_buf, 0775) != 0)
 		goto fail;
 
 	len = strlen(name_buf) + strlen("/node.json") + 1;
