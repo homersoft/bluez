@@ -413,7 +413,7 @@ int appkey_key_add(struct mesh_net *net, uint16_t net_idx, uint16_t app_idx,
 		return MESH_STATUS_CANNOT_UPDATE;
 
 	if (key) {
-		if (memcmp(new_key, key->key, 16) == 0)
+		if (memcmp(new_key, key->key, KEY_LEN) == 0)
 			return MESH_STATUS_SUCCESS;
 
 		if (!update) {

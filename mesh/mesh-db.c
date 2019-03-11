@@ -310,7 +310,6 @@ bool mesh_db_read_app_keys(json_object *jobj, mesh_db_app_key_cb cb,
 	for (i = 0; i < len; ++i) {
 		json_object *jtemp, *jvalue;
 		int app_idx, net_idx;
-		uint8_t app_idx_buf[2], net_idx_buf[2];
 
 		bool key_refresh = false;
 		char *str;
@@ -324,11 +323,7 @@ bool mesh_db_read_app_keys(json_object *jobj, mesh_db_app_key_cb cb,
 		if (!jvalue)
 			return false;
 
-		str = (char *)json_object_get_string(jvalue);
-		if (!str2hex(str, strlen(str), &app_idx_buf[0], 2))
-			return false;
-
-		app_idx = (app_idx_buf[0] << 8 & 0xFF00) | (app_idx_buf[1] & 0x00FF);
+		app_idx = json_object_get_int(jvalue);
 		l_info(">>read_app_idx = %d", app_idx);
 
 		if (!CHECK_KEY_IDX_RANGE(app_idx))
@@ -339,11 +334,8 @@ bool mesh_db_read_app_keys(json_object *jobj, mesh_db_app_key_cb cb,
 		if (!jvalue)
 			return false;
 
-		str = (char *)json_object_get_string(jvalue);
-		if (!str2hex(str, strlen(str), &net_idx_buf[0], 2))
-			return false;
-
-		net_idx = (net_idx_buf[0] << 8 & 0xFF00) | (net_idx_buf[1] & 0x00FF);
+		net_idx = json_object_get_int(jvalue);
+		l_info(">>read_net_idx = %d", net_idx);
 
 		if (!CHECK_KEY_IDX_RANGE(net_idx))
 			return false;
@@ -442,7 +434,6 @@ bool mesh_db_net_key_add(json_object *jobj, uint16_t idx,
 					const uint8_t key[KEY_LEN], int phase)
 {
 	json_object *jarray, *jentry = NULL, *jstring;
-	char buf[5];
 
 	json_object_object_get_ex(jobj, "netKeys", &jarray);
 
@@ -474,18 +465,15 @@ bool mesh_db_net_key_add(json_object *jobj, uint16_t idx,
 		if (!jentry)
 			goto fail;
 
-		snprintf(buf, 5, "%4.4x", idx);
-		jstring = json_object_new_string(buf);
-		if (!jstring)
+		/* Add index value */
+		json_object *jvalue = json_object_new_int(idx);
+
+		json_object_object_add(jentry, "index", jvalue);
+
+		if (!jvalue)
 			goto fail;
 
-		json_object_object_add(jentry, "index", jstring);
-
-		snprintf(buf, 5, "%4.4x", idx);
-		jstring = json_object_new_string(buf);
-		if (!jstring)
-			goto fail;
-
+		/* Add key value */
 		if (!add_key(jentry, "key", key))
 			goto fail;
 
@@ -523,9 +511,13 @@ bool mesh_db_net_key_add(json_object *jobj, uint16_t idx,
 			return false;
 	}
 
+	/* Add keyRefresh value */
+	json_object *jvalue = json_object_new_int(phase);
 
-	json_object_object_add(jentry, "keyRefresh",
-					json_object_new_int(phase));
+	json_object_object_add(jentry, "keyRefresh", jvalue);
+
+	if (!jvalue)
+		goto fail;
 
 	return true;
 fail:
@@ -577,7 +569,6 @@ bool mesh_db_app_key_add(json_object *jobj, uint16_t net_idx, uint16_t app_idx,
 			 const uint8_t key[KEY_LEN], bool update)
 {
 	json_object *jarray, *jentry = NULL, *jstring = NULL;
-	char buf[5];
 
 	json_object_object_get_ex(jobj, "appKeys", &jarray);
 	if (!jarray && update)
@@ -615,19 +606,20 @@ bool mesh_db_app_key_add(json_object *jobj, uint16_t net_idx, uint16_t app_idx,
 		if (!jentry)
 			goto fail;
 
-		snprintf(buf, 5, "%4.4x", app_idx);
-		jstring = json_object_new_string(buf);
-		if (!jstring)
+		/* Add app index value */
+		json_object *jvalue = json_object_new_int(app_idx);
+
+		json_object_object_add(jentry, "index", jvalue);
+
+		if (!jvalue)
 			goto fail;
 
-		json_object_object_add(jentry, "index", jstring);
+		/* Add net index value */
+		jvalue = json_object_new_int(net_idx);
+		json_object_object_add(jentry, "boundNetKey", jvalue);
 
-		snprintf(buf, 5, "%4.4x", net_idx);
-		jstring = json_object_new_string(buf);
-		if (!jstring)
+		if (!jvalue)
 			goto fail;
-
-		json_object_object_add(jentry, "boundNetKey", jstring);
 
 		if (!add_key(jentry, "key", key))
 			goto fail;
@@ -1542,7 +1534,7 @@ bool mesh_db_write_iv_index(json_object *jobj, uint32_t idx, bool update)
 {
 	int tmp = update ? 1 : 0;
 
-	if (!mesh_db_write_uint32_hex(jobj, "IVindex", idx))
+	if (!mesh_db_write_int(jobj, "IVindex", idx))
 		return false;
 
 	if (!mesh_db_write_int(jobj, "IVupdate", tmp))
