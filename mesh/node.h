@@ -97,7 +97,7 @@ void node_attach_io(struct mesh_io *io);
 int node_attach(const char *app_path, const char *sender, uint64_t token,
 						node_attach_ready_func_t cb);
 void node_build_attach_reply(struct l_dbus_message *reply, uint64_t token);
-void node_id_set(struct mesh_node *node, uint16_t node_id);
+void node_id_set(struct mesh_node *node, uint8_t id[KEY_LEN]);
 bool node_dbus_init(struct l_dbus *bus);
 void node_cleanup(void *node);
 void node_cleanup_all(void);

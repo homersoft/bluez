@@ -135,7 +135,7 @@ static bool parse_node(struct mesh_node *node, json_object *jnode)
 	return true;
 }
 
-static bool parse_config(char *in_file, char *out_file, uint16_t node_id)
+static bool parse_config(char *in_file, char *out_file, uint8_t node_id[KEY_LEN])
 {
 	int fd;
 	char *str;
@@ -201,7 +201,7 @@ static bool parse_config(char *in_file, char *out_file, uint16_t node_id)
 
 	node_jconfig_set(node, jnode);
 	node_cfg_file_set(node, out_file);
-	node_id_set(node, node_id);
+	node_id_set(node, &node_id[0]);
 
 	result = parse_node(node, jnode);
 
@@ -471,38 +471,37 @@ bool storage_load_nodes(const char *dir_name)
 	}
 
 	storage_dir = dir_name;
-	node_ids = l_queue_new();
 
 	while ((entry = readdir(dir)) != NULL) {
 		char name_buf[PATH_MAX];
 		char *filename;
-		uint32_t node_id;
+		uint8_t node_id[KEY_LEN];
 		size_t len;
 
+		/* Discard all non-directory instances */
 		if (entry->d_type != DT_DIR)
-			continue;
-
-		if (sscanf(entry->d_name, "%04x", &node_id) != 1)
 			continue;
 
 		snprintf(name_buf, PATH_MAX, "%s/%s/node.json",
 				dir_name, entry->d_name);
 
-		l_queue_push_tail(node_ids, L_UINT_TO_PTR(node_id));
+		/* Discard all non-uuid formats instances */
+		if (!l_uuid_parse(entry->d_name, UUID_LEN, &node_id[0]))
+			continue;
 
 		len = strlen(name_buf);
 		filename = l_malloc(len + 1);
 
 		strncpy(filename, name_buf, len + 1);
 
-		if (parse_config(name_buf, filename, node_id))
+		if (parse_config(name_buf, filename, &node_id[0]))
 			continue;
 
 		/* Fall-back to Backup version */
 		snprintf(name_buf, PATH_MAX, "%s/%s/node.json.bak",
 				dir_name, entry->d_name);
 
-		if (parse_config(name_buf, filename, node_id)) {
+		if (parse_config(name_buf, filename, &node_id[0])) {
 			remove(filename);
 			rename(name_buf, filename);
 			l_debug("backup parsed successfully");

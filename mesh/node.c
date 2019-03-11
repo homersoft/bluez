@@ -78,7 +78,7 @@ struct mesh_node {
 	time_t upd_sec;
 	uint32_t seq_number;
 	uint32_t seq_min_cache;
-	uint16_t id;
+	uint8_t id[KEY_LEN];
 	bool provisioner;
 	uint16_t primary;
 	struct node_composition *comp;
@@ -1048,12 +1048,10 @@ fail:
 	return false;
 }
 
-void node_id_set(struct mesh_node *node, uint16_t id)
-{
+void node_id_set(struct mesh_node *node, uint8_t id[KEY_LEN]) {
 	if (node)
-		node->id = id;
+		memcpy(&node->id[0], &id[0], KEY_LEN);
 }
-
 static void attach_io(void *a, void *b)
 {
 	struct mesh_node *node = a;
