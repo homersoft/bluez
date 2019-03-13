@@ -167,23 +167,6 @@ bool dbus_append_byte_array(struct l_dbus_message_builder *builder,
 	return true;
 }
 
-bool dbus_append_byte_array2d(struct l_dbus_message_builder *builder,
-						uint8_t **data, unsigned int count, int len)
-{
-	unsigned int i;
-
-	if (!l_dbus_message_builder_enter_array(builder, "ay"))
-		return false;
-
-	for (i = 0; i < count; i++) {
-		if (!dbus_append_byte_array(builder, data[i], len))
-			return false;
-	}
-
-	if (!l_dbus_message_builder_leave_array(builder))
-		return false;
-}
-
 void dbus_append_dict_entry_basic(struct l_dbus_message_builder *builder,
 					const char *key, const char *signature,
 					const void *data)

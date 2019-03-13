@@ -1695,22 +1695,38 @@ static void free_app_keys(uint8_t **app_keys, unsigned int app_keys_count)
 }
 
 static bool get_app_keys(struct mesh_net *net, struct l_queue *app_keys_queue,
-				uint8_t **app_keys)
+					struct l_dbus_message_builder *builder,
+					unsigned int app_keys_count)
 {
-	unsigned int app_keys_count;
-	unsigned int i = 0;
+	uint16_t temp_app_idx;
+	uint8_t *temp_app_key;
 	const struct l_queue_entry *entry;
 	struct mesh_app_key *app_key;
 
-	app_keys_count = l_queue_length(app_keys_queue);
+	if (!l_dbus_message_builder_enter_array(builder, "{qay}"))
+		return false;
 
 	for (entry = l_queue_get_entries(app_keys_queue);
 			 entry; entry = entry->next) {
 		app_key = (struct mesh_app_key *) entry->data;
-		if (!appkey_get_key_value(app_key, net, app_keys[i]))
+		if (!appkey_get_key_info(app_key, net, &temp_app_key, &temp_app_idx))
 			return false;
-		i++;
+
+		if (!l_dbus_message_builder_enter_dict(builder, "qay"))
+			return false;
+
+		if (!l_dbus_message_builder_append_basic(builder, 'q', &temp_app_idx))
+			return false;
+
+		if (!dbus_append_byte_array(builder, temp_app_key, KEY_LEN))
+			return false;
+
+		if (!l_dbus_message_builder_leave_dict(builder))
+			return false;
 	}
+
+	if (!l_dbus_message_builder_leave_array(builder))
+		return false;
 
 	return true;
 }
@@ -1723,53 +1739,40 @@ static bool node_application_keys_getter(struct l_dbus *dbus,
 	struct mesh_node *node = user_data;
 	struct l_queue *app_keys_queue;
 	unsigned int app_keys_count;
-	const char *path;
-	uint8_t uuid[KEY_LEN];
-	uint8_t **app_keys;
-	unsigned int i;
-	bool status = true;
 
 	if (!node)
-		goto failed;
+		goto empty;
 
 	if (!node->net)
-		goto failed;
+		goto empty;
 
 	app_keys_queue = mesh_net_get_app_keys(node->net);
 	if (!app_keys_queue)
-		goto failed;
+		goto empty;
 
 	app_keys_count = l_queue_length(app_keys_queue);
 	if (app_keys_count == 0)
-		goto failed;
+		goto empty;
 
-	app_keys = (uint8_t **) l_new(uint8_t*, app_keys_count);
+	if (!get_app_keys(node->net, app_keys_queue, builder, app_keys_count))
+		return false;
 
-	for (i = 0; i < app_keys_count; i++)
-		app_keys[i] = l_new(uint8_t, KEY_LEN);
+	return true;
 
-	if (!get_app_keys(node->net, app_keys_queue, app_keys))
-		status = false;
+empty:
+	if (!l_dbus_message_builder_enter_array(builder, "{qay}"))
+		return false;
 
-	if (!dbus_append_byte_array2d(builder, app_keys,
-			app_keys_count, KEY_LEN))
-		status = false;
+	if (!l_dbus_message_builder_enter_dict(builder, "qay"))
+		return false;
 
-	goto flush;
+	if (!l_dbus_message_builder_leave_dict(builder))
+		return false;
 
-failed:
-	app_keys_count = 1;
-	app_keys = (uint8_t **) l_new(uint8_t*, app_keys_count);
-	app_keys[0] = l_new(uint8_t, KEY_LEN);
+	if (!l_dbus_message_builder_leave_array(builder))
+		return false;
 
-	if (!dbus_append_byte_array2d(builder, app_keys, app_keys_count, 0))
-		status = false;
-
-	goto flush;
-
-flush:
-	free_app_keys(app_keys, app_keys_count);
-	return status;
+	return true;
 }
 
 static bool node_elements_getter(struct l_dbus *dbus,
@@ -1848,7 +1851,7 @@ static void setup_node_interface(struct l_dbus_interface *interface)
 	l_dbus_interface_property(interface, "DeviceKey", 0, "ay",
 				node_device_key_getter, NULL);
 
-	l_dbus_interface_property(interface, "ApplicationKeys", 0, "aay",
+	l_dbus_interface_property(interface, "ApplicationKeys", 0, "a{qay}",
 				node_application_keys_getter, NULL);
 
 	l_dbus_interface_property(interface, "Elements", 0, "a{yaq}",

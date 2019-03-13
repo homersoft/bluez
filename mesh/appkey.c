@@ -271,8 +271,8 @@ static bool set_key(struct mesh_app_key *key, uint16_t app_idx,
 	return true;
 }
 
-bool appkey_get_key_value(struct mesh_app_key *app_key, struct mesh_net *net,
-				uint8_t *key_value)
+bool appkey_get_key_info(struct mesh_app_key *app_key, struct mesh_net *net,
+				uint8_t **key_value, uint16_t *app_idx)
 {
 	uint8_t phase;
 
@@ -281,16 +281,17 @@ bool appkey_get_key_value(struct mesh_app_key *app_key, struct mesh_net *net,
 		return false;
 
 	if (phase != KEY_REFRESH_PHASE_TWO) {
-		memcpy(key_value, app_key->key, (sizeof(uint8_t) * 16));
+		*key_value = app_key->key;
 		goto success;
 	}
 
 	if (app_key->new_key_id == NET_NID_INVALID)
 		return false;
 
-	memcpy(key_value, app_key->new_key, (sizeof(uint8_t) * 16));
+	*key_value = app_key->new_key;
 
 success:
+	*app_idx = app_key->app_idx;
 	return true;
 }
 
