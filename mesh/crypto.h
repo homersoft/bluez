@@ -20,6 +20,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#define NONCE_LEN ((uint8_t)13)
+
 bool mesh_crypto_aes_ccm_encrypt(const uint8_t nonce[13], const uint8_t key[16],
 					const uint8_t *aad, uint16_t aad_len,
 					const uint8_t *msg, uint16_t msg_len,
