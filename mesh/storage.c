@@ -570,6 +570,7 @@ fail:
 /* Permanently remove node configuration */
 void storage_remove_node_config(struct mesh_node *node)
 {
+	char cfgname_bak[PATH_MAX];
 	char *cfgname;
 	struct json_object *jnode;
 	const char *dir_name;
@@ -585,6 +586,11 @@ void storage_remove_node_config(struct mesh_node *node)
 
 	l_debug("Delete node config file %s", cfgname);
 	remove(cfgname);
+
+	snprintf(cfgname_bak, PATH_MAX, "%s.bak", cfgname);
+
+	l_debug("Delete node backup config file %s", cfgname_bak);
+	remove(cfgname_bak);
 
 	dir_name = dirname(cfgname);
 

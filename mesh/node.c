@@ -1262,6 +1262,8 @@ bool delete_node(uint8_t *uuid)
 
 	if (node) {
 		//TODO: check if adveritising in progress and kill prov_acceptor
+		storage_remove_node_config(node);
+
 		l_queue_remove(nodes, node);
 		node_free(node);
 		return true;
