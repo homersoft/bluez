@@ -35,7 +35,6 @@
 #include "mesh/model.h"
 #include "mesh/storage.h"
 #include "mesh/appkey.h"
-#include <stdio.h>
 
 struct mesh_app_key {
 	struct l_queue *replay_cache;
@@ -271,28 +270,25 @@ static bool set_key(struct mesh_app_key *key, uint16_t app_idx,
 	return true;
 }
 
-bool appkey_get_key_info(struct mesh_app_key *app_key, struct mesh_net *net,
-				uint8_t **key_value, uint16_t *app_idx)
+const uint8_t *appkey_get_key_info(struct mesh_app_key *app_key,
+					struct mesh_net *net, uint16_t *app_idx)
 {
 	uint8_t phase;
 
 	if (mesh_net_key_refresh_phase_get(net, app_key->net_idx, &phase) !=
 							MESH_STATUS_SUCCESS)
-		return false;
+		return NULL;
+
+	*app_idx = app_key->app_idx;
 
 	if (phase != KEY_REFRESH_PHASE_TWO) {
-		*key_value = app_key->key;
-		goto success;
+		return app_key->key;
 	}
 
 	if (app_key->new_key_id == NET_NID_INVALID)
-		return false;
+		return NULL;
 
-	*key_value = app_key->new_key;
-
-success:
-	*app_idx = app_key->app_idx;
-	return true;
+	return app_key->new_key;
 }
 
 void appkey_key_free(void *data)

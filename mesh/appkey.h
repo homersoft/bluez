@@ -26,8 +26,8 @@ struct mesh_app_key;
 bool appkey_key_init(struct mesh_net *net, uint16_t net_idx, uint16_t app_idx,
 				uint8_t *key_value, uint8_t *new_key_value);
 void appkey_key_free(void *data);
-bool appkey_get_key_info(struct mesh_app_key *key, struct mesh_net *net,
-				uint8_t **key_value, uint16_t *app_idx);
+const uint8_t *appkey_get_key_info(struct mesh_app_key *app_key,
+					struct mesh_net *net, uint16_t *app_idx);
 int appkey_packet_decrypt(struct mesh_net *net, bool szmict, uint32_t seq,
 				uint32_t iv_index, uint16_t src, uint16_t dst,
 				uint8_t *virt, uint16_t virt_size,

@@ -1661,7 +1661,8 @@ static bool get_app_keys(struct mesh_net *net, struct l_queue *app_keys_queue,
 	for (entry = l_queue_get_entries(app_keys_queue);
 			 entry; entry = entry->next) {
 		app_key = (struct mesh_app_key *) entry->data;
-		if (!appkey_get_key_info(app_key, net, &temp_app_key, &temp_app_idx))
+		temp_app_key = appkey_get_key_info(app_key, net, &temp_app_idx);
+		if (!temp_app_key)
 			return false;
 
 		if (!l_dbus_message_builder_enter_dict(builder, "qay"))
@@ -1753,7 +1754,7 @@ static bool node_elements_getter(struct l_dbus *dbus,
 			return false;
 
 		if (!l_dbus_message_builder_append_basic(builder, 'y',
-				&(element->idx)))
+				&(element->location)))
 			return false;
 
 		if (!l_dbus_message_builder_enter_array(builder, "q"))
