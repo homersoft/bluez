@@ -18,6 +18,9 @@
  *
  */
 
+#ifndef __MESH_NODE_H
+#define __MESH_NODE_H
+
 struct mesh_net;
 struct mesh_node;
 struct mesh_io;
@@ -108,3 +111,4 @@ char *node_cfg_file_get(struct mesh_node *node);
 bool register_node_object(struct mesh_node *node);
 void get_node_path_from_uuid(char *path, uint8_t *uuid);
 
+#endif

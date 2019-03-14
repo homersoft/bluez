@@ -253,11 +253,12 @@ bool mesh_crypto_aes_ccm_encrypt(const uint8_t nonce[NONCE_LEN],
 {
 	struct l_aead_cipher *cipher = l_aead_cipher_new(L_AEAD_CIPHER_AES_CCM,
 			&key[0], KEY_LEN, mic_size);
+	bool result;
 
 	if (!out_msg)
 		return false;
 
-	bool result = l_aead_cipher_encrypt(cipher, (void *)msg, msg_len,
+	result = l_aead_cipher_encrypt(cipher, (void *)msg, msg_len,
 			aad, aad_len, &nonce[0], NONCE_LEN,
 			(void *)out_msg, msg_len + mic_size);
 

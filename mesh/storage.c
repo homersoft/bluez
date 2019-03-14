@@ -55,12 +55,6 @@ struct write_info {
 };
 
 static const char *storage_dir;
-static struct l_queue *node_ids;
-
-static bool simple_match(const void *a, const void *b)
-{
-	return a == b;
-}
 
 static bool read_node_cb(struct mesh_db_node *db_node, void *user_data)
 {
@@ -115,13 +109,12 @@ static bool read_app_keys_cb(uint16_t net_idx, uint16_t app_idx, uint8_t *key,
 static bool parse_node(struct mesh_node *node, json_object *jnode)
 {
 	uint8_t dev_key_buf[KEY_LEN];
+	struct mesh_net *net;
 
 	if (!mesh_db_read_node(jnode, read_node_cb, node))
 		return false;
 
-	struct mesh_net *net = node_get_net(node);
-
-	if (net) {
+	if ((net = node_get_net(node))) {
 		if (!mesh_db_read_net_keys(jnode, read_net_keys_cb, net))
 			return false;
 
@@ -143,6 +136,9 @@ static bool parse_config(char *in_file, char *out_file, uint8_t node_id[KEY_LEN]
 	ssize_t sz;
 	bool result = false;
 	struct mesh_node *node;
+	struct json_tokener *jtok;
+	enum json_tokener_error jerr;
+	json_object *jnode;
 
 	l_info("Loading configuration from %s", in_file);
 
@@ -167,9 +163,7 @@ static bool parse_config(char *in_file, char *out_file, uint8_t node_id[KEY_LEN]
 		goto done;
 	}
 
-	struct json_tokener *jtok = json_tokener_new();
-	enum json_tokener_error jerr;
-	json_object *jnode = NULL;
+	jtok = json_tokener_new();
 
 	do {
 		jnode = json_tokener_parse_ex(jtok, str, strlen(str));
@@ -182,7 +176,7 @@ static bool parse_config(char *in_file, char *out_file, uint8_t node_id[KEY_LEN]
 		return false;
 	}
 
-	if (jtok->char_offset < strlen(str)) {
+	if (jtok->char_offset < (int)strlen(str)) {
 		/*
 		 * Handle extra characters after parsed object as desired.
 		 * e.g. issue an error, parse another object

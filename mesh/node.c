@@ -117,14 +117,6 @@ static bool match_node_uuid(const void *a, const void *b)
 	return (memcmp(node->dev_uuid, uuid, KEY_LEN) == 0);
 }
 
-static bool match_token(const void *a, const void *b)
-{
-	const struct mesh_node *node = a;
-	const uint64_t *token = b;
-	const uint64_t tmp = l_get_u64(node->dev_key);
-	return *token == tmp;
-}
-
 static bool match_element_idx(const void *a, const void *b)
 {
 	const struct node_element *element = a;
@@ -161,9 +153,9 @@ uint8_t *node_uuid_get(struct mesh_node *node)
 	return node->dev_uuid;
 }
 
-void replace_dash_with_underscore(char *src, uint32_t len)
+static void replace_dash_with_underscore(char *src, size_t len)
 {
-	int i;
+	size_t i;
 
 	for (i = 0; i < len; i++) {
 		if (src[i] == '-')
@@ -277,7 +269,7 @@ static bool add_models(struct mesh_node *node, struct node_element *ele,
 	return true;
 }
 
-static bool add_model_from_properties(struct node_element *ele,
+static void add_model_from_properties(struct node_element *ele,
 				uint16_t model_id)
 {
 	struct mesh_model *mod;
@@ -290,7 +282,7 @@ static bool add_model_from_properties(struct node_element *ele,
 	l_queue_insert(ele->models, mod, compare_model_id, NULL);
 }
 
-static bool add_vendor_model_from_properties(struct node_element *ele,
+static void add_vendor_model_from_properties(struct node_element *ele,
 				uint16_t vendor_id, uint16_t model_id)
 {
 	struct mesh_model *mod;
@@ -1094,21 +1086,6 @@ bool register_node_object(struct mesh_node *node)
 	return true;
 }
 
-static void app_disc_cb(struct l_dbus *bus, void *user_data)
-{
-	struct mesh_node *node = user_data;
-
-	l_info("App %s disconnected (%u)", node->owner, node->disc_watch);
-
-	node->disc_watch = 0;
-
-	l_free(node->owner);
-	node->owner = NULL;
-
-	l_free(node->app_path);
-	node->app_path = NULL;
-}
-
 static void convert_node_to_storage(struct mesh_node *node,
 	struct mesh_db_node *db_node)
 {
@@ -1273,7 +1250,7 @@ bool delete_node(uint8_t *uuid)
 
 }
 
-bool provision_node(struct mesh_node *node, uint8_t *network_key, uint16_t addr,
+static bool provision_node(struct mesh_node *node, uint8_t *network_key, uint16_t addr,
 					uint32_t iv_index)
 {
 	struct mesh_prov_node_info *info;
@@ -1297,8 +1274,10 @@ bool provision_node(struct mesh_node *node, uint8_t *network_key, uint16_t addr,
 	return status;
 }
 
-bool unprovision_node(struct mesh_node *node)
+static bool unprovision_node(struct mesh_node *node)
 {
+	json_object *jnode;
+
 	/* Unregister io callbacks */
 	if (node->net) {
 		mesh_net_detach(node->net);
@@ -1306,7 +1285,7 @@ bool unprovision_node(struct mesh_node *node)
 		node->net = NULL;
 
 		/* Remove net_key and unicast from storage */
-		json_object *jnode = node_jconfig_get(node);
+		jnode = node_jconfig_get(node);
 
 		mesh_db_remove_property(jnode, "unicastAddress");
 		mesh_db_remove_property(jnode, "netKeys");
@@ -1322,21 +1301,21 @@ bool unprovision_node(struct mesh_node *node)
 	return false;
 }
 
-bool start_advertising(struct mesh_node *node)
+static bool start_advertising(struct mesh_node *node)
 {
 	//TODO
 	node->is_advertising = true;
 	return true;
 }
 
-bool stop_advertising(struct mesh_node *node)
+static bool stop_advertising(struct mesh_node *node)
 {
 	//TODO
 	node->is_advertising = false;
 	return true;
 }
 
-bool send_message(struct mesh_node *node, uint16_t element, uint16_t dest,
+static bool send_message(struct mesh_node *node, uint16_t element, uint16_t dest,
 		uint8_t *opcode, uint16_t opcode_len, uint8_t *payload,
 		uint16_t payload_len, struct l_dbus_message_iter *key_variant)
 {
@@ -1379,8 +1358,6 @@ static struct l_dbus_message *provision_call(struct l_dbus *dbus,
 	struct l_dbus_message *reply;
 	struct l_dbus_message_iter iter_network_key;
 	struct mesh_node *node = user_data;
-	const char *path;
-	uint8_t uuid[KEY_LEN];
 	uint8_t network_key[16];
 	uint16_t addr;
 	uint32_t iv_index;
@@ -1418,8 +1395,6 @@ static struct l_dbus_message *unprovision_call(struct l_dbus *dbus,
 {
 	struct l_dbus_message *reply;
 	struct mesh_node *node = user_data;
-	const char *path;
-	uint8_t uuid[KEY_LEN];
 
 	l_debug("Unprovision");
 
@@ -1441,8 +1416,6 @@ static struct l_dbus_message *start_advertising_call(struct l_dbus *dbus,
 {
 	struct l_dbus_message *reply;
 	struct mesh_node *node = user_data;
-	const char *path;
-	uint8_t uuid[KEY_LEN];
 
 	l_debug("Start advertising as unprovisioned node");
 
@@ -1472,8 +1445,6 @@ static struct l_dbus_message *stop_advertising_call(struct l_dbus *dbus,
 {
 	struct l_dbus_message *reply;
 	struct mesh_node *node = user_data;
-	const char *path;
-	uint8_t uuid[KEY_LEN];
 
 	l_debug("Stop advertising as unprovisioned node");
 
@@ -1505,8 +1476,6 @@ static bool is_provisioned_getter(struct l_dbus *dbus,
 				void *user_data)
 {
 	struct mesh_node *node = user_data;
-	const char *path;
-	uint8_t uuid[KEY_LEN];
 	bool is_provisioned = false;
 
 	if (node) {
@@ -1527,8 +1496,6 @@ static bool is_advertising_getter(struct l_dbus *dbus,
 				void *user_data)
 {
 	struct mesh_node *node = user_data;
-	const char *path;
-	uint8_t uuid[KEY_LEN];
 	bool is_advertising = false;
 
 	if (node) {
@@ -1572,8 +1539,6 @@ static struct l_dbus_message *send_message_call(struct l_dbus *dbus,
 	struct l_dbus_message_iter iter_opcode, iter_payload;
 	struct l_dbus_message_iter key_variant;
 	struct mesh_node *node = user_data;
-	const char *path;
-	uint8_t uuid[KEY_LEN];
 	uint8_t opcode[MESH_MAX_OPCODE];
 	uint8_t payload[MESH_MAX_ACCESS_PAYLOAD];
 	uint16_t element, dest, payload_len, opcode_len;
@@ -1608,8 +1573,6 @@ static bool node_address_getter(struct l_dbus *dbus,
 				void *user_data)
 {
 	struct mesh_node *node = user_data;
-	const char *path;
-	uint8_t uuid[KEY_LEN];
 	uint16_t addr = 0;
 
 	if (node) {
@@ -1629,8 +1592,6 @@ static bool node_network_key_getter(struct l_dbus *dbus,
 				void *user_data)
 {
 	struct mesh_node *node = user_data;
-	const char *path;
-	uint8_t uuid[KEY_LEN];
 	uint32_t net_key_id;
 	uint8_t network_key[16] = {0};
 
@@ -1662,8 +1623,6 @@ static bool node_device_key_getter(struct l_dbus *dbus,
 				void *user_data)
 {
 	struct mesh_node *node = user_data;
-	const char *path;
-	uint8_t uuid[KEY_LEN];
 	const uint8_t *device_key;
 
 	if (!node)
@@ -1674,26 +1633,17 @@ static bool node_device_key_getter(struct l_dbus *dbus,
 
 	device_key = node_get_device_key(node);
 
+	if (!device_key)
+		goto failed;
+
 	dbus_append_byte_array(builder, device_key, 16);
 
 	return true;
 
 failed:
-	dbus_append_byte_array(builder, device_key, 0);
+	dbus_append_byte_array(builder, NULL, 0);
 
 	return true;
-}
-
-static void free_app_keys(uint8_t **app_keys, unsigned int app_keys_count)
-{
-	unsigned int i;
-
-	for (i = 0; i < app_keys_count; i++) {
-		l_free(app_keys[i]);
-		app_keys[i] = NULL;
-	}
-
-	l_free(app_keys);
 }
 
 static bool get_app_keys(struct mesh_net *net, struct l_queue *app_keys_queue,
@@ -1787,8 +1737,6 @@ static bool node_elements_getter(struct l_dbus *dbus,
 	struct mesh_node *node = user_data;
 	struct node_element *element;
 	struct mesh_model *model;
-	const char *path;
-	uint8_t uuid[KEY_LEN];
 	uint16_t model_id;
 
 	if (!node)

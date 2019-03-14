@@ -209,12 +209,12 @@ static struct l_dbus_message *create_config_update_msg(struct mesh_node *node,
 					uint8_t ele_idx, uint32_t id,
 					struct l_dbus_message_builder **builder)
 {
-	struct l_dbus *dbus = dbus_get_bus();
-	struct l_dbus_message *msg;
-	uint16_t model_id;
-
-	/*
+    /*
 	 *FIXME emit signal
+	 * struct l_dbus *dbus = dbus_get_bus();
+	 * struct l_dbus_message *msg;
+	 * uint16_t model_id;
+	 *
 	 *l_debug("Send \"UpdateModelConfiguration\"");
 	 *msg = l_dbus_message_new_method_call(dbus, owner, path,
 	 *					MESH_ELEMENT_INTERFACE,
@@ -234,7 +234,7 @@ static struct l_dbus_message *create_config_update_msg(struct mesh_node *node,
 	 *}
 	 */
 
-	return msg;
+	return NULL;
 }
 
 static void config_update_model_pub_period(struct mesh_node *node,

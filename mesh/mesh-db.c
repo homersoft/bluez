@@ -37,6 +37,7 @@
 #include "mesh/storage.h"
 
 #define CHECK_KEY_IDX_RANGE(x) (((x) >= 0) && ((x) <= 4095))
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 static bool get_int(json_object *jobj, const char *keyword, int *value)
 {
@@ -275,6 +276,7 @@ bool mesh_db_read_device_key(json_object *jobj, uint8_t key_buf[KEY_LEN])
 bool mesh_db_read_uuid(json_object *jobj, uint8_t uuid_buf[KEY_LEN])
 {
 	json_object *jvalue;
+	const char *str;
 
 	if (!uuid_buf)
 		return false;
@@ -283,7 +285,7 @@ bool mesh_db_read_uuid(json_object *jobj, uint8_t uuid_buf[KEY_LEN])
 		 !jvalue)
 		return false;
 
-	char *str = (char *)json_object_get_string(jvalue);
+	str = json_object_get_string(jvalue);
 
 	if (!l_uuid_parse(str, UUID_LEN, &uuid_buf[0]))
 		return false;
@@ -433,7 +435,7 @@ bool mesh_db_read_net_keys(json_object *jobj, mesh_db_net_key_cb cb,
 bool mesh_db_net_key_add(json_object *jobj, uint16_t idx,
 					const uint8_t key[KEY_LEN], int phase)
 {
-	json_object *jarray, *jentry = NULL, *jstring;
+	json_object *jarray, *jentry = NULL, *jstring, *jvalue = NULL;
 
 	json_object_object_get_ex(jobj, "netKeys", &jarray);
 
@@ -466,7 +468,7 @@ bool mesh_db_net_key_add(json_object *jobj, uint16_t idx,
 			goto fail;
 
 		/* Add index value */
-		json_object *jvalue = json_object_new_int(idx);
+		jvalue = json_object_new_int(idx);
 
 		json_object_object_add(jentry, "index", jvalue);
 
@@ -512,7 +514,7 @@ bool mesh_db_net_key_add(json_object *jobj, uint16_t idx,
 	}
 
 	/* Add keyRefresh value */
-	json_object *jvalue = json_object_new_int(phase);
+	jvalue = json_object_new_int(phase);
 
 	json_object_object_add(jentry, "keyRefresh", jvalue);
 
@@ -568,7 +570,7 @@ bool mesh_db_write_device_key(json_object *jnode, uint8_t *key)
 bool mesh_db_app_key_add(json_object *jobj, uint16_t net_idx, uint16_t app_idx,
 			 const uint8_t key[KEY_LEN], bool update)
 {
-	json_object *jarray, *jentry = NULL, *jstring = NULL;
+	json_object *jarray, *jentry = NULL, *jstring = NULL, *jvalue = NULL;
 
 	json_object_object_get_ex(jobj, "appKeys", &jarray);
 	if (!jarray && update)
@@ -607,7 +609,7 @@ bool mesh_db_app_key_add(json_object *jobj, uint16_t net_idx, uint16_t app_idx,
 			goto fail;
 
 		/* Add app index value */
-		json_object *jvalue = json_object_new_int(app_idx);
+		jvalue = json_object_new_int(app_idx);
 
 		json_object_object_add(jentry, "index", jvalue);
 
@@ -949,6 +951,7 @@ static bool parse_models(json_object *jmodels, struct mesh_db_element *ele)
 		struct mesh_db_model *mod;
 		uint32_t id;
 		int len;
+		const char *str;
 
 		json_object *jmodel = json_object_array_get_idx(jmodels, i);
 
@@ -959,7 +962,7 @@ static bool parse_models(json_object *jmodels, struct mesh_db_element *ele)
 		if (!ele)
 			goto fail;
 
-		char *str = (char *)json_object_get_string(jmodel);
+		str = (char *)json_object_get_string(jmodel);
 
 		len = strlen(str);
 
@@ -1020,7 +1023,9 @@ static bool parse_elements(json_object *jelements, struct mesh_db_node *node)
 		json_object *jelement;
 		json_object *jlocation;
 		json_object *jmodels;
-
+		struct mesh_db_element *ele;
+		int elementIndex;
+		const char *str;
 		/* Convert integer to string */
 		char int_as_str[6];
 
@@ -1032,12 +1037,10 @@ static bool parse_elements(json_object *jelements, struct mesh_db_node *node)
 			return true;
 		}
 
-		int elementIndex;
-
 		if (!get_int(jelement, "elementIndex", &elementIndex))
 			goto fail;
 
-		struct mesh_db_element *ele = l_new(struct mesh_db_element, 1);
+		ele = l_new(struct mesh_db_element, 1);
 
 		if (!ele)
 			goto fail;
@@ -1053,7 +1056,7 @@ static bool parse_elements(json_object *jelements, struct mesh_db_node *node)
 			 &jlocation))
 			goto fail;
 
-		char *str = (char *)json_object_get_string(jlocation);
+		str = json_object_get_string(jlocation);
 
 		/* Store location in the structure */
 		if (sscanf(str, "%04hx", &(ele->location)) != 1)
@@ -1158,28 +1161,17 @@ static void parse_features(json_object *jconfig, struct mesh_db_node *node)
 	if (!jvalue)
 		return;
 
-	uint8_t count = json_object_get_int(jvalue);
-
-	if (count > RELAY_RETRAN_COUNT_MAX)
-		count = RELAY_RETRAN_COUNT_MAX;
-
-	node->modes.relay.cnt = count;
+	node->modes.relay.cnt = MIN(json_object_get_int(jvalue), RELAY_RETRAN_COUNT_MAX);
 
 	json_object_object_get_ex(jrelay, "interval", &jvalue);
 	if (!jvalue)
 		return;
 
-	uint16_t interval = json_object_get_int(jvalue);
-
-	if (interval > RELAY_RETR_INTERVAL_STEPS_MAX)
-		interval = RELAY_RETR_INTERVAL_STEPS_MAX;
-
-	node->modes.relay.interval = interval;
+	node->modes.relay.interval = MIN(json_object_get_int(jvalue), RELAY_RETR_INTERVAL_STEPS_MAX);
 }
 
 static bool parse_iv_idx(json_object *jcomp, struct mesh_db_node *node)
 {
-	json_object *jvalue;
 	uint32_t iv_index;
 	bool iv_update;
 
@@ -1423,18 +1415,6 @@ bool mesh_db_write_bool(json_object *jobj, const char *keyword, bool value)
 	return true;
 }
 
-static const char *mode_to_string(int mode)
-{
-	switch (mode) {
-	case MESH_MODE_DISABLED:
-		return "false";
-	case MESH_MODE_ENABLED:
-		return "true";
-	default:
-		return "unsupported";
-	}
-}
-
 bool mesh_db_write_mode(json_object *jobj, const char *keyword, int value)
 {
 	json_object *jstring;
@@ -1643,13 +1623,15 @@ bool mesh_db_add_node(json_object *jnode,
 	entry = l_queue_get_entries(db_node->elements);
 
 	for (int idx = 0; entry; entry = entry->next, idx++) {
-		char int_as_str[5];
+		char int_as_str[11];
 		struct mesh_db_element *ele = entry->data;
+		json_object *jmodels;
+		json_object *jsub_elements;
 
 		/* Convert idx to string value */
 		sprintf(int_as_str, "%d", idx);
 
-		json_object *jsub_elements = json_object_new_object();
+		jsub_elements = json_object_new_object();
 
 		mesh_db_write_int(jsub_elements, "elementIndex", ele->index);
 		mesh_db_write_uint16_hex(jsub_elements, "location",
@@ -1662,7 +1644,7 @@ bool mesh_db_add_node(json_object *jnode,
 		if (l_queue_isempty(ele->models))
 			continue;
 
-		json_object *jmodels = json_object_new_array();
+		jmodels = json_object_new_array();
 
 		if (!jmodels) {
 			json_object_put(jelements);
