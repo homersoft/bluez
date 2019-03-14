@@ -1664,7 +1664,7 @@ static bool get_app_keys(struct mesh_net *net, struct l_queue *app_keys_queue,
 	for (entry = l_queue_get_entries(app_keys_queue);
 			 entry; entry = entry->next) {
 		app_key = (struct mesh_app_key *) entry->data;
-		temp_app_key = appkey_get_key_info(app_key, net, &temp_app_idx);
+		temp_app_key = appkey_get_key_info(app_key, net, &temp_app_idx, NULL);
 		if (!temp_app_key)
 			return false;
 
