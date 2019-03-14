@@ -114,7 +114,9 @@ static bool parse_node(struct mesh_node *node, json_object *jnode)
 	if (!mesh_db_read_node(jnode, read_node_cb, node))
 		return false;
 
-	if ((net = node_get_net(node))) {
+	net = node_get_net(node);
+
+	if (net) {
 		if (!mesh_db_read_net_keys(jnode, read_net_keys_cb, net))
 			return false;
 
@@ -128,7 +130,8 @@ static bool parse_node(struct mesh_node *node, json_object *jnode)
 	return true;
 }
 
-static bool parse_config(char *in_file, char *out_file, uint8_t node_id[KEY_LEN])
+static bool parse_config(char *in_file, char *out_file,
+		uint8_t node_id[KEY_LEN])
 {
 	int fd;
 	char *str;

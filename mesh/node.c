@@ -1040,10 +1040,12 @@ fail:
 	return false;
 }
 
-void node_id_set(struct mesh_node *node, uint8_t id[KEY_LEN]) {
+void node_id_set(struct mesh_node *node, uint8_t id[KEY_LEN])
+{
 	if (node)
 		memcpy(&node->id[0], &id[0], KEY_LEN);
 }
+
 static void attach_io(void *a, void *b)
 {
 	struct mesh_node *node = a;
@@ -1250,8 +1252,8 @@ bool delete_node(uint8_t *uuid)
 
 }
 
-static bool provision_node(struct mesh_node *node, uint8_t *network_key, uint16_t addr,
-					uint32_t iv_index)
+static bool provision_node(struct mesh_node *node, uint8_t *network_key,
+		uint16_t addr, uint32_t iv_index)
 {
 	struct mesh_prov_node_info *info;
 	bool status = false;
@@ -1315,9 +1317,10 @@ static bool stop_advertising(struct mesh_node *node)
 	return true;
 }
 
-static bool send_message(struct mesh_node *node, uint16_t element, uint16_t dest,
-		uint8_t *opcode, uint16_t opcode_len, uint8_t *payload,
-		uint16_t payload_len, struct l_dbus_message_iter *key_variant)
+static bool send_message(struct mesh_node *node, uint16_t element,
+		uint16_t dest, uint8_t *opcode, uint16_t opcode_len,
+		uint8_t *payload, uint16_t payload_len,
+		struct l_dbus_message_iter *key_variant)
 {
 	uint8_t data[MESH_MAX_OPCODE + MESH_MAX_ACCESS_PAYLOAD];
 	uint16_t data_len = opcode_len + payload_len;
@@ -1668,7 +1671,8 @@ static bool get_app_keys(struct mesh_net *net, struct l_queue *app_keys_queue,
 		if (!l_dbus_message_builder_enter_dict(builder, "qay"))
 			return false;
 
-		if (!l_dbus_message_builder_append_basic(builder, 'q', &temp_app_idx))
+		if (!l_dbus_message_builder_append_basic(builder,
+				'q', &temp_app_idx))
 			return false;
 
 		if (!dbus_append_byte_array(builder, temp_app_key, KEY_LEN))

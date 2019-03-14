@@ -1161,13 +1161,15 @@ static void parse_features(json_object *jconfig, struct mesh_db_node *node)
 	if (!jvalue)
 		return;
 
-	node->modes.relay.cnt = MIN(json_object_get_int(jvalue), RELAY_RETRAN_COUNT_MAX);
+	node->modes.relay.cnt = MIN(json_object_get_int(jvalue),
+			RELAY_RETRAN_COUNT_MAX);
 
 	json_object_object_get_ex(jrelay, "interval", &jvalue);
 	if (!jvalue)
 		return;
 
-	node->modes.relay.interval = MIN(json_object_get_int(jvalue), RELAY_RETR_INTERVAL_STEPS_MAX);
+	node->modes.relay.interval = MIN(json_object_get_int(jvalue),
+			RELAY_RETR_INTERVAL_STEPS_MAX);
 }
 
 static bool parse_iv_idx(json_object *jcomp, struct mesh_db_node *node)

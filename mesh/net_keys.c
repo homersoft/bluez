@@ -79,7 +79,8 @@ static bool match_network(const void *a, const void *b)
 
 bool net_key_get(uint32_t key_id, uint8_t *net_key)
 {
-	struct net_key *key = l_queue_find(keys, match_id, L_UINT_TO_PTR(key_id));
+	struct net_key *key = l_queue_find(keys,
+			match_id, L_UINT_TO_PTR(key_id));
 
 	if (!key)
 		return false;

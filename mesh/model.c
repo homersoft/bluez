@@ -209,29 +209,28 @@ static struct l_dbus_message *create_config_update_msg(struct mesh_node *node,
 					uint8_t ele_idx, uint32_t id,
 					struct l_dbus_message_builder **builder)
 {
-    /*
-	 *FIXME emit signal
-	 * struct l_dbus *dbus = dbus_get_bus();
-	 * struct l_dbus_message *msg;
-	 * uint16_t model_id;
+	/*
+	 * FIXME emit signal
+	 *  struct l_dbus *dbus = dbus_get_bus();
+	 *  struct l_dbus_message *msg;
+	 *  uint16_t model_id;
 	 *
-	 *l_debug("Send \"UpdateModelConfiguration\"");
-	 *msg = l_dbus_message_new_method_call(dbus, owner, path,
-	 *					MESH_ELEMENT_INTERFACE,
-	 *					"UpdateModelConfiguration");
+	 * l_debug("Send \"UpdateModelConfiguration\"");
+	 * msg = l_dbus_message_new_method_call(dbus, owner, path,
+	 *          MESH_ELEMENT_INTERFACE, UpdateModelConfiguration");
 	 *
-	 **builder = l_dbus_message_builder_new(msg);
+	 * *builder = l_dbus_message_builder_new(msg);
 	 *
-	 *model_id = (uint16_t) id;
+	 * model_id = (uint16_t) id;
 	 *
-	 *l_dbus_message_builder_append_basic(*builder, 'q', &model_id);
+	 * l_dbus_message_builder_append_basic(*builder, 'q', &model_id);
 	 *
-	 *l_dbus_message_builder_enter_array(*builder, "{sv}");
+	 * l_dbus_message_builder_enter_array(*builder, "{sv}");
 	 *
-	 *if ((id & VENDOR_ID_MASK) != VENDOR_ID_MASK) {
-	 *	uint16_t vendor = id >> 16;
-	 *	dbus_append_dict_entry_basic(*builder, "Vendor", "q", &vendor);
-	 *}
+	 * if ((id & VENDOR_ID_MASK) != VENDOR_ID_MASK) {
+	 *    uint16_t vendor = id >> 16;
+	 *    dbus_append_dict_entry_basic(*builder, "Vendor", "q", &vendor);
+	 * }
 	 */
 
 	return NULL;

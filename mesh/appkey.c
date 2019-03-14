@@ -270,7 +270,7 @@ static bool set_key(struct mesh_app_key *key, uint16_t app_idx,
 	return true;
 }
 
-const uint8_t *appkey_get_key_info(struct mesh_app_key *app_key,
+uint8_t *appkey_get_key_info(struct mesh_app_key *app_key,
 					struct mesh_net *net, uint16_t *app_idx)
 {
 	uint8_t phase;
@@ -281,9 +281,8 @@ const uint8_t *appkey_get_key_info(struct mesh_app_key *app_key,
 
 	*app_idx = app_key->app_idx;
 
-	if (phase != KEY_REFRESH_PHASE_TWO) {
+	if (phase != KEY_REFRESH_PHASE_TWO)
 		return app_key->key;
-	}
 
 	if (app_key->new_key_id == NET_NID_INVALID)
 		return NULL;
