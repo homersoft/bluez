@@ -344,7 +344,6 @@ const uint8_t *appkey_get_key(struct mesh_net *net, uint16_t app_idx,
 							uint8_t *key_id)
 {
 	struct mesh_app_key *app_key;
-	uint8_t phase;
 	struct l_queue *app_keys;
 
 	app_keys = mesh_net_get_app_keys(net);
