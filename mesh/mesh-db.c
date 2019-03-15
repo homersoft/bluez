@@ -358,14 +358,13 @@ bool mesh_db_read_net_keys(json_object *jobj, mesh_db_net_key_cb cb,
 	iter = json_object_iter_begin(jobject);
 	end = json_object_iter_end(jobject);
 
-	while (!json_object_iter_equal(&iter, &end))
-	{
+	while (!json_object_iter_equal(&iter, &end)) {
 		int idx;
 		char *str, *end;
 		bool key_refresh = false;
 		int phase;
-        uint8_t key[16];
-        uint8_t new_key[16];
+		uint8_t key[16];
+		uint8_t new_key[16];
 
 		jidx = json_object_iter_peek_name(&iter);
 		jtemp = json_object_iter_peek_value(&iter);
@@ -445,27 +444,24 @@ bool mesh_db_net_key_add(json_object *jobj, uint16_t idx,
 
 	json_object_object_add(jobject, int_as_str, jentry);
 
-#if 0
-		/* If Key Refresh underway, add placeholder for "Old Key" */
-		if (phase != KEY_REFRESH_PHASE_NONE) {
-			uint8_t int_as_str[KEY_LEN];
-			uint8_t i;
-
-			/* Flip Bits to differentiate */
-			for (i = 0; i < sizeof(int_as_str); i++)
-				int_as_str[i] = key[i] ^ 0xff;
-
-			if (!add_key(jentry, "oldKey", int_as_str))
-				goto fail;
-		}
-
-		if (!jarray) {
-			jarray = json_object_new_array();
-			if (!jarray)
-				goto fail;
-			json_object_object_add(jobj, "netKeys", jarray);
-		}
-#endif
+	/* FIXME
+	 * //If Key Refresh underway, add placeholder for "Old Key"
+	 * if (phase != KEY_REFRESH_PHASE_NONE) {
+	 *		uint8_t buf[KEY_LEN];
+	 *		uint8_t i;
+	 *		// Flip Bits to differentiate
+	 *		for (i = 0; i < sizeof(buf); i++)
+	 *			buf[i] = key[i] ^ 0xff;
+	 *		if (!add_key(jentry, "oldKey", buf))
+	 *			goto fail;
+	 * }
+	 * if (!jarray) {
+	 *		jarray = json_object_new_array();
+	 *		if (!jarray)
+	 *			goto fail;
+	 *		json_object_object_add(jobj, "netKeys", jarray);
+	 * }
+	 */
 
 	return true;
 fail:
@@ -484,8 +480,7 @@ bool mesh_db_net_key_del(json_object *jobj, uint16_t idx)
 	if (!jobject)
 		return true;
 
-	if (json_object_get_object(jobject)->size == 1)
-	{
+	if (json_object_get_object(jtemp)->size == 1) {
 		json_object_object_del(jobj, "netKeys");
 		return true;
 	}

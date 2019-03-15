@@ -244,7 +244,8 @@ bool appkey_msg_in_replay_cache(struct mesh_net *net, uint16_t idx,
 
 static struct mesh_app_key *app_key_new(void)
 {
-	struct mesh_app_key *key = l_new(struct mesh_app_key, 1);
+	struct mesh_app_key *key =
+			l_new(struct mesh_app_key, 1);
 
 	key->new_key_id = NET_NID_INVALID;
 	key->replay_cache = l_queue_new();
@@ -271,7 +272,7 @@ static bool set_key(struct mesh_app_key *key, uint16_t app_idx,
 }
 
 uint8_t *appkey_get_key_info(struct mesh_app_key *app_key,
-			struct mesh_net *net, uint16_t *app_idx, uint8_t *key_id)
+		struct mesh_net *net, uint16_t *app_idx, uint8_t *key_id)
 {
 	uint8_t phase;
 
