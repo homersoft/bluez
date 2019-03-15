@@ -480,7 +480,7 @@ bool mesh_db_net_key_del(json_object *jobj, uint16_t idx)
 	if (!jobject)
 		return true;
 
-	if (json_object_get_object(jtemp)->size == 1) {
+	if (json_object_get_object(jobject)->size == 1) {
 		json_object_object_del(jobj, "netKeys");
 		return true;
 	}
