@@ -200,34 +200,6 @@ static json_object *get_key_object(json_object *jobject, uint16_t idx)
 	return jobject;
 }
 
-static json_object *jarray_key_del(json_object *jarray, int16_t idx)
-{
-	json_object *jarray_new;
-	int i, sz = json_object_array_length(jarray);
-
-	jarray_new = json_object_new_array();
-	if (!jarray_new)
-		return NULL;
-
-	for (i = 0; i < sz; ++i) {
-		json_object *jentry, *jvalue;
-
-		jentry = json_object_array_get_idx(jarray, i);
-
-		if (json_object_object_get_ex(jentry, "index", &jvalue)) {
-			int tmp = json_object_get_int(jvalue);
-
-			if (tmp == idx)
-				continue;
-		}
-
-		json_object_get(jentry);
-		json_object_array_add(jarray_new, jentry);
-	}
-
-	return jarray_new;
-}
-
 bool mesh_db_read_iv_index(json_object *jobj, uint32_t *idx, bool *update)
 {
 	int tmp;
