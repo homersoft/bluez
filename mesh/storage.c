@@ -269,7 +269,10 @@ bool storage_app_key_add(struct mesh_net *net, uint16_t net_idx,
 	if (!jnode)
 		return false;
 
-	return mesh_db_app_key_add(jnode, net_idx, app_idx, key, update);
+	if (mesh_db_app_key_add(jnode, net_idx, app_idx, key, update))
+		return storage_save_config(node, false, NULL, NULL);
+
+	return false;
 }
 
 bool storage_app_key_del(struct mesh_net *net, uint16_t net_idx,
