@@ -415,47 +415,47 @@ bool mesh_db_read_net_keys(json_object *jobj, mesh_db_net_key_cb cb,
 bool mesh_db_net_key_add(json_object *jobj, uint16_t idx,
 					const uint8_t key[KEY_LEN], int phase)
 {
-	json_object *jtemp, *jobject = NULL, *jvalue = NULL;
-	char buf[6];
+	json_object *jobject, *jentry = NULL, *jvalue = NULL;
+	char int_as_str[6];
 
-	json_object_object_get_ex(jobj, "netKeys", &jtemp);
+	json_object_object_get_ex(jobj, "netKeys", &jobject);
 
-	if (!jtemp) {
-		jtemp = json_object_new_object();
-		if (!jtemp)
+	if (!jobject) {
+		jobject = json_object_new_object();
+		if (!jobject)
 			return false;
 
-		json_object_object_add(jobj, "netKeys", jtemp);
+		json_object_object_add(jobj, "netKeys", jobject);
 	}
 
-	jobject = json_object_new_object();
-	if (!jobject)
+	jentry = json_object_new_object();
+	if (!jentry)
 		goto fail;
 
 	jvalue = json_object_new_int(phase);
 	if (!jvalue)
 		goto fail;
 
-	json_object_object_add(jobject, "keyRefresh", jvalue);
+	json_object_object_add(jentry, "keyRefresh", jvalue);
 
-	if (!add_key(jobject, "key", key))
+	if (!add_key(jentry, "key", key))
 		goto fail;
 
-	snprintf(buf, sizeof(buf), "%hd", idx);
+	snprintf(int_as_str, sizeof(int_as_str), "%hd", idx);
 
-	json_object_object_add(jtemp, buf, jobject);
+	json_object_object_add(jobject, int_as_str, jentry);
 
 #if 0
 		/* If Key Refresh underway, add placeholder for "Old Key" */
 		if (phase != KEY_REFRESH_PHASE_NONE) {
-			uint8_t buf[KEY_LEN];
+			uint8_t int_as_str[KEY_LEN];
 			uint8_t i;
 
 			/* Flip Bits to differentiate */
-			for (i = 0; i < sizeof(buf); i++)
-				buf[i] = key[i] ^ 0xff;
+			for (i = 0; i < sizeof(int_as_str); i++)
+				int_as_str[i] = key[i] ^ 0xff;
 
-			if (!add_key(jentry, "oldKey", buf))
+			if (!add_key(jentry, "oldKey", int_as_str))
 				goto fail;
 		}
 
@@ -469,29 +469,29 @@ bool mesh_db_net_key_add(json_object *jobj, uint16_t idx,
 
 	return true;
 fail:
-	if (jobject)
-		json_object_put(jobject);
+	if (jentry)
+		json_object_put(jentry);
 
 	return false;
 }
 
 bool mesh_db_net_key_del(json_object *jobj, uint16_t idx)
 {
-	json_object *jtemp;
-	char buf[6];
+	char int_as_str[6];
+	json_object *jobject;
 
-	json_object_object_get_ex(jobj, "netKeys", &jtemp);
-	if (!jtemp)
+	json_object_object_get_ex(jobj, "netKeys", &jobject);
+	if (!jobject)
 		return true;
 
-	if (json_object_get_object(jtemp)->size == 1)
+	if (json_object_get_object(jobject)->size == 1)
 	{
 		json_object_object_del(jobj, "netKeys");
 		return true;
 	}
 
-	snprintf(buf, sizeof(buf), "%hd", idx);
-	json_object_object_del(jtemp, buf);
+	snprintf(int_as_str, sizeof(int_as_str), "%hd", idx);
+	json_object_object_del(jobject, int_as_str);
 
 	return true;
 }
@@ -505,7 +505,7 @@ bool mesh_db_app_key_add(json_object *jobj, uint16_t net_idx, uint16_t app_idx,
 			 const uint8_t key[KEY_LEN], bool update)
 {
 	json_object *jobject, *jentry = NULL;
-	char int_as_str[11];
+	char int_as_str[6];
 
 	/* Check if update has been requested */
 	if (update) {
@@ -534,7 +534,7 @@ bool mesh_db_app_key_add(json_object *jobj, uint16_t net_idx, uint16_t app_idx,
 	}
 
 	/* Convert idx to string value */
-	sprintf(int_as_str, "%d", app_idx);
+	sprintf(int_as_str, "%hd", app_idx);
 
 	/* Add net index value */
 	if (!mesh_db_write_int(jentry, "boundNetKey", net_idx))
@@ -572,7 +572,7 @@ bool mesh_db_app_key_del(json_object *jobj, uint16_t net_idx, uint16_t idx)
 	}
 
 	/* Convert index to string */
-	sprintf(int_as_str, "%u", idx);
+	snprintf(int_as_str, sizeof(int_as_str), "%hd", idx);
 	json_object_object_del(jobject, int_as_str);
 
 	return true;
