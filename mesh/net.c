@@ -2613,6 +2613,7 @@ static void update_iv_kr_state(struct mesh_subnet *subnet, uint32_t iv_index,
 				bool rxed_key_refresh, bool lpn)
 {
 	struct mesh_net *net = subnet->net;
+	struct mesh_node *node;
 	uint8_t local_kr;
 	uint32_t local_iv_index;
 	bool local_iv_update;
@@ -2659,9 +2660,7 @@ static void update_iv_kr_state(struct mesh_subnet *subnet, uint32_t iv_index,
 		storage_set_iv_index(net, iv_index, net->iv_upd_state);
 
 		/* Save config to the Json file */
-		struct mesh_node *node = mesh_net_node_get(net);
-		json_object *jnode = node_jconfig_get(node);
-
+		node = mesh_net_node_get(net);
 		storage_save_config(node, true, NULL, NULL);
 
 		/* Figure out the key refresh phase */
@@ -3853,12 +3852,29 @@ bool mesh_net_init_params_from_node(struct mesh_node *node,
 {
 	struct mesh_net *net = node_get_net(node);
 
-	if (!net)
-		return false;
-
 	/* SEQ nr and TTL */
 	uint32_t seq_number = node_get_sequence_number(node);
 	uint8_t ttl = node_default_ttl_get(node);
+	
+	/* Proxy, friend and beacon */
+	uint8_t mode = node_proxy_mode_get(node);
+
+	/* Unicast */
+	uint16_t unicast = node_get_primary(node);
+	uint8_t num_ele = node_get_num_elements(node);
+
+	/* UUID */
+	uint8_t *uuid = node_uuid_get(node);
+
+	/* Relay params */
+	uint8_t rel_cnt, rel_mode;
+	uint16_t rel_interval;
+
+	rel_mode = node_relay_mode_get(node, &rel_cnt, &rel_interval);
+	mesh_net_set_relay_mode(net, (bool)rel_mode, rel_cnt, rel_interval);
+
+	if (!net)
+		return false;
 
 	mesh_net_set_seq_num(net, seq_number);
 	mesh_net_set_default_ttl(net, ttl);
@@ -3866,8 +3882,6 @@ bool mesh_net_init_params_from_node(struct mesh_node *node,
 	/* Set IV idx and IV update */
 	mesh_net_set_iv_index(net, db_node->iv_index, db_node->iv_update);
 
-	/* Proxy, friend and beacon */
-	uint8_t mode = node_proxy_mode_get(node);
 
 	if (mode == MESH_MODE_ENABLED || mode == MESH_MODE_DISABLED)
 		mesh_net_set_proxy_mode(net, mode == MESH_MODE_ENABLED);
@@ -3880,9 +3894,6 @@ bool mesh_net_init_params_from_node(struct mesh_node *node,
 	if (mode == MESH_MODE_ENABLED || mode == MESH_MODE_DISABLED)
 		mesh_net_set_beacon_mode(net, mode == MESH_MODE_ENABLED);
 
-	/* Unicast */
-	uint16_t unicast = node_get_primary(node);
-	uint8_t num_ele = node_get_num_elements(node);
 
 	if (!IS_UNASSIGNED(unicast) &&
 		 !mesh_net_register_unicast(net, unicast, num_ele)) {
@@ -3891,18 +3902,8 @@ bool mesh_net_init_params_from_node(struct mesh_node *node,
 		return false;
 	}
 
-	/* UUID */
-	uint8_t *uuid = node_uuid_get(node);
-
 	if (uuid)
 		mesh_net_id_uuid_set(net, uuid);
-
-	/* Relay params */
-	uint8_t rel_cnt, rel_mode;
-	uint16_t rel_interval;
-
-	rel_mode = node_relay_mode_get(node, &rel_cnt, &rel_interval);
-	mesh_net_set_relay_mode(net, (bool)rel_mode, rel_cnt, rel_interval);
 
 	return true;
 }

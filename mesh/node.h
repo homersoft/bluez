@@ -18,6 +18,9 @@
  *
  */
 
+#ifndef __MESH_NODE_H
+#define __MESH_NODE_H
+
 struct mesh_net;
 struct mesh_node;
 struct mesh_io;
@@ -28,13 +31,14 @@ struct mesh_agent;
 #define MIN_SEQ_CACHE		(2*MIN_SEQ_TRIGGER)
 #define MIN_SEQ_CACHE_TIME	(5*60)
 
+#define MESH_NODE_PATH_PREFIX "/org/bluez/mesh/node_"
+#define MESH_NODE_PATH_PREFIX_LEN 21
+
 #define KEY_LEN 16
 
 #define RELAY_RETRAN_COUNT_MAX 7
 #define RELAY_RETR_INTERVAL_STEPS_MAX 31
 
-#define OPCODE_MAX_LEN 3
-#define PAYLOAD_MAX_LEN 379
 
 typedef void (*node_attach_ready_func_t) (int status, char *node_path,
 								uint64_t token);
@@ -96,7 +100,7 @@ void node_attach_io(struct mesh_io *io);
 int node_attach(const char *app_path, const char *sender, uint64_t token,
 						node_attach_ready_func_t cb);
 void node_build_attach_reply(struct l_dbus_message *reply, uint64_t token);
-void node_id_set(struct mesh_node *node, uint16_t node_id);
+void node_id_set(struct mesh_node *node, uint8_t id[KEY_LEN]);
 bool node_dbus_init(struct l_dbus *bus);
 void node_cleanup(void *node);
 void node_cleanup_all(void);
@@ -105,3 +109,6 @@ void *node_jconfig_get(struct mesh_node *node);
 void node_cfg_file_set(struct mesh_node *node, char *cfg);
 char *node_cfg_file_get(struct mesh_node *node);
 bool register_node_object(struct mesh_node *node);
+void get_node_path_from_uuid(char *path, uint8_t *uuid);
+
+#endif

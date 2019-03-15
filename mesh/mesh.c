@@ -329,20 +329,8 @@ bool mesh_init(uint16_t index, const char *config_dir)
 	return true;
 }
 
-static void attach_exit(void *data)
-{
-	struct l_dbus_message *reply;
-	struct attach_data *pending = data;
-
-	reply = dbus_error(pending->msg, MESH_ERROR_FAILED, "Failed. Exiting");
-	l_dbus_send(dbus_get_bus(), reply);
-	l_free(pending);
-}
-
 void mesh_cleanup(void)
 {
-	struct l_dbus_message *reply;
-
 	mesh_io_destroy(mesh.io);
 	mgmt_unref(mgmt_mesh);
 
@@ -381,31 +369,6 @@ const char *mesh_status_str(uint8_t err)
 	}
 }
 
-static const char *prov_status_str(uint8_t status)
-{
-	switch (status) {
-	case PROV_ERR_SUCCESS:
-		return "success";
-	case PROV_ERR_INVALID_PDU:
-	case PROV_ERR_INVALID_FORMAT:
-	case PROV_ERR_UNEXPECTED_PDU:
-		return "bad-pdu";
-	case PROV_ERR_CONFIRM_FAILED:
-		return "confirmation-failed";
-	case PROV_ERR_INSUF_RESOURCE:
-		return "out-of-resources";
-	case PROV_ERR_DECRYPT_FAILED:
-		return "decryption-error";
-	case PROV_ERR_CANT_ASSIGN_ADDR:
-		return "cannot-assign-addresses";
-	case PROV_ERR_TIMEOUT:
-		return "timeout";
-	case PROV_ERR_UNEXPECTED_ERR:
-	default:
-		return "unexpected-error";
-	}
-}
-
 static struct l_dbus_message *create_node_call(struct l_dbus *dbus,
 			struct l_dbus_message *msg, void *user_data)
 {
@@ -439,6 +402,11 @@ static struct l_dbus_message *create_node_call(struct l_dbus *dbus,
 			MESH_ERROR_INVALID_ARGS,
 			"Incorrect device UUID format");
 
+	if (!l_uuid_is_valid(temp_uuid))
+		return dbus_error(msg,
+			MESH_ERROR_INVALID_ARGS,
+			"Incorrect device UUID format");
+
 	if (node_find_by_uuid(temp_uuid))
 		return dbus_error(msg, MESH_ERROR_ALREADY_EXISTS, NULL);
 
@@ -457,7 +425,7 @@ static struct l_dbus_message *create_node_call(struct l_dbus *dbus,
 		n++;
 	}
 
-	if (element_bits != ((1 << n) - 1))
+	if (element_bits != ((1u << n) - 1))
 		return dbus_error(msg, MESH_ERROR_INVALID_ARGS,
 			"Wrong element indexation");
 
@@ -478,7 +446,6 @@ static struct l_dbus_message *delete_node_call(struct l_dbus *dbus,
 	struct l_dbus_message *reply;
 	struct l_dbus_message_iter iter_uuid;
 	uint8_t uuid[KEY_LEN];
-	uint32_t n;
 
 	l_debug("Delete Node");
 

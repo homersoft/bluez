@@ -77,6 +77,18 @@ static bool match_network(const void *a, const void *b)
 	return memcmp(key->network, network, sizeof(key->network)) == 0;
 }
 
+bool net_key_get(uint32_t key_id, uint8_t *net_key)
+{
+	struct net_key *key = l_queue_find(keys,
+			match_id, L_UINT_TO_PTR(key_id));
+
+	if (!key)
+		return false;
+
+	memcpy(net_key, key->master, 16);
+	return true;
+}
+
 /* Key added from Provisioning, NetKey Add or NetKey update */
 uint32_t net_key_add(const uint8_t master[16])
 {

@@ -55,12 +55,6 @@ struct write_info {
 };
 
 static const char *storage_dir;
-static struct l_queue *node_ids;
-
-static bool simple_match(const void *a, const void *b)
-{
-	return a == b;
-}
 
 static bool read_node_cb(struct mesh_db_node *db_node, void *user_data)
 {
@@ -114,19 +108,30 @@ static bool read_app_keys_cb(uint16_t net_idx, uint16_t app_idx, uint8_t *key,
 
 static bool parse_node(struct mesh_node *node, json_object *jnode)
 {
+	uint8_t dev_key_buf[KEY_LEN];
+	struct mesh_net *net;
+
 	if (!mesh_db_read_node(jnode, read_node_cb, node))
 		return false;
 
-	struct mesh_net *net = node_get_net(node);
+	net = node_get_net(node);
 
 	if (net) {
 		if (!mesh_db_read_net_keys(jnode, read_net_keys_cb, net))
 			return false;
+
+		/* Application keys are possible but not required */
+		mesh_db_read_app_keys(jnode, read_app_keys_cb, net);
+
+		/* Device key is possible but not required */
+		if (mesh_db_read_device_key(jnode, dev_key_buf))
+			node_set_device_key(node, dev_key_buf);
 	}
 	return true;
 }
 
-static bool parse_config(char *in_file, char *out_file, uint16_t node_id)
+static bool parse_config(char *in_file, char *out_file,
+		uint8_t node_id[KEY_LEN])
 {
 	int fd;
 	char *str;
@@ -134,6 +139,9 @@ static bool parse_config(char *in_file, char *out_file, uint16_t node_id)
 	ssize_t sz;
 	bool result = false;
 	struct mesh_node *node;
+	struct json_tokener *jtok;
+	enum json_tokener_error jerr;
+	json_object *jnode;
 
 	l_info("Loading configuration from %s", in_file);
 
@@ -158,9 +166,7 @@ static bool parse_config(char *in_file, char *out_file, uint16_t node_id)
 		goto done;
 	}
 
-	struct json_tokener *jtok = json_tokener_new();
-	enum json_tokener_error jerr;
-	json_object *jnode = NULL;
+	jtok = json_tokener_new();
 
 	do {
 		jnode = json_tokener_parse_ex(jtok, str, strlen(str));
@@ -173,7 +179,7 @@ static bool parse_config(char *in_file, char *out_file, uint16_t node_id)
 		return false;
 	}
 
-	if (jtok->char_offset < strlen(str)) {
+	if (jtok->char_offset < (int)strlen(str)) {
 		/*
 		 * Handle extra characters after parsed object as desired.
 		 * e.g. issue an error, parse another object
@@ -192,7 +198,7 @@ static bool parse_config(char *in_file, char *out_file, uint16_t node_id)
 
 	node_jconfig_set(node, jnode);
 	node_cfg_file_set(node, out_file);
-	node_id_set(node, node_id);
+	node_id_set(node, &node_id[0]);
 
 	result = parse_node(node, jnode);
 
@@ -263,7 +269,10 @@ bool storage_app_key_add(struct mesh_net *net, uint16_t net_idx,
 	if (!jnode)
 		return false;
 
-	return mesh_db_app_key_add(jnode, net_idx, app_idx, key, update);
+	if (mesh_db_app_key_add(jnode, net_idx, app_idx, key, update))
+		return storage_save_config(node, false, NULL, NULL);
+
+	return false;
 }
 
 bool storage_app_key_del(struct mesh_net *net, uint16_t net_idx,
@@ -462,38 +471,37 @@ bool storage_load_nodes(const char *dir_name)
 	}
 
 	storage_dir = dir_name;
-	node_ids = l_queue_new();
 
 	while ((entry = readdir(dir)) != NULL) {
 		char name_buf[PATH_MAX];
 		char *filename;
-		uint32_t node_id;
+		uint8_t node_id[KEY_LEN];
 		size_t len;
 
+		/* Discard all non-directory instances */
 		if (entry->d_type != DT_DIR)
-			continue;
-
-		if (sscanf(entry->d_name, "%04x", &node_id) != 1)
 			continue;
 
 		snprintf(name_buf, PATH_MAX, "%s/%s/node.json",
 				dir_name, entry->d_name);
 
-		l_queue_push_tail(node_ids, L_UINT_TO_PTR(node_id));
+		/* Discard all non-uuid formats instances */
+		if (!l_uuid_parse(entry->d_name, UUID_LEN, &node_id[0]))
+			continue;
 
 		len = strlen(name_buf);
 		filename = l_malloc(len + 1);
 
 		strncpy(filename, name_buf, len + 1);
 
-		if (parse_config(name_buf, filename, node_id))
+		if (parse_config(name_buf, filename, &node_id[0]))
 			continue;
 
 		/* Fall-back to Backup version */
 		snprintf(name_buf, PATH_MAX, "%s/%s/node.json.bak",
 				dir_name, entry->d_name);
 
-		if (parse_config(name_buf, filename, node_id)) {
+		if (parse_config(name_buf, filename, &node_id[0])) {
 			remove(filename);
 			rename(name_buf, filename);
 			l_debug("backup parsed successfully");
@@ -568,6 +576,7 @@ fail:
 /* Permanently remove node configuration */
 void storage_remove_node_config(struct mesh_node *node)
 {
+	char cfgname_bak[PATH_MAX];
 	char *cfgname;
 	struct json_object *jnode;
 	const char *dir_name;
@@ -583,6 +592,11 @@ void storage_remove_node_config(struct mesh_node *node)
 
 	l_debug("Delete node config file %s", cfgname);
 	remove(cfgname);
+
+	snprintf(cfgname_bak, PATH_MAX, "%s.bak", cfgname);
+
+	l_debug("Delete node backup config file %s", cfgname_bak);
+	remove(cfgname_bak);
 
 	dir_name = dirname(cfgname);
 

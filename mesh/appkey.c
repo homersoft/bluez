@@ -40,9 +40,9 @@ struct mesh_app_key {
 	struct l_queue *replay_cache;
 	uint16_t net_idx;
 	uint16_t app_idx;
-	uint8_t key[16];
+	uint8_t key[KEY_LEN];
 	uint8_t key_id;
-	uint8_t new_key[16];
+	uint8_t new_key[KEY_LEN];
 	uint8_t new_key_id;
 };
 
@@ -244,9 +244,10 @@ bool appkey_msg_in_replay_cache(struct mesh_net *net, uint16_t idx,
 
 static struct mesh_app_key *app_key_new(void)
 {
-	struct mesh_app_key *key = l_new(struct mesh_app_key, 1);
+	struct mesh_app_key *key =
+			l_new(struct mesh_app_key, 1);
 
-	key->new_key_id = 0xFF;
+	key->new_key_id = NET_NID_INVALID;
 	key->replay_cache = l_queue_new();
 	return key;
 }
@@ -268,6 +269,31 @@ static bool set_key(struct mesh_app_key *key, uint16_t app_idx,
 	memcpy(is_new ? key->new_key : key->key, key_value, 16);
 
 	return true;
+}
+
+uint8_t *appkey_get_key_info(struct mesh_app_key *app_key,
+		struct mesh_net *net, uint16_t *app_idx, uint8_t *key_id)
+{
+	uint8_t phase;
+
+	if (mesh_net_key_refresh_phase_get(net, app_key->net_idx, &phase) !=
+							MESH_STATUS_SUCCESS)
+		return NULL;
+
+	*app_idx = app_key->app_idx;
+
+	if (phase != KEY_REFRESH_PHASE_TWO) {
+		if (key_id)
+			*key_id = app_key->key_id;
+		return app_key->key;
+	}
+
+	if (app_key->new_key_id == NET_NID_INVALID)
+		return NULL;
+
+	if (key_id)
+		*key_id = app_key->new_key_id;
+	return app_key->new_key;
 }
 
 void appkey_key_free(void *data)
@@ -319,7 +345,6 @@ const uint8_t *appkey_get_key(struct mesh_net *net, uint16_t app_idx,
 							uint8_t *key_id)
 {
 	struct mesh_app_key *app_key;
-	uint8_t phase;
 	struct l_queue *app_keys;
 
 	app_keys = mesh_net_get_app_keys(net);
@@ -331,20 +356,7 @@ const uint8_t *appkey_get_key(struct mesh_net *net, uint16_t app_idx,
 	if (!app_key)
 		return NULL;
 
-	if (mesh_net_key_refresh_phase_get(net, app_key->net_idx, &phase) !=
-							MESH_STATUS_SUCCESS)
-		return NULL;
-
-	if (phase != KEY_REFRESH_PHASE_TWO) {
-		*key_id = app_key->key_id;
-		return app_key->key;
-	}
-
-	if (app_key->new_key_id == NET_NID_INVALID)
-		return NULL;
-
-	*key_id = app_key->new_key_id;
-	return app_key->new_key;
+	return appkey_get_key_info(app_key, net, &app_idx, key_id);
 }
 
 bool appkey_have_key(struct mesh_net *net, uint16_t app_idx)
@@ -389,7 +401,7 @@ int appkey_key_add(struct mesh_net *net, uint16_t net_idx, uint16_t app_idx,
 		return MESH_STATUS_CANNOT_UPDATE;
 
 	if (key) {
-		if (memcmp(new_key, key->key, 16) == 0)
+		if (memcmp(new_key, key->key, KEY_LEN) == 0)
 			return MESH_STATUS_SUCCESS;
 
 		if (!update) {
