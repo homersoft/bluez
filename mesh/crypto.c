@@ -251,9 +251,12 @@ bool mesh_crypto_aes_ccm_encrypt(const uint8_t nonce[NONCE_LEN],
 		uint8_t *out_msg,
 		void *out_mic, size_t mic_size)
 {
+	bool result;
 	struct l_aead_cipher *cipher = l_aead_cipher_new(L_AEAD_CIPHER_AES_CCM,
 			&key[0], KEY_LEN, mic_size);
-	bool result;
+
+	if (!cipher)
+		return false;
 
 	if (!out_msg)
 		return false;
@@ -286,157 +289,34 @@ bool mesh_crypto_aes_ccm_decrypt(const uint8_t nonce[13], const uint8_t key[16],
 				uint8_t *out_msg,
 				void *out_mic, size_t mic_size)
 {
-	uint8_t msg[16], pmsg[16], cmic[16], cmsg[16], Xn[16];
-	uint8_t mic[16];
-	uint16_t msg_len = enc_msg_len - mic_size;
-	uint16_t last_blk, blk_cnt;
 	bool result;
-	size_t i, j;
-	int fd;
+	struct l_aead_cipher *cipher = l_aead_cipher_new(L_AEAD_CIPHER_AES_CCM,
+			&key[0], KEY_LEN, mic_size);
 
-	if (enc_msg_len < 5 || aad_len > 16)
+	if (!cipher)
 		return false;
 
-	fd = aes_ecb_setup(key);
-	if (fd < 0)
-		return false;
-
-	/* C_mic = e(AppKey, 0x01 || nonce || 0x0000) */
-	pmsg[0] = 0x01;
-	memcpy(pmsg + 1, nonce, 13);
-	l_put_be16(0x0000, pmsg + 14);
-
-	result = aes_ecb(fd, pmsg, cmic);
-	if (!result)
-		goto done;
-
-	/* X_0 = e(AppKey, 0x09 || nonce || length) */
-	if (mic_size == 8)
-		pmsg[0] = 0x19 | (aad_len ? 0x40 : 0x00);
-	else
-		pmsg[0] = 0x09 | (aad_len ? 0x40 : 0x00);
-
-	memcpy(pmsg + 1, nonce, 13);
-	l_put_be16(msg_len, pmsg + 14);
-
-	result = aes_ecb(fd, pmsg, Xn);
-	if (!result)
-		goto done;
-
-	/* If AAD is being used to authenticate, include it here */
-	if (aad_len) {
-		l_put_be16(aad_len, pmsg);
-
-		for (i = 0; i < sizeof(uint16_t); i++)
-			pmsg[i] = Xn[i] ^ pmsg[i];
-
-		j = 0;
-		aad_len += sizeof(uint16_t);
-		while (aad_len > 16) {
-			do {
-				pmsg[i] = Xn[i] ^ aad[j];
-				i++, j++;
-			} while (i < 16);
-
-			aad_len -= 16;
-			i = 0;
-
-			result = aes_ecb(fd, pmsg, Xn);
-			if (!result)
-				goto done;
-		}
-
-		for (i = 0; i < aad_len; i++, j++)
-			pmsg[i] = Xn[i] ^ aad[j];
-
-		for (i = aad_len; i < 16; i++)
-			pmsg[i] = Xn[i];
-
-		result = aes_ecb(fd, pmsg, Xn);
-		if (!result)
-			goto done;
-	}
-
-	last_blk = msg_len % 16;
-	blk_cnt = (msg_len + 15) / 16;
-	if (!last_blk)
-		last_blk = 16;
-
-	for (j = 0; j < blk_cnt; j++) {
-		if (j + 1 == blk_cnt) {
-			/* C_1 = e(AppKey, 0x01 || nonce || 0x0001) */
-			pmsg[0] = 0x01;
-			memcpy(pmsg + 1, nonce, 13);
-			l_put_be16(j + 1, pmsg + 14);
-
-			result = aes_ecb(fd, pmsg, cmsg);
-			if (!result)
-				goto done;
-
-			/* Encrypted = Payload[0-15] ^ C_1 */
-			for (i = 0; i < last_blk; i++)
-				msg[i] = enc_msg[(j * 16) + i] ^ cmsg[i];
-
-			if (out_msg)
-				memcpy(out_msg + (j * 16), msg, last_blk);
-
-			/* X_1 = e(AppKey, X_0 ^ Payload[0-15]) */
-			for (i = 0; i < last_blk; i++)
-				pmsg[i] = Xn[i] ^ msg[i];
-			for (i = last_blk; i < 16; i++)
-				pmsg[i] = Xn[i] ^ 0x00;
-
-			result = aes_ecb(fd, pmsg, Xn);
-			if (!result)
-				goto done;
-
-			/* MIC = C_mic ^ X_1 */
-			for (i = 0; i < sizeof(mic); i++)
-				mic[i] = cmic[i] ^ Xn[i];
-		} else {
-			/* C_1 = e(AppKey, 0x01 || nonce || 0x0001) */
-			pmsg[0] = 0x01;
-			memcpy(pmsg + 1, nonce, 13);
-			l_put_be16(j + 1, pmsg + 14);
-
-			result = aes_ecb(fd, pmsg, cmsg);
-			if (!result)
-				goto done;
-
-			/* Encrypted = Payload[0-15] ^ C_1 */
-			for (i = 0; i < 16; i++)
-				msg[i] = enc_msg[(j * 16) + i] ^ cmsg[i];
-
-			if (out_msg)
-				memcpy(out_msg + (j * 16), msg, 16);
-
-			/* X_1 = e(AppKey, X_0 ^ Payload[0-15]) */
-			for (i = 0; i < 16; i++)
-				pmsg[i] = Xn[i] ^ msg[i];
-
-			result = aes_ecb(fd, pmsg, Xn);
-			if (!result)
-				goto done;
-		}
-	}
+	result = l_aead_cipher_decrypt(cipher, (void *)enc_msg, enc_msg_len,
+			aad, aad_len, &nonce[0], NONCE_LEN,
+			(void *)out_msg, enc_msg_len - mic_size);
 
 	if (out_mic) {
 		switch (mic_size) {
 		case 4:
-			*(uint32_t *)out_mic = l_get_be32(mic);
+			*(uint32_t *)out_mic = l_get_be32(out_msg +
+					enc_msg_len - mic_size);
 			break;
 		case 8:
-			*(uint64_t *)out_mic = l_get_be64(mic);
+			*(uint64_t *)out_mic = l_get_be64(out_msg +
+					enc_msg_len - mic_size);
 			break;
 		default:
 			/* Unsupported MIC size */
-			result = false;
+			return false;
 		}
 	}
 
-done:
-	aes_ecb_destroy(fd);
-
+	l_aead_cipher_free(cipher);
 	return result;
 }
 
