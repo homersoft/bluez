@@ -255,6 +255,9 @@ bool mesh_crypto_aes_ccm_encrypt(const uint8_t nonce[NONCE_LEN],
 	struct l_aead_cipher *cipher = l_aead_cipher_new(L_AEAD_CIPHER_AES_CCM,
 			&key[0], KEY_LEN, mic_size);
 
+	if (!cipher)
+		return false;
+
 	if (!out_msg)
 		return false;
 
@@ -288,23 +291,28 @@ bool mesh_crypto_aes_ccm_decrypt(const uint8_t nonce[13], const uint8_t key[16],
 {
 	bool result;
 	struct l_aead_cipher *cipher = l_aead_cipher_new(L_AEAD_CIPHER_AES_CCM,
-													 &key[0], KEY_LEN, mic_size);
+			&key[0], KEY_LEN, mic_size);
+
+	if (!cipher)
+		return false;
 
 	result = l_aead_cipher_decrypt(cipher, (void *)enc_msg, enc_msg_len,
-								   aad, aad_len, &nonce[0], NONCE_LEN,
-								   (void *)out_msg, enc_msg_len - mic_size);
+			aad, aad_len, &nonce[0], NONCE_LEN,
+			(void *)out_msg, enc_msg_len - mic_size);
 
 	if (out_mic) {
 		switch (mic_size) {
-			case 4:
-				*(uint32_t *)out_mic = l_get_be32(out_msg + enc_msg_len - mic_size);
-				break;
-			case 8:
-				*(uint64_t *)out_mic = l_get_be64(out_msg + enc_msg_len - mic_size);
-				break;
-			default:
-				/* Unsupported MIC size */
-				return false;
+		case 4:
+			*(uint32_t *)out_mic = l_get_be32(out_msg +
+					enc_msg_len - mic_size);
+			break;
+		case 8:
+			*(uint64_t *)out_mic = l_get_be64(out_msg +
+					enc_msg_len - mic_size);
+			break;
+		default:
+			/* Unsupported MIC size */
+			return false;
 		}
 	}
 
