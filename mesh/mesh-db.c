@@ -947,15 +947,14 @@ static bool parse_elements(json_object *jelements, struct mesh_db_node *node)
 		if (sscanf(str, "%04hx", &(ele->location)) != 1)
 			goto fail;
 
-		if (!json_object_object_get_ex(jelement, "models", &jmodels))
-			goto fail;
+		if (json_object_object_get_ex(jelement, "models", &jmodels))
+		{
+			if (json_object_get_type(jmodels) != json_type_array)
+				goto fail;
 
-		if (jmodels &&
-			 (json_object_get_type(jmodels) != json_type_array))
-			goto fail;
-
-		if (!parse_models(jmodels, ele))
-			goto fail;
+			if (!parse_models(jmodels, ele))
+				goto fail;
+		}
 
 		l_queue_push_tail(node->elements, ele);
 	}
