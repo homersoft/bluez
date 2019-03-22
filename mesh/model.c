@@ -699,7 +699,7 @@ static int add_sub(struct mesh_net *net, struct mesh_model *mod,
 
 	l_queue_push_tail(mod->subs, L_UINT_TO_PTR(grp));
 
-	l_debug("Added %4.4x", grp);
+	l_debug("Added subscription %4.4x", grp);
 
 	mesh_net_dst_reg(net, grp);
 
@@ -730,7 +730,7 @@ static void send_msg_rcvd(struct mesh_node *node, uint8_t ele_idx, bool is_sub,
 	(void)is_sub;
 
 	/* Add element index */
-	if (!l_dbus_message_builder_append_basic(builder, 'q', &ele_idx))
+	if (!l_dbus_message_builder_append_basic(builder, 'q', &(uint16_t){ele_idx}))
 		goto error;
 
 	/* Add src address */
@@ -759,7 +759,7 @@ static void send_msg_rcvd(struct mesh_node *node, uint8_t ele_idx, bool is_sub,
 		goto error;
 
 	/* Add key index */
-	if (!l_dbus_message_builder_append_basic(builder, 'y', &key_idx))
+	if (!l_dbus_message_builder_append_basic(builder, 'q', &key_idx))
 		goto error;
 
 	/* Finalize builder */
@@ -1112,6 +1112,7 @@ static struct mesh_model *model_new(uint8_t ele_idx, uint32_t id)
 	mod->id = id;
 	mod->ele_idx = ele_idx;
 	mod->virtuals = l_queue_new();
+	mod->bindings = l_queue_new();
 	return mod;
 }
 
@@ -1141,7 +1142,7 @@ static void restore_model_state(struct mesh_model *mod)
 	if (!cbs)
 		return;
 
-	if (l_queue_isempty(mod->bindings) || !mod->cbs->bind) {
+	if (!l_queue_isempty(mod->bindings) && mod->cbs->bind) {
 		for (b = l_queue_get_entries(mod->bindings); b; b = b->next) {
 			if (cbs->bind(L_PTR_TO_UINT(b->data), ACTION_ADD) !=
 				MESH_STATUS_SUCCESS)

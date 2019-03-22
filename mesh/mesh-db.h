@@ -112,9 +112,8 @@ typedef bool (*mesh_db_net_key_cb)(uint16_t idx, uint8_t key[16],
 			uint8_t new_key[16], int phase, void *user_data);
 typedef bool (*mesh_db_app_key_cb)(uint16_t idx, uint16_t net_idx,
 			uint8_t key[16], uint8_t new_key[16], void *user_data);
-typedef bool (*mesh_db_node_cb)(struct mesh_db_node *node, void *user_data);
 
-bool mesh_db_read_node(json_object *jobj, mesh_db_node_cb cb, void *user_data);
+bool mesh_db_read_node(json_object *jnode, struct mesh_db_node *node);
 bool mesh_db_add_node(json_object *jnode, struct mesh_db_node *db_node,
 							struct mesh_node *node);
 bool mesh_db_read_iv_index(json_object *jobj, uint32_t *idx, bool *update);

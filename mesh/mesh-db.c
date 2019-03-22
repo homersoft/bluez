@@ -37,6 +37,7 @@
 #include "mesh/storage.h"
 
 #define CHECK_KEY_IDX_RANGE(x) (((x) >= 0) && ((x) <= 4095))
+#define CHECK_ELEMENT_IDX_RANGE(x) (((x) >= 0) && ((x) <= 63))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 static bool get_int(json_object *jobj, const char *keyword, int *value)
@@ -87,21 +88,16 @@ static bool add_uuid(json_object *jobject, const char *desc, uint8_t *uuid)
 static json_object *get_element_model(json_object *jnode, int ele_idx,
 						uint32_t mod_id, bool vendor)
 {
-	json_object *jelements, *jelement, *jmodels;
-	int i, num_mods;
-	size_t len;
+	json_object *jelements, *jelement, *jmodels, *jmodel;
 	char buf[9];
-
-	if (!vendor)
-		snprintf(buf, 5, "%4.4x", (uint16_t)mod_id);
-	else
-		snprintf(buf, 9, "%8.8x", mod_id);
 
 	json_object_object_get_ex(jnode, "elements", &jelements);
 	if (!jelements)
 		return NULL;
 
-	jelement = json_object_array_get_idx(jelements, ele_idx);
+	sprintf(buf, "%u", ele_idx);
+
+	json_object_object_get_ex(jelements, buf, &jelement);
 	if (!jelement)
 		return NULL;
 
@@ -109,36 +105,16 @@ static json_object *get_element_model(json_object *jnode, int ele_idx,
 	if (!jmodels)
 		return NULL;
 
-	num_mods = json_object_array_length(jmodels);
-	if (!num_mods)
+	if (!vendor)
+		snprintf(buf, 5, "%4.4x", mod_id);
+	else
+		snprintf(buf, 9, "%8.8x", mod_id);
+
+	json_object_object_get_ex(jmodels, buf, &jmodel);
+	if (!jmodel)
 		return NULL;
 
-	if (!vendor) {
-		snprintf(buf, 5, "%4.4x", mod_id);
-		len = 4;
-	} else {
-		snprintf(buf, 9, "%8.8x", mod_id);
-		len = 8;
-	}
-
-	for (i = 0; i < num_mods; ++i) {
-		json_object *jmodel, *jvalue;
-		char *str;
-
-		jmodel = json_object_array_get_idx(jmodels, i);
-		json_object_object_get_ex(jmodel, "modelId", &jvalue);
-		if (!jvalue)
-			return NULL;
-
-		str = (char *)json_object_get_string(jvalue);
-		if (!str)
-			return NULL;
-
-		if (!strncmp(str, buf, len))
-			return jmodel;
-	}
-
-	return NULL;
+	return jmodel;
 }
 
 static bool jarray_has_string(json_object *jarray, char *str, size_t len)
@@ -826,69 +802,70 @@ fail:
 
 static bool parse_models(json_object *jmodels, struct mesh_db_element *ele)
 {
-	int num_models = json_object_array_length(jmodels);
+	struct json_object_iterator iter, end;
+	const char *jidx;
+	json_object *jtemp, *jvalue;
 
-	if (!num_models)
-		return true;
+	iter = json_object_iter_begin(jmodels);
+	end = json_object_iter_end(jmodels);
 
-	for (int i = 0; i < num_models; ++i) {
-		json_object *jarray, *jvalue;
-		struct mesh_db_model *mod;
-		uint32_t id;
+	while (!json_object_iter_equal(&iter, &end)) {
+		uint32_t idx;
 		int len;
-		const char *str;
+		char *str_end, *str;
+		struct mesh_db_model *mod;
+		json_object *jbindings , *jpublications, *jsubscriptions;
 
-		json_object *jmodel = json_object_array_get_idx(jmodels, i);
+		jidx = json_object_iter_peek_name(&iter);
+		jtemp = json_object_iter_peek_value(&iter);
 
-		if (!jmodel)
-			goto fail;
-
-		mod = l_new(struct mesh_db_model, 1);
-		if (!ele)
-			goto fail;
-
-		str = (char *)json_object_get_string(jmodel);
-
-		len = strlen(str);
-
-		if (len != 4 && len != 8)
-			goto fail;
+		len = strlen(jidx);
 
 		if (len == 4) {
-			if (sscanf(str, "%04x", &id) != 1)
+			if (sscanf(jidx, "%04x", &idx) != 1)
 				goto fail;
 
-			id |= VENDOR_ID_MASK;
+			idx |= VENDOR_ID_MASK;
 		} else if (len == 8) {
-			if (sscanf(str, "%08x", &id) != 1)
+			if (sscanf(jidx, "%08x", &idx) != 1)
 				goto fail;
 		} else
 			goto fail;
 
-		mod->id = id;
+		if (json_object_get_type(jtemp) != json_type_object)
+			return false;
 
-		if (len == 8)
-			mod->vendor = true;
-
-		json_object_object_get_ex(jmodel, "bind", &jarray);
-
-		if (jarray && (json_object_get_type(jarray) != json_type_array
-					|| !parse_bindings(jarray, mod)))
+		mod = l_new(struct mesh_db_model, 1);
+		if (!mod)
 			goto fail;
 
-		json_object_object_get_ex(jmodel, "publish", &jvalue);
-		if (jvalue) {
-			mod->pub = parse_model_publication(jvalue);
+		mod->id = idx;
+		if (len == 8)
+			mod->vendor = true;
+		else
+			mod->vendor = false;
+
+		json_object_object_get_ex(jtemp, "bind", &jbindings);
+
+		if (jbindings && (json_object_get_type(jbindings) != json_type_array
+					|| !parse_bindings(jbindings, mod)))
+			goto fail;
+
+		json_object_object_get_ex(jtemp, "publish", &jpublications);
+		if (jpublications) {
+			mod->pub = parse_model_publication(jpublications);
 			if (!mod->pub)
 				goto fail;
 		}
 
-		json_object_object_get_ex(jmodel, "subscribe", &jarray);
+		json_object_object_get_ex(jtemp, "subscribe", &jsubscriptions);
 
-		if (jarray && !parse_model_subscriptions(jarray, mod))
+		if (jsubscriptions && !parse_model_subscriptions(jsubscriptions, mod))
 			goto fail;
 
 		l_queue_push_tail(ele->models, mod);
+
+		json_object_iter_next(&iter);
 	}
 
 	return true;
@@ -900,56 +877,59 @@ fail:
 
 static bool parse_elements(json_object *jelements, struct mesh_db_node *node)
 {
+	struct json_object_iterator iter, end;
+	const char *jidx;
+	json_object *jtemp, *jvalue;
+
 	node->elements = l_queue_new();
 	if (!node->elements)
 		return false;
 
-	for (uint16_t ele_nr = 0;; ele_nr++) {
-		json_object *jelement;
-		json_object *jlocation;
-		json_object *jmodels;
+	if (json_object_get_type(jelements) != json_type_object)
+		return false;
+
+	iter = json_object_iter_begin(jelements);
+	end = json_object_iter_end(jelements);
+
+	while (!json_object_iter_equal(&iter, &end)) {
+		int idx;
+		char *str_end, *str;
 		struct mesh_db_element *ele;
-		int elementIndex;
-		const char *str;
-		/* Convert integer to string */
-		char int_as_str[6];
+		json_object *jmodels, *jlocation;
 
-		sprintf(int_as_str, "%u", ele_nr);
+		jidx = json_object_iter_peek_name(&iter);
+		jtemp = json_object_iter_peek_value(&iter);
 
-		if (!json_object_object_get_ex(jelements, int_as_str,
-			 &jelement)) {
-			/* End of elements */
-			return true;
-		}
+		if (!*jidx)
+			return false;
 
-		if (!get_int(jelement, "elementIndex", &elementIndex))
-			goto fail;
+		idx = strtol(jidx, &str_end, 10);
+		if (*str_end || !CHECK_ELEMENT_IDX_RANGE(idx))
+			return false;
+
+		if (json_object_get_type(jtemp) != json_type_object)
+			return false;
 
 		ele = l_new(struct mesh_db_element, 1);
-
 		if (!ele)
 			goto fail;
 
-		/* Store elIdx in the structure */
-		ele->index = elementIndex;
-
+		ele->index = idx;
 		ele->models = l_queue_new();
 		if (!ele->models)
 			goto fail;
 
-		if (!json_object_object_get_ex(jelement, "location",
+		if (!json_object_object_get_ex(jtemp, "location",
 			 &jlocation))
 			goto fail;
 
-		str = json_object_get_string(jlocation);
-
-		/* Store location in the structure */
+		str = (char*)json_object_get_string(jlocation);
 		if (sscanf(str, "%04hx", &(ele->location)) != 1)
 			goto fail;
 
-		if (json_object_object_get_ex(jelement, "models", &jmodels))
+		if (json_object_object_get_ex(jtemp, "models", &jmodels))
 		{
-			if (json_object_get_type(jmodels) != json_type_array)
+			if (json_object_get_type(jmodels) != json_type_object)
 				goto fail;
 
 			if (!parse_models(jmodels, ele))
@@ -957,7 +937,10 @@ static bool parse_elements(json_object *jelements, struct mesh_db_node *node)
 		}
 
 		l_queue_push_tail(node->elements, ele);
+		json_object_iter_next(&iter);
 	}
+
+	return true;
 
 fail:
 	l_queue_destroy(node->elements, free_element);
@@ -1126,45 +1109,45 @@ static bool parse_composition(json_object *jcomp, struct mesh_db_node *node)
 	if (sscanf(str, "%04hx", &node->vid) != 1)
 		return false;
 
+	json_object_object_get_ex(jcomp, "crpl", &jvalue);
+	if (!jvalue)
+		return false;
+
+	str = (char *)json_object_get_string(jvalue);
+	if (sscanf(str, "%04hx", &node->crpl) != 1)
+		return false;
+
 	return true;
 }
 
-bool mesh_db_read_node(json_object *jnode, mesh_db_node_cb cb, void *user_data)
+bool mesh_db_read_node(json_object *jnode, struct mesh_db_node *node)
 {
-	struct mesh_db_node node;
 	json_object *jvalue;
 
-	if (!cb) {
-		l_info("Node read callback is required");
-		return false;
-	}
-
-	memset(&node, 0, sizeof(node));
-
 	/* Parse IV idx and IV update flag */
-	if (!parse_iv_idx(jnode, &node))
+	if (!parse_iv_idx(jnode, node))
 		l_info("Failed to parse IV index and IV update");
 
 	/* Parse UUID */
-	if (!parse_uuid(jnode, &node)) {
+	if (!parse_uuid(jnode, node)) {
 		l_info("Failed to parse uuid");
 		return false;
 	}
 
 	/* Parse keys */
-	if (!parse_keys(jnode, &node)) {
+	if (!parse_keys(jnode, node)) {
 		l_info("Failed to parse device key");
 		return false;
 	}
 
 	/* Parse Composition Data */
-	if (!parse_composition(jnode, &node)) {
+	if (!parse_composition(jnode, node)) {
 		l_info("Failed to parse local node composition");
 		return false;
 	}
 
 	/* Parse features */
-	parse_features(jnode, &node);
+	parse_features(jnode, node);
 
 	/* Parse unicast */
 	json_object_object_get_ex(jnode, "unicastAddress", &jvalue);
@@ -1172,7 +1155,7 @@ bool mesh_db_read_node(json_object *jnode, mesh_db_node_cb cb, void *user_data)
 	if (jvalue) {
 		char *str = (char *)json_object_get_string(jvalue);
 
-		if (sscanf(str, "%04hx", &node.unicast) != 1)
+		if (sscanf(str, "%04hx", &(node->unicast)) != 1)
 			l_error("Failed to parse unicast address");
 	} else
 		l_info("Unicast address not available - node is not provisioned");
@@ -1187,7 +1170,7 @@ bool mesh_db_read_node(json_object *jnode, mesh_db_node_cb cb, void *user_data)
 			l_info("Wrong TTL parameter during parsing data");
 			return false;
 		}
-		node.ttl = (uint8_t) ttl;
+		node->ttl = (uint8_t) ttl;
 	} else {
 		l_info("Failed to parse TTL");
 	}
@@ -1196,7 +1179,7 @@ bool mesh_db_read_node(json_object *jnode, mesh_db_node_cb cb, void *user_data)
 	json_object_object_get_ex(jnode, "sequenceNumber", &jvalue);
 
 	if (jvalue)
-		node.seq_number = json_object_get_int(jvalue);
+		node->seq_number = json_object_get_int(jvalue);
 	else
 		l_info("Failed to parse sequence number");
 
@@ -1204,7 +1187,7 @@ bool mesh_db_read_node(json_object *jnode, mesh_db_node_cb cb, void *user_data)
 	json_object_object_get_ex(jnode, "advertising", &jvalue);
 
 	if (jvalue)
-		node.is_advertising = json_object_get_boolean(jvalue);
+		node->is_advertising = json_object_get_boolean(jvalue);
 	else
 		l_info("Failed to parse advertising state");
 
@@ -1213,7 +1196,7 @@ bool mesh_db_read_node(json_object *jnode, mesh_db_node_cb cb, void *user_data)
 
 	if (jvalue && json_object_get_type(jvalue) == json_type_object) {
 
-		if (!parse_elements(jvalue, &node)) {
+		if (!parse_elements(jvalue, node)) {
 			l_info("Failed to parse elements");
 			return false;
 		}
@@ -1221,25 +1204,6 @@ bool mesh_db_read_node(json_object *jnode, mesh_db_node_cb cb, void *user_data)
 		l_info("Failed to parse elements: wrong JSON object type");
 	}
 
-	return cb(&node, user_data);
-}
-
-bool mesh_db_write_model_id(json_object *jobj, struct mesh_db_model *mod)
-{
-	char buf[9];
-	json_object *jstring;
-
-	if (!mod->vendor)
-		snprintf(buf, 5, "%4.4x", (uint16_t)mod->id);
-	else
-		snprintf(buf, 9, "%8.8x", mod->id);
-
-	jstring = json_object_new_string(buf);
-
-	if (!jstring)
-		return false;
-
-	json_object_array_add(jobj, jstring);
 	return true;
 }
 
@@ -1418,8 +1382,22 @@ static void add_model(void *a, void *b)
 {
 	struct mesh_db_model *mod = a;
 	json_object *jmodels = b;
+	char buf[9];
+	json_object *jmodel;
 
-	(void)mesh_db_write_model_id(jmodels, mod);
+	if (!mod->vendor)
+		snprintf(buf, 5, "%4.4x", (uint16_t)mod->id);
+	else
+		snprintf(buf, 9, "%8.8x", mod->id);
+
+	jmodel = json_object_new_object();
+
+	if (!jmodel) {
+		json_object_put(jmodels);
+		return;
+	}
+
+	json_object_object_add(jmodels, buf, jmodel);
 }
 
 /* Add unprovisioned node (local) */
@@ -1439,6 +1417,10 @@ bool mesh_db_add_node(json_object *jnode,
 		return false;
 
 	if (!mesh_db_write_uint16_hex(jnode, "vid", db_node->vid))
+		return false;
+
+	/* CRPL -Cache Replay */
+	if (!mesh_db_write_uint16_hex(jnode, "crpl", db_node->crpl))
 		return false;
 
 	/* IV index and IV update flag */
@@ -1514,12 +1496,11 @@ bool mesh_db_add_node(json_object *jnode,
 		json_object *jmodels;
 		json_object *jsub_elements;
 
-		/* Convert idx to string value */
-		sprintf(int_as_str, "%d", idx);
+		/* Convert index to string value */
+		sprintf(int_as_str, "%d", ele->index);
 
 		jsub_elements = json_object_new_object();
 
-		mesh_db_write_int(jsub_elements, "elementIndex", ele->index);
 		mesh_db_write_uint16_hex(jsub_elements, "location",
 			ele->location);
 
@@ -1530,7 +1511,7 @@ bool mesh_db_add_node(json_object *jnode,
 		if (l_queue_isempty(ele->models))
 			continue;
 
-		jmodels = json_object_new_array();
+		jmodels = json_object_new_object();
 
 		if (!jmodels) {
 			json_object_put(jelements);

@@ -403,6 +403,9 @@ bool node_init_from_storage(struct mesh_node *node, void *data)
 	node->comp->pid = db_node->pid;
 	node->comp->vid = db_node->vid;
 
+	/* Cache Replay */
+	node->comp->crpl = db_node->crpl;
+
 	/* UUID and Device Key */
 	memcpy(node->dev_uuid, db_node->uuid, KEY_LEN);
 	memcpy(node->dev_key, db_node->dev_key, KEY_LEN);
@@ -1110,6 +1113,7 @@ static void convert_node_to_storage(struct mesh_node *node,
 
 	db_node->provisioned = node->net ? true : false;
 	db_node->modes.proxy = node->proxy;
+	db_node->crpl = node->comp->crpl;
 	db_node->seq_number = node->seq_number;
 	db_node->unicast = node->primary;
 	db_node->elements = l_queue_new();
