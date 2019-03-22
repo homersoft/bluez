@@ -659,7 +659,7 @@ static int set_pub(struct mesh_model *mod, const uint8_t *mod_addr,
 }
 
 static int add_sub(struct mesh_net *net, struct mesh_model *mod,
-			const uint8_t *group, bool b_virt, uint16_t *dst)
+			uint8_t *group, bool b_virt, uint16_t *dst)
 {
 	struct mesh_virtual *virt;
 	uint16_t grp;
@@ -668,14 +668,14 @@ static int add_sub(struct mesh_net *net, struct mesh_model *mod,
 		virt = l_queue_find(mesh_virtuals, find_virt_by_addr, group);
 		if (!virt) {
 			if (!mesh_crypto_virtual_addr(group, &grp))
-				return MESH_STATUS_STORAGE_FAIL;
+				return MESH_STATUS_UNSPECIFIED_ERROR;
 
 			virt = l_new(struct mesh_virtual, 1);
 			virt->id = virt_id_next++;
 			virt->ota = grp;
 			memcpy(virt->addr, group, sizeof(virt->addr));
 			if (!l_queue_push_head(mesh_virtuals, virt))
-				return MESH_STATUS_STORAGE_FAIL;
+				return MESH_STATUS_INSUFF_RESOURCES;
 		} else {
 			grp = virt->ota;
 		}
@@ -691,7 +691,7 @@ static int add_sub(struct mesh_net *net, struct mesh_model *mod,
 	if (!mod->subs)
 		mod->subs = l_queue_new();
 	if (!mod->subs)
-		return MESH_STATUS_STORAGE_FAIL;
+		return MESH_STATUS_INSUFF_RESOURCES;
 
 	if (l_queue_find(mod->subs, simple_match, L_UINT_TO_PTR(grp)))
 		/* Group already exists */
@@ -699,7 +699,7 @@ static int add_sub(struct mesh_net *net, struct mesh_model *mod,
 
 	l_queue_push_tail(mod->subs, L_UINT_TO_PTR(grp));
 
-	l_debug("Added subscription %4.4x", grp);
+	l_info("Added subscription %4.4x", grp);
 
 	mesh_net_dst_reg(net, grp);
 
@@ -1293,29 +1293,31 @@ int mesh_model_sub_get(struct mesh_node *node, uint16_t addr, uint32_t id,
 }
 
 int mesh_model_sub_add(struct mesh_node *node, uint16_t addr, uint32_t id,
-			const uint8_t *group, bool b_virt, uint16_t *dst)
+			const uint16_t *group, bool b_virt, uint16_t *dst)
 {
-	int fail = MESH_STATUS_SUCCESS;
+	int fail;
 	int ele_idx = -1;
 	struct mesh_model *mod;
 
 	ele_idx = node_get_element_idx(node, addr);
 
 	if (!node || ele_idx < 0) {
-		fail = MESH_STATUS_INVALID_ADDRESS;
-		return false;
+		return MESH_STATUS_INVALID_ADDRESS;
 	}
 
-	mod = get_model(node, (uint8_t) ele_idx, id, &fail);
-	if (!mod)
-		return fail;
+	mod = get_model(node, (uint8_t)ele_idx, id, &fail);
+	if (!mod || (fail != MESH_STATUS_SUCCESS))
+		return MESH_STATUS_INVALID_MODEL;
 
-	return add_sub(node_get_net(node), mod, group, b_virt, dst);
+	if (!storage_model_subscribe(node, (uint8_t)ele_idx, *group))
+		return MESH_STATUS_STORAGE_FAIL;
+
+	return add_sub(node_get_net(node), mod, (uint8_t *)group, b_virt, dst);
 	/* TODO: communicate to registered models that sub has changed */
 }
 
 int mesh_model_sub_ovr(struct mesh_node *node, uint16_t addr, uint32_t id,
-			const uint8_t *group, bool b_virt, uint16_t *dst)
+			const uint16_t *group, bool b_virt, uint16_t *dst)
 {
 	int fail = MESH_STATUS_SUCCESS;
 	struct l_queue *virtuals, *subs;
