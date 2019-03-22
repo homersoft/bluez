@@ -56,10 +56,8 @@ struct write_info {
 
 static const char *storage_dir;
 
-static bool read_node_cb(struct mesh_db_node *db_node, void *user_data)
+static bool read_node(struct mesh_db_node *db_node, struct mesh_node *node)
 {
-	struct mesh_node *node = user_data;
-
 	if (!node_init_from_storage(node, db_node)) {
 		node_free(node);
 		l_info("Cannot initialize from storage");
@@ -110,8 +108,14 @@ static bool parse_node(struct mesh_node *node, json_object *jnode)
 {
 	uint8_t dev_key_buf[KEY_LEN];
 	struct mesh_net *net;
+	struct mesh_db_node db_node;
 
-	if (!mesh_db_read_node(jnode, read_node_cb, node))
+	memset(&db_node, 0, sizeof(db_node));
+
+	if (!mesh_db_read_node(jnode, &db_node))
+		return false;
+
+	if (!read_node(&db_node, node))
 		return false;
 
 	net = node_get_net(node);
