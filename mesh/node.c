@@ -50,7 +50,7 @@
 /* Default element location: unknown */
 #define DEFAULT_LOCATION 0x0000
 
-#define DEFAULT_CRPL 10
+#define DEFAULT_CRPL 32768
 #define DEFAULT_SEQUENCE_NUMBER 0
 
 struct node_element {
