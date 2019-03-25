@@ -75,9 +75,7 @@ struct mesh_node {
 	void *jconfig;
 	char *cfg_file;
 	uint32_t disc_watch;
-	time_t upd_sec;
 	uint32_t seq_number;
-	uint32_t seq_min_cache;
 	uint8_t id[KEY_LEN];
 	bool provisioner;
 	uint16_t primary;
@@ -607,34 +605,7 @@ bool node_set_sequence_number(struct mesh_node *node, uint32_t seq)
 		return false;
 
 	node->seq_number = seq;
-
-	/*
-	 * Holistically determine worst case 5 minute sequence consumption
-	 * so that we typically (once we reach a steady state) rewrite the
-	 * local node file with a new seq cache value no more than once every
-	 * five minutes (or more)
-	 */
-	gettimeofday(&write_time, NULL);
-	if (node->upd_sec) {
-		uint32_t elapsed = write_time.tv_sec - node->upd_sec;
-
-		if (elapsed < MIN_SEQ_CACHE_TIME) {
-			uint32_t ideal = node->seq_min_cache;
-
-			l_debug("Old Seq Cache: %d", node->seq_min_cache);
-
-			ideal *= (MIN_SEQ_CACHE_TIME / elapsed);
-
-			if (ideal > node->seq_min_cache + MIN_SEQ_CACHE)
-				node->seq_min_cache = ideal;
-			else
-				node->seq_min_cache += MIN_SEQ_CACHE;
-
-			l_debug("New Seq Cache: %d", node->seq_min_cache);
-		}
-	}
-
-	node->upd_sec = write_time.tv_sec;
+	mesh_net_set_seq_num(node->net, seq);
 
 	return storage_write_sequence_number(node->net, seq);
 }
@@ -645,14 +616,6 @@ uint32_t node_get_sequence_number(struct mesh_node *node)
 		return 0xffffffff;
 
 	return node->seq_number;
-}
-
-uint32_t node_seq_cache(struct mesh_node *node)
-{
-	if (node->seq_min_cache < MIN_SEQ_CACHE)
-		node->seq_min_cache = MIN_SEQ_CACHE;
-
-	return node->seq_min_cache;
 }
 
 int node_get_element_idx(struct mesh_node *node, uint16_t ele_addr)
@@ -1802,6 +1765,47 @@ static bool node_elements_getter(struct l_dbus *dbus,
 	return true;
 }
 
+static bool node_sequence_getter(struct l_dbus *dbus,
+				struct l_dbus_message *message,
+				struct l_dbus_message_builder *builder,
+				void *user_data)
+{
+	struct mesh_node *node = user_data;
+
+	if (!node)
+		return false;
+
+	if (!l_dbus_message_builder_append_basic(builder, 'u',
+			&(node->seq_number)))
+		return false;
+
+	return true;
+}
+
+static struct l_dbus_message *node_sequence_setter(struct l_dbus *dbus,
+				struct l_dbus_message *message,
+				struct l_dbus_message_iter *new_value,
+				l_dbus_property_complete_cb_t complete,
+				void *user_data)
+{
+	struct mesh_node *node = user_data;
+	uint32_t seq_number;
+
+	if (!node)
+		return dbus_error(message, MESH_ERROR_DOES_NOT_EXIST, NULL);
+
+	if (!l_dbus_message_iter_get_variant(new_value, "u",
+				&seq_number))
+		return dbus_error(message, MESH_ERROR_INVALID_ARGS, NULL);
+
+	if (!node_set_sequence_number(node, seq_number))
+		return dbus_error(message, MESH_ERROR_FAILED, NULL);
+
+	complete(dbus, message, NULL);
+
+	return NULL;
+}
+
 static void setup_node_interface(struct l_dbus_interface *interface)
 {
 	l_dbus_interface_method(interface, "SendMessage", 0,
@@ -1826,6 +1830,9 @@ static void setup_node_interface(struct l_dbus_interface *interface)
 
 	l_dbus_interface_property(interface, "Elements", 0, "a{y(qaq)}",
 				node_elements_getter, NULL);
+
+	l_dbus_interface_property(interface, "Sequence", 0, "u",
+				node_sequence_getter, node_sequence_setter);
 }
 
 bool node_dbus_init(struct l_dbus *bus)
