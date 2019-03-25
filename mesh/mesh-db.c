@@ -227,7 +227,7 @@ bool mesh_db_read_uuid(json_object *jobj, uint8_t uuid_buf[KEY_LEN])
 
 	str = json_object_get_string(jvalue);
 
-	if (!l_uuid_parse(str, UUID_LEN, &uuid_buf[0]))
+	if (!l_uuid_from_string(str, &uuid_buf[0]))
 		return false;
 
 	return true;

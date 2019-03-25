@@ -490,7 +490,7 @@ bool storage_load_nodes(const char *dir_name)
 				dir_name, entry->d_name);
 
 		/* Discard all non-uuid formats instances */
-		if (!l_uuid_parse(entry->d_name, UUID_LEN, &node_id[0]))
+		if (!l_uuid_from_string(entry->d_name, &node_id[0]))
 			continue;
 
 		len = strlen(name_buf);
