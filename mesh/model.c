@@ -699,7 +699,7 @@ static int add_sub(struct mesh_net *net, struct mesh_model *mod,
 
 	l_queue_push_tail(mod->subs, L_UINT_TO_PTR(grp));
 
-	l_info("Added subscription %4.4x", grp);
+	l_debug("Added subscription %4.4x", grp);
 
 	mesh_net_dst_reg(net, grp);
 
@@ -1297,6 +1297,7 @@ int mesh_model_sub_add(struct mesh_node *node, uint16_t addr, uint32_t id,
 {
 	int fail;
 	int ele_idx = -1;
+
 	struct mesh_model *mod;
 
 	ele_idx = node_get_element_idx(node, addr);
@@ -1309,7 +1310,9 @@ int mesh_model_sub_add(struct mesh_node *node, uint16_t addr, uint32_t id,
 	if (!mod || (fail != MESH_STATUS_SUCCESS))
 		return MESH_STATUS_INVALID_MODEL;
 
-	if (!storage_model_subscribe(node, (uint8_t)ele_idx, *group))
+	id = (id >= VENDOR_ID_MASK) ? (id & 0xffff) : id;
+
+	if (!storage_model_subscribe(node, (uint8_t)ele_idx, id, *group))
 		return MESH_STATUS_STORAGE_FAIL;
 
 	return add_sub(node_get_net(node), mod, (uint8_t *)group, b_virt, dst);
