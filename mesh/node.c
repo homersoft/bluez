@@ -1753,17 +1753,24 @@ static bool node_elements_getter(struct l_dbus *dbus,
 	if (!node)
 		return false;
 
-	if (!l_dbus_message_builder_enter_array(builder, "{yaq}"))
+	if (!l_dbus_message_builder_enter_array(builder, "{y(qaq)}"))
 		return false;
 
 	for (element_obj = l_queue_get_entries(node->elements); element_obj;
 			element_obj = element_obj->next) {
 		element = element_obj->data;
 
-		if (!l_dbus_message_builder_enter_dict(builder, "yaq"))
+		if (!l_dbus_message_builder_enter_dict(builder, "y(qaq)"))
 			return false;
 
 		if (!l_dbus_message_builder_append_basic(builder, 'y',
+				&(element->idx)))
+			return false;
+
+		if (!l_dbus_message_builder_enter_struct(builder, "qaq"))
+			return false;
+
+		if (!l_dbus_message_builder_append_basic(builder, 'q',
 				&(element->location)))
 			return false;
 
@@ -1779,8 +1786,10 @@ static bool node_elements_getter(struct l_dbus *dbus,
 					&model_id))
 				return false;
 		}
-
 		if (!l_dbus_message_builder_leave_array(builder))
+			return false;
+
+		if (!l_dbus_message_builder_leave_struct(builder))
 			return false;
 
 		if (!l_dbus_message_builder_leave_dict(builder))
@@ -1815,7 +1824,7 @@ static void setup_node_interface(struct l_dbus_interface *interface)
 	l_dbus_interface_property(interface, "ApplicationKeys", 0, "a{qay}",
 				node_application_keys_getter, NULL);
 
-	l_dbus_interface_property(interface, "Elements", 0, "a{yaq}",
+	l_dbus_interface_property(interface, "Elements", 0, "a{y(qaq)}",
 				node_elements_getter, NULL);
 }
 
