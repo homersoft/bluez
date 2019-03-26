@@ -536,29 +536,25 @@ static int set_pub(struct mesh_model *mod, const uint8_t *mod_addr,
 }
 
 static int add_sub(struct mesh_net *net, struct mesh_model *mod,
-			uint8_t *group, uint16_t *dst)
+			uint16_t group, uint16_t *dst)
 {
-	uint16_t grp;
-
-	grp = l_get_le16(group);
-
 	if (dst)
-		*dst = grp;
+		*dst = group;
 
 	if (!mod->subs)
 		mod->subs = l_queue_new();
 	if (!mod->subs)
 		return MESH_STATUS_INSUFF_RESOURCES;
 
-	if (l_queue_find(mod->subs, simple_match, L_UINT_TO_PTR(grp)))
+	if (l_queue_find(mod->subs, simple_match, L_UINT_TO_PTR(group)))
 		/* Group already exists */
 		return MESH_STATUS_SUCCESS;
 
-	l_queue_push_tail(mod->subs, L_UINT_TO_PTR(grp));
+	l_queue_push_tail(mod->subs, L_UINT_TO_PTR(group));
 
-	l_debug("Added subscription %4.4x", grp);
+	l_debug("Added subscription %4.4x", group);
 
-	mesh_net_dst_reg(net, grp);
+	mesh_net_dst_reg(net, group);
 
 	return MESH_STATUS_SUCCESS;
 }
@@ -1140,10 +1136,13 @@ int mesh_model_sub_add(struct mesh_node *node, uint16_t addr, uint32_t id,
 	int fail;
 	int ele_idx = -1;
 	struct mesh_model *mod;
+	uint16_t grp;
 
 	/* FIXME */
 	if (b_virt)
 		return MESH_STATUS_FEATURE_NO_SUPPORT;
+
+	grp = l_get_le16(group);
 
 	ele_idx = node_get_element_idx(node, addr);
 
@@ -1157,10 +1156,10 @@ int mesh_model_sub_add(struct mesh_node *node, uint16_t addr, uint32_t id,
 
 	id = (id >= VENDOR_ID_MASK) ? (id & 0xffff) : id;
 
-	if (!storage_model_subscribe(node, (uint8_t)ele_idx, id, (uint8_t*)group))
+	if (!storage_model_subscribe(node, (uint8_t)ele_idx, id, grp))
 		return MESH_STATUS_STORAGE_FAIL;
 
-	return add_sub(node_get_net(node), mod, (uint8_t*)group, dst);
+	return add_sub(node_get_net(node), mod, grp, dst);
 	/* TODO: communicate to registered models that sub has changed */
 }
 
@@ -1322,7 +1321,7 @@ struct mesh_model *mesh_model_setup(struct mesh_node *node, uint8_t ele_idx,
 		src = db_mod->subs[i].virt ? db_mod->subs[i].src.virt_addr :
 			(uint8_t *) &group;
 
-		if (add_sub(net, mod, src, NULL) !=
+		if (add_sub(net, mod, group, NULL) !=
 							MESH_STATUS_SUCCESS) {
 			mesh_model_free(mod);
 			return NULL;

@@ -243,16 +243,15 @@ bool storage_set_mode(json_object *jnode, uint8_t mode,
 }
 
 bool storage_model_subscribe(struct mesh_node *node, uint8_t ele_idx,
-				uint32_t mod_id, uint8_t *group)
+				uint32_t mod_id, uint16_t group)
 {
 	json_object *jnode;
 	bool is_vendor = (mod_id > 0xffff);
-	uint16_t grp = l_get_le16(group);
 
 	jnode = node_jconfig_get(node);
 
 	return mesh_db_model_subscription_add(jnode, ele_idx,
-				is_vendor, mod_id, grp);
+				is_vendor, mod_id, group);
 }
 
 bool storage_model_bind(struct mesh_node *node, uint16_t addr, uint32_t mod_id,
