@@ -32,7 +32,7 @@ void storage_remove_node_config(struct mesh_node *node);
 bool storage_save_config(struct mesh_node *node, bool no_wait,
 					mesh_status_func_t cb, void *user_data);
 bool storage_model_subscribe(struct mesh_node *node, uint8_t ele_idx,
-				uint32_t mod_id, uint16_t group);
+				uint32_t mod_id, uint8_t *group);
 bool storage_model_bind(struct mesh_node *node, uint16_t addr, uint32_t id,
 						uint16_t app_idx, bool unbind);
 

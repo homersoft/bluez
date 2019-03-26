@@ -112,14 +112,14 @@ int mesh_model_binding_del(struct mesh_node *node, uint16_t addr, uint32_t id,
 int mesh_model_get_bindings(struct mesh_node *node, uint16_t addr, uint32_t id,
 				uint8_t *buf, uint16_t buf_len, uint16_t *size);
 int mesh_model_sub_add(struct mesh_node *node, uint16_t addr, uint32_t id,
-						const uint16_t *group, bool b_virt,
+						const uint8_t *group, bool b_virt,
 						uint16_t *dst);
 int mesh_model_sub_del(struct mesh_node *node, uint16_t addr, uint32_t id,
 						const uint8_t *grp, bool b_virt,
 						uint16_t *dst);
 int mesh_model_sub_del_all(struct mesh_node *node, uint16_t addr, uint32_t id);
 int mesh_model_sub_ovr(struct mesh_node *node, uint16_t addr, uint32_t id,
-						const uint16_t *grp, bool b_virt,
+						const uint8_t *grp, bool b_virt,
 						uint16_t *dst);
 int mesh_model_sub_get(struct mesh_node *node, uint16_t addr, uint32_t id,
 			uint8_t *buf, uint16_t buf_size, uint16_t *size);
