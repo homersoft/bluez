@@ -142,6 +142,8 @@ bool mesh_db_write_bool(json_object *jobj, const char *keyword, bool value);
 bool mesh_db_write_relay_mode(json_object *jnode, uint8_t mode, uint8_t count,
 							uint16_t interval);
 bool mesh_db_write_mode(json_object *jobj, const char *keyword, int value);
+bool mesh_db_model_subscription_add(json_object *jnode, uint8_t ele_idx,
+				bool vendor, uint32_t mod_id, uint16_t group);
 bool mesh_db_model_binding_add(json_object *jnode, uint8_t ele_idx, bool vendor,
 					uint32_t mod_id, uint16_t app_idx);
 bool mesh_db_model_binding_del(json_object *jnode, uint8_t ele_idx, bool vendor,

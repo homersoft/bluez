@@ -549,6 +549,41 @@ bool mesh_db_app_key_del(json_object *jobj, uint16_t net_idx, uint16_t idx)
 	return true;
 }
 
+bool mesh_db_model_subscription_add(json_object *jnode, uint8_t ele_idx,
+				bool vendor, uint32_t mod_id, uint16_t group)
+{
+	json_object *jmodel, *jstring, *jarray;
+	char buf[5];
+
+	jmodel = get_element_model(jnode, ele_idx, mod_id, vendor);
+	if (!jmodel)
+		return false;
+
+	json_object_object_get_ex(jmodel, "subscribe", &jarray);
+
+	snprintf(buf, 5, "%4.4x", group);
+
+	if (jarray && jarray_has_string(jarray, buf, 4))
+		return true;
+
+	jstring = json_object_new_string(buf);
+	if (!jstring)
+		return false;
+
+	if (!jarray) {
+		jarray = json_object_new_array();
+		if (!jarray) {
+			json_object_put(jstring);
+			return false;
+		}
+		json_object_object_add(jmodel, "subscribe", jarray);
+	}
+
+	json_object_array_add(jarray, jstring);
+
+	return true;
+}
+
 bool mesh_db_model_binding_add(json_object *jnode, uint8_t ele_idx, bool vendor,
 				uint32_t mod_id, uint16_t app_idx)
 {
