@@ -363,13 +363,15 @@ static bool msg_send(struct mesh_node *node, bool credential, uint16_t src,
 	bool szmic = false;
 	uint16_t out_len = msg_len + sizeof(uint32_t);
 	struct mesh_net *net = node_get_net(node);
-
+	const uint8_t long_mic_len = out_len + 4;
+	uint8_t *payload = (uint8_t *)msg;
+	
 	/* Use large MIC if it doesn't affect segmentation */
-	if (msg_len > 11 && msg_len <= 376) {
-		if ((out_len / 12) == ((out_len + 4) / 12)) {
-			szmic = true;
-			out_len = msg_len + sizeof(uint64_t);
-		}
+	if (((out_len / 12) + (out_len % 12 != 0)) ==
+		((long_mic_len / 12) + (long_mic_len % 12 != 0))) {
+
+		szmic = true;
+		out_len = msg_len + sizeof(uint64_t);
 	}
 
 	out = l_malloc(out_len);
