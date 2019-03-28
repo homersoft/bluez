@@ -572,8 +572,6 @@ static void send_msg_rcvd(struct mesh_node *node, uint8_t ele_idx, bool is_sub,
 
 	char path[(KEY_LEN * 2) + MESH_NODE_PATH_PREFIX_LEN + 6] = {'\0'};
 
-	l_debug("Emit \"MessageReceived\" signal");
-
 	get_node_path_from_uuid(path, node_uuid_get(node));
 
 	msg = l_dbus_message_new_signal(dbus, path,
@@ -619,11 +617,15 @@ static void send_msg_rcvd(struct mesh_node *node, uint8_t ele_idx, bool is_sub,
 	if (!l_dbus_message_builder_finalize(builder))
 		goto error;
 
+	l_info("Emit \"MessageReceived\" signal");
+
 	/* Emit signal */
 	l_dbus_send(dbus, msg);
 
+	return;
+
 error:
-	l_error("MessageReceived signal\r\n");
+	l_error("MessageReceived error\r\n");
 	l_dbus_message_builder_destroy(builder);
 }
 
