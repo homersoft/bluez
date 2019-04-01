@@ -40,6 +40,8 @@
 #include "mesh/util.h"
 #include "mesh/model.h"
 
+#define CEILDIV(val, div)	((val / div) + (val % div != 0))
+
 struct mesh_model {
 	const struct mesh_model_ops *cbs;
 	void *user_data;
@@ -367,9 +369,7 @@ static bool msg_send(struct mesh_node *node, bool credential, uint16_t src,
 	uint8_t *payload = (uint8_t *)msg;
 	
 	/* Use large MIC if it doesn't affect segmentation */
-	if (((out_len / 12) + (out_len % 12 != 0)) ==
-		((long_mic_len / 12) + (long_mic_len % 12 != 0))) {
-
+	if (CEILDIV(out_len, 12) == CEILDIV(long_mic_len, 12)) {
 		szmic = true;
 		out_len = msg_len + sizeof(uint64_t);
 	}
