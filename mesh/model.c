@@ -411,9 +411,11 @@ static bool msg_send(struct mesh_node *node, bool credential, uint16_t src,
 	uint8_t *payload = (uint8_t *)msg;
 	
 	/* Use large MIC if it doesn't affect segmentation */
-	if (CEILDIV(out_len, 12) == CEILDIV(long_mic_len, 12)) {
-		szmic = true;
-		out_len = msg_len + sizeof(uint64_t);
+	if (msg_len > 11 && msg_len <= 376) {
+		if (CEILDIV(out_len, 12) == CEILDIV(long_mic_len, 12)) {
+			szmic = true;
+			out_len = msg_len + sizeof(uint64_t);
+		}
 	}
 
 	out = l_malloc(out_len);
