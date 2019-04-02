@@ -1298,6 +1298,7 @@ static bool send_message(struct mesh_node *node, uint16_t element,
 	uint32_t opcode_temp;
 	uint16_t opcode_len_temp;
 
+	/* Verifying opcode validity. */
 	if (!mesh_model_opcode_get(opcode, opcode_len, &opcode_temp,
 				&opcode_len_temp))
 		return false;
