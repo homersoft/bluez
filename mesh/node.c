@@ -1295,6 +1295,12 @@ static bool send_message(struct mesh_node *node, uint16_t element,
 	struct l_dbus_message_iter device_key_iter;
 	uint8_t device_key[KEY_LEN];
 	uint8_t device_key_len;
+	uint32_t opcode_temp;
+	uint16_t opcode_len_temp;
+
+	if (!mesh_model_opcode_get(opcode, opcode_len, &opcode_temp,
+				&opcode_len_temp))
+		return false;
 
 	src = node_get_primary(node) + element;
 
@@ -1509,20 +1515,23 @@ static struct l_dbus_message *send_message_call(struct l_dbus *dbus,
 	struct l_dbus_message_iter iter_opcode, iter_payload;
 	struct l_dbus_message_iter key_variant;
 	struct mesh_node *node = user_data;
-	uint8_t opcode[MESH_MAX_OPCODE];
-	uint8_t payload[MESH_MAX_ACCESS_PAYLOAD];
+	uint8_t opcode[MESH_MAX_OPCODE + 1];
+	uint8_t payload[MESH_MAX_ACCESS_PAYLOAD + 1];
 	uint16_t element, dest, payload_len, opcode_len;
 
-	l_info("Send message call");
+	l_debug("Send message call");
 
 	if (!l_dbus_message_get_arguments(message, "qqayayv", &element, &dest,
 			&iter_opcode, &iter_payload, &key_variant)) {
 		return dbus_error(message, MESH_ERROR_INVALID_ARGS, NULL);
 	}
 
-	opcode_len = dbus_get_byte_array(&iter_opcode, opcode, MESH_MAX_OPCODE);
-	payload_len = dbus_get_byte_array(&iter_payload, payload,
-						MESH_MAX_ACCESS_PAYLOAD);
+	opcode_len = dbus_get_byte_array(&iter_opcode, opcode, sizeof(opcode));
+	payload_len = dbus_get_byte_array(&iter_payload, payload, sizeof(payload));
+
+	if ((opcode_len > MESH_MAX_OPCODE) ||
+				payload_len > MESH_MAX_ACCESS_PAYLOAD)
+		return dbus_error(message, MESH_ERROR_INVALID_ARGS, NULL);
 
 	if (!node)
 		return dbus_error(message, MESH_ERROR_DOES_NOT_EXIST, NULL);
