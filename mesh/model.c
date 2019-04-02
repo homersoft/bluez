@@ -297,6 +297,48 @@ static void forward_model(void *a, void *b)
 		fwd->done = true;
 }
 
+static int app_packet_decrypt(struct mesh_node *node, const uint8_t *data,
+				uint16_t size, bool szmict, uint16_t src,
+				uint16_t dst, uint8_t *virt, uint16_t virt_size,
+				uint8_t key_id, uint32_t seq,
+				uint32_t iv_idx, uint8_t *out)
+{
+	struct mesh_net *net = node_get_net(node);
+	struct l_queue *app_keys = mesh_net_get_app_keys(net);
+	const struct l_queue_entry *app_key_entry;
+
+	if (!app_keys)
+		return -1;
+
+	for (app_key_entry = l_queue_get_entries(app_keys);
+			app_key_entry; app_key_entry = app_key_entry->next)
+	{
+		uint16_t app_key_idx;
+		uint8_t app_key_id;
+		const uint8_t *app_key;
+		bool decrypted;
+
+		app_key = appkey_get_key_info(app_key_entry->data, net, &app_key_idx, &app_key_id);
+
+		if (!app_key)
+			continue;
+
+		if(app_key_id == key_id)
+		{
+			if (mesh_crypto_payload_decrypt(NULL, 0, data, size, szmict, src,
+						dst, key_id, seq, iv_idx, out, app_key))
+			{
+				print_packet("Used App Key", app_key, 16);
+				return app_key_idx;
+			}
+			else
+				print_packet("Failed with App Key", app_key, 16);
+		}
+	}
+
+	return -1;
+}
+
 static int dev_packet_decrypt(struct mesh_node *node, const uint8_t *data,
 				uint16_t size, bool szmict, uint16_t src,
 				uint16_t dst, uint8_t key_id, uint32_t seq,
@@ -306,7 +348,7 @@ static int dev_packet_decrypt(struct mesh_node *node, const uint8_t *data,
 
 	dev_key = node_get_device_key(node);
 	if (!dev_key)
-		return false;
+		return -1;
 
 	if (mesh_crypto_payload_decrypt(NULL, 0, data, size, szmict, src,
 					dst, key_id, seq, iv_idx, out, dev_key))
@@ -679,10 +721,10 @@ bool mesh_model_rx(struct mesh_node *node, bool szmict, uint32_t seq0,
 		/* FIXME: virtual addressed packet! */
 		decrypt_idx = -1;
 	else
-		decrypt_idx = appkey_packet_decrypt(net, szmict, seq0,
-							iv_index, src, dst,
-							NULL, 0, key_id, data,
-							size, clear_text);
+		decrypt_idx = app_packet_decrypt(node, data, size, szmict, src,
+						dst, NULL, 0,
+						key_id, seq0, iv_index,
+						clear_text);
 
 	if (decrypt_idx < 0) {
 		l_error("model.c - Failed to decrypt application payload");

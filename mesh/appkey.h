@@ -28,11 +28,6 @@ bool appkey_key_init(struct mesh_net *net, uint16_t net_idx, uint16_t app_idx,
 void appkey_key_free(void *data);
 uint8_t *appkey_get_key_info(struct mesh_app_key *app_key,
 		struct mesh_net *net, uint16_t *app_idx, uint8_t *key_id);
-int appkey_packet_decrypt(struct mesh_net *net, bool szmict, uint32_t seq,
-				uint32_t iv_index, uint16_t src, uint16_t dst,
-				uint8_t *virt, uint16_t virt_size,
-				uint8_t key_id, const uint8_t *data,
-				uint16_t data_size, uint8_t *out);
 bool appkey_msg_in_replay_cache(struct mesh_net *net, uint16_t idx,
 				uint16_t src, uint16_t crpl, uint32_t seq,
 				uint32_t iv_index);
