@@ -27,6 +27,7 @@
 
 #include <ell/ell.h>
 #include <json-c/json.h>
+#include <stdio.h>
 
 #include "mesh/mesh-defs.h"
 #include "mesh/mesh.h"
@@ -58,9 +59,12 @@
 #define DEFAULT_CRPL 10
 #define DEFAULT_SEQUENCE_NUMBER 0
 
-#define REQUEST_TYPE_JOIN 0
-#define REQUEST_TYPE_ATTACH 1
-#define REQUEST_TYPE_CREATE 2
+enum request_type {
+	REQUEST_TYPE_JOIN = 0,
+	REQUEST_TYPE_ATTACH,
+	REQUEST_TYPE_CREATE,
+	REQUEST_TYPE_IMPORT,
+};
 
 struct node_element {
 	char *path;
@@ -111,7 +115,18 @@ struct managed_obj_request {
 	void *data;
 	void *cb;
 	void *user_data;
-	uint8_t type;
+	enum request_type type;
+};
+
+struct node_import_request {
+	uint8_t uuid[16];
+	uint8_t dev_key[16];
+	uint8_t net_key[16];
+	bool kr;
+	uint16_t unicast;
+	uint32_t iv_idx;
+	bool iv_update;
+	void *user_data;
 };
 
 static struct l_queue *nodes;
@@ -851,7 +866,7 @@ element_done:
 #define MIN_COMPOSITION_LEN 16
 
 bool node_parse_composition(struct mesh_node *node, uint8_t *data,
-								uint16_t len)
+			    uint16_t len)
 {
 	struct node_composition *comp;
 	uint16_t features;
@@ -946,7 +961,7 @@ bool node_parse_composition(struct mesh_node *node, uint8_t *data,
 			vendor_id = l_get_le16(data);
 			mod_id |= (vendor_id << 16);
 			mod = mesh_model_vendor_new(ele->idx, vendor_id,
-									mod_id);
+						    mod_id);
 			if (!mod) {
 				element_free(ele);
 				goto fail;
@@ -977,7 +992,6 @@ fail:
 
 	return false;
 }
-
 static void attach_io(void *a, void *b)
 {
 	struct mesh_node *node = a;
@@ -1365,17 +1379,92 @@ static bool get_app_properties(struct mesh_node *node, const char *path,
 	return true;
 }
 
+static bool parse_imported_iv_index(json_object *jobj, uint32_t *idx,
+								bool *update)
+{
+	int tmp;
+	json_object *jvalue;
+
+	if (!json_object_object_get_ex(jobj, "IVindex", &jvalue))
+		return false;
+
+	tmp = json_object_get_int(jvalue);
+	*idx = (uint32_t) tmp;
+
+	if (!json_object_object_get_ex(jobj, "IVupdate", &jvalue))
+		return false;
+
+	tmp = json_object_get_int(jvalue);
+	*update = (bool)tmp;
+
+	return true;
+}
+
+static bool parse_imported_unicast_addr(json_object *jobj, uint16_t *unicast)
+{
+	json_object *jvalue;
+	char *str;
+
+	if (!json_object_object_get_ex(jobj, "unicastAddress", &jvalue))
+		return false;
+
+	str = (char *)json_object_get_string(jvalue);
+
+	if (sscanf(str, "%04hx", unicast) != 1)
+		return false;
+
+	return true;
+}
+
+static bool parse_imported_device_key(json_object *jobj, uint8_t key_buf[16])
+{
+	json_object *jvalue;
+	char *str;
+
+	if (!key_buf)
+		return false;
+
+	if (!json_object_object_get_ex(jobj, "deviceKey", &jvalue))
+		return false;
+
+	str = (char *)json_object_get_string(jvalue);
+
+	if (!str2hex(str, strlen(str), key_buf, 16))
+		return false;
+
+	return true;
+}
+
+static bool parse_imported_net_key(json_object *jobj, uint8_t key_buf[16],
+								bool *kr)
+{
+	json_object *jvalue;
+	char *str;
+
+	if (!key_buf)
+		return false;
+
+	if (!json_object_object_get_ex(jobj, "netKey", &jvalue))
+		return false;
+
+	str = (char *)json_object_get_string(jvalue);
+
+	if (!str2hex(str, strlen(str), key_buf, 16))
+		return false;
+
+	/* Get key refresh */
+	if (!json_object_object_get_ex(jobj, "keyRefresh", &jvalue))
+		return false;
+
+	*kr = (bool)json_object_get_boolean(jvalue);
+	return true;
+}
+
+
 static bool add_local_node(struct mesh_node *node, uint16_t unicast, bool kr,
 				bool ivu, uint32_t iv_idx, uint8_t dev_key[16],
 				uint16_t net_key_idx, uint8_t net_key[16])
 {
-	node->net = mesh_net_new(node);
-
-	if (!nodes)
-		nodes = l_queue_new();
-
-	l_queue_push_tail(nodes, node);
-
 	if (!storage_set_iv_index(node->net, iv_idx, ivu))
 		return false;
 
@@ -1443,14 +1532,13 @@ static void get_managed_objects_cb(struct l_dbus_message *msg, void *user_data)
 	}
 
 	if (is_new) {
-		node = l_new(struct mesh_node, 1);
+		node = node_new(req->data);
 		node->elements = l_queue_new();
 	} else {
 		node = req->data;
 	}
 
 	num_ele = 0;
-
 	while (l_dbus_message_iter_next_entry(&objects, &path, &interfaces)) {
 		struct l_dbus_message_iter properties;
 		const char *interface;
@@ -1545,6 +1633,44 @@ static void get_managed_objects_cb(struct l_dbus_message *msg, void *user_data)
 			goto fail;
 
 		cb(node, agent);
+
+	} else if (req->type == REQUEST_TYPE_IMPORT) {
+
+		node_ready_func_t cb = req->cb;
+		struct node_import_request *import_data = req->user_data;
+		struct keyring_net_key net_key;
+
+		if (!agent) {
+			l_error("Interface %s not found",
+						MESH_PROVISION_AGENT_INTERFACE);
+			goto fail;
+		}
+
+		node->num_ele = num_ele;
+		set_defaults(node);
+		memcpy(node->uuid, import_data->uuid, 16);
+
+		if (!create_node_config(node))
+			goto fail;
+
+		if (!add_local_node(node, import_data->unicast, import_data->kr,
+				import_data->iv_update, import_data->iv_idx,
+				import_data->dev_key, PRIMARY_NET_IDX,
+							import_data->net_key))
+			goto fail;
+
+		memcpy(net_key.old_key, import_data->net_key, 16);
+		net_key.net_idx = PRIMARY_NET_IDX;
+		net_key.phase = KEY_REFRESH_PHASE_NONE;
+
+		if (!keyring_put_remote_dev_key(node, import_data->unicast,
+						num_ele, import_data->dev_key))
+			goto fail;
+
+		if (!keyring_put_net_key(node, PRIMARY_NET_IDX, &net_key))
+			goto fail;
+
+		cb(import_data->user_data, MESH_ERROR_NONE, node);
 
 	} else {
 		/* Callback for create node request */
@@ -1669,6 +1795,59 @@ void node_join(const char *app_path, const char *sender, const uint8_t *uuid,
 					"GetManagedObjects", NULL,
 					get_managed_objects_cb,
 					req, l_free);
+}
+
+
+bool node_import(const char *app_path, const char *sender, void *json_data,
+		const uint8_t *uuid, node_ready_func_t cb, void *user_data)
+{
+	struct managed_obj_request *req;
+	struct node_import_request *node;
+
+	l_debug("");
+	node = l_new(struct node_import_request, 1);
+	req = l_new(struct managed_obj_request, 1);
+
+	if (!parse_imported_device_key(json_data, node->dev_key)) {
+		l_error("Failed to parse imported device key");
+		goto fail;
+	}
+
+	if (!parse_imported_unicast_addr(json_data, &node->unicast)) {
+		l_error("Failed to parse imported unicast address");
+		goto fail;
+	}
+
+	if (!parse_imported_iv_index(json_data, &node->iv_idx,
+							&node->iv_update)) {
+		l_error("Failed to parse imported iv idx");
+		goto fail;
+	}
+
+
+	if (!parse_imported_net_key(json_data, node->net_key, &node->kr)) {
+		l_error("Failed to parse imported network key");
+		goto fail;
+	}
+
+	node->user_data = user_data;
+
+	memcpy(node->uuid, uuid, 16);
+	req->data = (void *) uuid;
+	req->user_data = node;
+	req->cb = cb;
+	req->type = REQUEST_TYPE_IMPORT;
+
+	l_dbus_method_call(dbus_get_bus(), sender, app_path,
+					L_DBUS_INTERFACE_OBJECT_MANAGER,
+					"GetManagedObjects", NULL,
+					get_managed_objects_cb,
+					req, l_free);
+	return true;
+fail:
+	json_object_put(json_data);
+	l_free(node);
+	return false;
 }
 
 void node_create(const char *app_path, const char *sender, const uint8_t *uuid,

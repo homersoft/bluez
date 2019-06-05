@@ -151,10 +151,20 @@ Methods:
 			org.bluez.mesh.Error.InvalidArguments
 			org.bluez.mesh.Error.AlreadyExists,
 
-	 uint64 token ImportLocalNode(string json_data)
+	 uint64 token ImportLocalNode(object app_root, string json_data, array{byte}[16] uuid)
 
 		This method creates a local mesh node based on node
 		configuration that has been generated outside bluetooth-meshd.
+
+		The app_root parameter is a D-Bus object root path of the
+		application that implements org.bluez.mesh.Application1
+		interface, and a org.bluez.mesh.Provisioner1 interface. The
+		application represents a node where child mesh elements have
+		their own objects that implement org.bluez.mesh.Element1
+		interface. The application hierarchy also contains a provision
+		agent object that implements org.bluez.mesh.ProvisionAgent1
+		interface. The standard DBus.ObjectManager interface must be
+		available on the app_root path.
 
 		The json_data parameter is a full JSON representation of a node
 		configuration file. The format must conform to the schema
@@ -1059,4 +1069,12 @@ Properties:
 
 Mesh Node Configuration Schema
 ==============================
-<TBD>
+Example of Json format for ImportLocalNode():
+{
+  "IVindex":0,
+  "IVupdate":0,
+  "unicastAddress":"0012",
+  "deviceKey":"7daa45cd1e9e11a4b86eeef7d01efa11",
+  "netKey":"1234567890abcdef1234567890abcdef",
+  "keyRefresh":0
+}
