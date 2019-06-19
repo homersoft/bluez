@@ -66,7 +66,9 @@ static void usage(void)
 	       "io:\n"
 	       "\tgeneric[:<index>]\n"
 	       "\t\tUse generic HCI io on interface hci<index>, or the first\n"
-	       "\t\tavailable one\n");
+	       "\t\tavailable one\n"
+	       "\tsilvair:<tty>\n"
+	       "\t\tUse Silvair Radio SLIP protocol on <tty>\n");
 }
 
 static void do_debug(const char *str, void *user_data)
@@ -139,6 +141,26 @@ static bool parse_io(const char *optarg, enum mesh_io_type *type, void **opts)
 
 		if (sscanf(optarg, "%d", index) == 1)
 			return true;
+
+		return false;
+	}
+
+	if (strstr(optarg, "silvair") == optarg) {
+		char *tty_name = NULL;
+
+		*type = MESH_IO_TYPE_SILVAIR;
+
+		optarg += strlen("silvair");
+
+		if (*optarg != ':')
+			return false;
+
+		optarg++;
+
+		if (sscanf(optarg, "%ms", &tty_name) == 1) {
+			*opts = tty_name;
+			return true;
+		}
 
 		return false;
 	}
