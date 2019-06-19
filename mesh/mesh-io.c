@@ -23,11 +23,15 @@
 /* List of Mesh-IO Type headers */
 #include "mesh/mesh-io-generic.h"
 #include "mesh/mesh-io-unit.h"
+#include "mesh/mesh-io-uart.h"
+#include "mesh/mesh-io-tcpserver.h"
 
 /* List of Supported Mesh-IO Types */
 static const struct mesh_io_table table[] = {
 	{MESH_IO_TYPE_GENERIC, &mesh_io_generic},
 	{MESH_IO_TYPE_UNIT_TEST, &mesh_io_unit},
+	{MESH_IO_TYPE_UART, &mesh_io_uart},
+	{MESH_IO_TYPE_TCPSERVER, &mesh_io_tcpserver},
 };
 
 static struct l_queue *io_list;
@@ -65,6 +69,9 @@ struct mesh_io *mesh_io_new(enum mesh_io_type type, void *opts,
 		return NULL;
 
 	io = l_new(struct mesh_io, 1);
+
+	if (!io)
+		return NULL;
 
 	io->type = type;
 	io->api = api;

@@ -96,13 +96,8 @@ gdbus_libgdbus_internal_la_SOURCES = gdbus/gdbus.h \
 				gdbus/mainloop.c gdbus/watch.c \
 				gdbus/object.c gdbus/client.c gdbus/polkit.c
 
-if OPENSSL
 openssl_cflags = @OPENSSL_CFLAGS@
 openssl_ldadd = @OPENSSL_LIBS@
-else
-openssl_cflags =
-openssl_ldadd =
-endif
 
 if EXTERNAL_ELL
 ell_cflags = @ELL_CFLAGS@
@@ -148,7 +143,8 @@ ell_headers = ell/util.h \
 			ell/uuid.h \
 			ell/useful.h \
 			ell/main-private.h \
-			ell/tester.h
+			ell/tester.h \
+			ell/ringbuf.h
 
 ell_sources = ell/private.h ell/missing.h \
 			ell/util.c \
@@ -186,7 +182,8 @@ ell_sources = ell/private.h ell/missing.h \
 			ell/siphash-private.h \
 			ell/siphash.c \
 			ell/uuid.c \
-			ell/tester.c
+			ell/tester.c \
+			ell/ringbuf.c
 
 ell_shared = ell/useful.h
 
