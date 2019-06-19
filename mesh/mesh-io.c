@@ -27,6 +27,8 @@
 #include "mesh/mesh-io-mgmt.h"
 #include "mesh/mesh-io-generic.h"
 #include "mesh/mesh-io-unit.h"
+#include "mesh/mesh-io-uart.h"
+#include "mesh/mesh-io-tcpserver.h"
 
 struct mesh_io_reg {
 	mesh_io_recv_func_t cb;
@@ -40,6 +42,8 @@ static const struct mesh_io_table table[] = {
 	{MESH_IO_TYPE_MGMT,	&mesh_io_mgmt},
 	{MESH_IO_TYPE_GENERIC,	&mesh_io_generic},
 	{MESH_IO_TYPE_UNIT_TEST, &mesh_io_unit},
+	{MESH_IO_TYPE_UART,		&mesh_io_uart},
+	{MESH_IO_TYPE_TCPSERVER,	&mesh_io_tcpserver}
 };
 
 static struct mesh_io *default_io;

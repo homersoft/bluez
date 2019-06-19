@@ -391,6 +391,7 @@ tools_mesh_cfgclient_SOURCES = tools/mesh-cfgclient.c \
 				mesh/crypto.h mesh/crypto.c
 
 tools_mesh_cfgclient_LDADD = lib/libbluetooth-internal.la src/libshared-ell.la \
+						$(openssl_ldadd) \
 						$(ell_ldadd) -ljson-c -lreadline
 
 bin_PROGRAMS +=  tools/mesh-cfgtest
