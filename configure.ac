@@ -446,18 +446,10 @@ if (test "${plugin_phonebook}" = "ebook"); then
 fi
 AC_SUBST(PLUGIN_PHONEBOOK, [${plugin_phonebook}])
 
-AC_ARG_ENABLE(openssl, AC_HELP_STRING([--enable-openssl],
-		[enable openssl]), [enable_openssl=${enableval}])
-AM_CONDITIONAL(OPENSSL, test "${enable_openssl}" = "yes")
-
-if (test "${enable_openssl}" = "yes"); then
-	AC_DEFINE(HAVE_OPENSSL, 1,
-			[Define to 1 if you have openssl support.])
-	PKG_CHECK_MODULES(OPENSSL, openssl, dummy=yes,
-				AC_MSG_ERROR(openssl is required))
-	AC_SUBST(OPENSSL_CFLAGS)
-	AC_SUBST(OPENSSL_LIBS)
-fi
+PKG_CHECK_MODULES(OPENSSL, openssl, dummy=yes,
+			AC_MSG_ERROR(openssl is required))
+AC_SUBST(OPENSSL_CFLAGS)
+AC_SUBST(OPENSSL_LIBS)
 
 AC_CONFIG_FILES(Makefile src/bluetoothd.rst lib/bluez.pc mesh/bluetooth-meshd.rst)
 AC_OUTPUT

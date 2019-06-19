@@ -66,7 +66,11 @@ static void usage(void)
 	       "io:\n"
 	       "\t([hci]<index> | generic[:[hci]<index>] | unit:<fd_path>)\n"
 	       "\t\tUse generic HCI io on interface hci<index>, or the first\n"
-	       "\t\tavailable one\n");
+	       "\t\tavailable one\n"
+	       "\tsilvair:<tty>\n"
+	       "\t\tUse Silvair Radio SLIP protocol on <tty>\n"
+	       "\ttcpserver:<port>,<uuid>,<dev-key>,<net-key>\n"
+	       "\t\tUse Silvair Radio SLIP protocol over TCP/IP\n");
 }
 
 static void do_debug(const char *str, void *user_data)
@@ -174,6 +178,36 @@ static bool parse_io(const char *optarg, enum mesh_io_type *type, void **opts)
 		test_path = strdup(optarg);
 
 		*opts = test_path;
+		return true;
+	}
+
+	if (strstr(optarg, "silvair") == optarg) {
+		*type = MESH_IO_TYPE_UART;
+
+		optarg += strlen("silvair");
+
+		if (*optarg != ':')
+			return false;
+
+		optarg++;
+
+		*opts = l_strdup(optarg);
+
+		return true;
+	}
+
+	if (strstr(optarg, "tcpserver") == optarg) {
+		*type = MESH_IO_TYPE_TCPSERVER;
+
+		optarg += strlen("tcpserver");
+
+		if (*optarg != ':')
+			return false;
+
+		optarg++;
+
+		*opts = l_strdup(optarg);
+
 		return true;
 	}
 

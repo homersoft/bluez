@@ -1167,6 +1167,7 @@ static const uint8_t crypto_test_result[] = {
 bool mesh_crypto_check_avail()
 {
 #if HAVE_OPENSSL
+	(void)crypto_test_result;
 	return true;
 #else
 	void *cipher;
