@@ -14,8 +14,14 @@ mesh_sources = mesh/mesh.h mesh/mesh.c \
 				mesh/mesh-io.h mesh/mesh-io.c \
 				mesh/mesh-mgmt.c mesh/mesh-mgmt.h \
 				mesh/error.h mesh/mesh-io-api.h \
+				mesh/silvair-io.h \
+				mesh/silvair-io.c \
 				mesh/mesh-io-generic.h \
 				mesh/mesh-io-generic.c \
+				mesh/mesh-io-silvair.h \
+				mesh/mesh-io-silvair.c \
+				mesh/mesh-io-tcpserver.h \
+				mesh/mesh-io-tcpserver.c \
 				mesh/net.h mesh/net.c \
 				mesh/crypto.h mesh/crypto.c \
 				mesh/friend.h mesh/friend.c \
