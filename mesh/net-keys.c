@@ -219,6 +219,9 @@ uint32_t net_key_decrypt(uint32_t iv_index, const uint8_t *pkt, size_t len,
 	}
 
 	cache_id = 0;
+	if (len > sizeof(cache_pkt))
+		goto done;
+
 	memcpy(cache_pkt, pkt, len);
 	cache_len = len;
 	cache_iv_index = iv_index;
