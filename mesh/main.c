@@ -146,8 +146,6 @@ static bool parse_io(const char *optarg, enum mesh_io_type *type, void **opts)
 	}
 
 	if (strstr(optarg, "silvair") == optarg) {
-		char *tty_name = NULL;
-
 		*type = MESH_IO_TYPE_SILVAIR;
 
 		optarg += strlen("silvair");
@@ -157,12 +155,9 @@ static bool parse_io(const char *optarg, enum mesh_io_type *type, void **opts)
 
 		optarg++;
 
-		if (sscanf(optarg, "%ms", &tty_name) == 1) {
-			*opts = tty_name;
-			return true;
-		}
+		*opts = l_strdup(optarg);
 
-		return false;
+		return true;
 	}
 
 	return false;

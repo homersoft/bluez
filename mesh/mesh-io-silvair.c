@@ -33,6 +33,7 @@
 #include <linux/if.h>
 #include <linux/if_ether.h>
 #include <linux/if_packet.h>
+#include <linux/limits.h>
 #include <sys/ioctl.h>
 #include <sys/time.h>
 #include <ell/ell.h>
@@ -45,7 +46,13 @@
 #include "mesh/mesh-io-api.h"
 #include "mesh/mesh-io-silvair.h"
 
+#define SLIP_END     0300
+#define SLIP_ESC     0333
+#define SLIP_ESC_END 0334
+#define SLIP_ESC_ESC 0335
+
 struct mesh_io_private {
+	char tty_name[PATH_MAX];
 	int tty_fd;
 
 	char iface_name[IFNAMSIZ];
@@ -59,6 +66,12 @@ struct mesh_io_private {
 	uint8_t filters[3]; /* Simple filtering on AD type only */
 	struct tx_pkt *tx;
 	uint16_t counter;
+
+	struct slip {
+		uint8_t buf[512];
+		size_t offset;
+		bool esc;
+	} slip;
 };
 
 struct pvt_rx_reg {
@@ -249,36 +262,21 @@ static void process_evt_rx(struct mesh_io *io, uint32_t instant,
 	}
 }
 
-static bool io_read_callback(struct io *io, void *user_data)
+static void process_packet(struct mesh_io *io, uint8_t *buf, size_t size,
+							uint32_t instant)
 {
-	struct mesh_io *mesh_io = user_data;
-	uint32_t instant;
-	uint8_t buf[512];
-	size_t len;
-	int r;
-	int fd;
 	const struct silvair_pkt_hdr *pkt_hdr;
+	size_t len = size;
 
-	fd = io_get_fd(mesh_io->pvt->io);
-	if (fd < 0)
-		return false;
-
-	r = read(fd, buf, sizeof(buf));
-	if (r <= 0)
-		return false;
-
-	len = r;
 	if (len < sizeof(*pkt_hdr))
-		return true;
+		return;
 
 	pkt_hdr = (struct silvair_pkt_hdr *)buf;
 	len -= sizeof(*pkt_hdr);
 
-	instant = get_instant();
-
 	switch (pkt_hdr->type) {
 	case SILVAIR_EVT_RX:
-		process_evt_rx(mesh_io, instant, pkt_hdr, len);
+		process_evt_rx(io, instant, pkt_hdr, len);
 		break;
 	case SILVAIR_EVT_RESET:
 	case SILVAIR_CMD_TX:
@@ -287,52 +285,95 @@ static bool io_read_callback(struct io *io, void *user_data)
 	case SILVAIR_CMD_FILTER:
 		break;
 	}
+}
+
+static void process_slip(struct mesh_io *io, uint8_t *buf, size_t size,
+							uint32_t instant)
+{
+	struct slip *slip = &io->pvt->slip;
+
+	for (uint8_t *i = buf; i != buf + size; ++i) {
+		switch (*i) {
+		case SLIP_END:
+			if (slip->offset)
+				process_packet(io, slip->buf, slip->offset,
+								instant);
+
+			slip->offset = 0;
+			break;
+
+		case SLIP_ESC:
+			slip->esc = true;
+			break;
+
+		default:
+			if (!slip->esc) {
+				slip->buf[slip->offset++] = *i;
+				break;
+			}
+
+			switch (*i) {
+			case SLIP_ESC_ESC:
+				slip->buf[slip->offset++] = SLIP_ESC;
+				break;
+
+			case SLIP_ESC_END:
+				slip->buf[slip->offset++] = SLIP_END;
+				break;
+
+			default:
+				slip->offset = 0;
+			}
+
+			slip->esc = false;
+		}
+	}
+}
+
+static bool io_read_callback(struct io *io, void *user_data)
+{
+	struct mesh_io *mesh_io = user_data;
+	uint8_t buf[512];
+	uint32_t instant;
+	int r;
+	int fd;
+
+	fd = io_get_fd(mesh_io->pvt->io);
+	if (fd < 0)
+		return false;
+
+	r = read(fd, buf, sizeof(buf));
+
+	if (r <= 0)
+		return false;
+
+
+	instant = get_instant();
+
+	if (mesh_io->pvt->iface_fd >= 0)
+		process_packet(mesh_io, buf, r, instant);
+	else
+		process_slip(mesh_io, buf, r, instant);
 
 	return true;
 }
 
 static void send_timeout(struct l_timeout *timeout, void *user_data);
 
-static bool silvair_io_init(struct mesh_io *io, void *opts)
+static bool silvair_kernel_init(struct mesh_io *io)
 {
 	struct ifreq req;
-	struct termios ttys;
 	struct sockaddr_ll addr;
 	int disc = N_SLIP;
 	int encap = 0;
-	const char *tty_name = (char *)opts;
-
-	if (!io || io->pvt)
-		return false;
-
-	io->pvt = l_new(struct mesh_io_private, 1);
-	io->pvt->tty_fd = open(tty_name, O_RDWR);
-
-	if (io->pvt->tty_fd < 0) {
-		l_error("%s: cannot open: %s", tty_name,
-							strerror(errno));
-		return false;
-	}
-
-	cfmakeraw(&ttys);
-	cfsetspeed(&ttys, B1000000);
-	ttys.c_cflag |= CRTSCTS;
-
-	if (tcsetattr(io->pvt->tty_fd, TCSANOW, &ttys) != 0) {
-		l_error("%s: cannot set terminal: %s", tty_name,
-							strerror(errno));
-		return false;
-	}
 
 	if (ioctl(io->pvt->tty_fd, TIOCSETD, &disc) != 0) {
-		l_error("%s: cannot set line discipline: %s",
-					tty_name, strerror(errno));
+		l_error("cannot set line discipline: %s", strerror(errno));
 		return false;
 	}
 
 	if (ioctl(io->pvt->tty_fd, SIOCSIFENCAP, &encap) != 0) {
-		l_error("%s: cannot set encapsulation: %s",
-					tty_name, strerror(errno));
+		l_error("cannot set encapsulation: %s", strerror(errno));
 		return false;
 	}
 
@@ -374,12 +415,77 @@ static bool silvair_io_init(struct mesh_io *io, void *opts)
 		return false;
 	}
 
-	l_error("Started mesh on tty %s, interface %s", tty_name,
+	l_info("Started mesh on tty %s, interface %s", io->pvt->tty_name,
 							io->pvt->iface_name);
-	io->pvt->rx_regs = l_queue_new();
-	io->pvt->tx_pkts = l_queue_new();
 
 	io->pvt->io = io_new(io->pvt->iface_fd);
+
+	return true;
+}
+
+static bool silvair_user_init(struct mesh_io *io)
+{
+	io->pvt->io = io_new(io->pvt->tty_fd);
+	io->pvt->iface_fd = -1;
+	io->pvt->slip.offset = 0;
+	io->pvt->slip.esc = false;
+
+	l_info("Started mesh on tty %s", io->pvt->tty_name);
+
+	return true;
+}
+
+static bool silvair_io_init(struct mesh_io *io, void *opts)
+{
+	struct termios ttys;
+	const char *tty_mode = NULL;
+	char *delim = strchr(opts, ':');
+
+	if (delim) {
+		*delim = '\0';
+		if (sscanf(delim + 1, "%ms", &tty_mode) != 1) {
+			l_error("%s: missing mode", (char *)opts);
+			return false;
+		}
+	}
+
+	if (!io || io->pvt)
+		return false;
+
+	io->pvt = l_new(struct mesh_io_private, 1);
+	strncpy(io->pvt->tty_name, opts, sizeof(io->pvt->tty_name) - 1);
+	io->pvt->tty_fd = open(io->pvt->tty_name, O_RDWR);
+
+	if (io->pvt->tty_fd < 0) {
+		l_error("%s: cannot open: %s", io->pvt->tty_name,
+							strerror(errno));
+		return false;
+	}
+
+	cfmakeraw(&ttys);
+	cfsetspeed(&ttys, B1000000);
+	ttys.c_cflag |= CRTSCTS;
+
+	if (tcsetattr(io->pvt->tty_fd, TCSANOW, &ttys) != 0) {
+		l_error("%s: cannot set terminal: %s", io->pvt->tty_name,
+							strerror(errno));
+		return false;
+	}
+
+	if (!tty_mode || !strcmp(tty_mode, "kernel")) {
+		if (!silvair_kernel_init(io)) {
+			l_error("kernel initialization failed");
+			return false;
+		}
+	} else if (tty_mode && !strcmp(tty_mode, "user")) {
+		if (!silvair_user_init(io)) {
+			l_error("user initialization failed");
+			return false;
+		}
+	}
+
+	io->pvt->rx_regs = l_queue_new();
+	io->pvt->tx_pkts = l_queue_new();
 
 	if (!io_set_read_handler(io->pvt->io, io_read_callback, io, NULL))
 		return false;
@@ -421,6 +527,48 @@ static bool silvair_io_caps(struct mesh_io *io, struct mesh_io_caps *caps)
 	return true;
 }
 
+static bool send_packet(struct mesh_io *io, uint8_t *buf, ssize_t size)
+{
+	int fd = io_get_fd(io->pvt->io);
+
+	return write(fd, buf, size) == size;
+}
+
+static bool send_slip(struct mesh_io *io, uint8_t *buf, ssize_t size)
+{
+	static const uint8_t end = SLIP_END;
+	static const uint8_t esc_end[2] = { SLIP_ESC, SLIP_ESC_END };
+	static const uint8_t esc_esc[2] = { SLIP_ESC, SLIP_ESC_ESC };
+
+	int fd = io_get_fd(io->pvt->io);
+
+	if (write(fd, &end, 1) != 1)
+		return false;
+
+	for (uint8_t *i = buf; i != buf + size; ++i) {
+		switch (*i) {
+		case SLIP_END:
+			if (write(fd, esc_end, 2) != 2)
+				return false;
+			break;
+
+		case SLIP_ESC:
+			if (write(fd, esc_esc, 2) != 2)
+				return false;
+			break;
+
+		default:
+			if (write(fd, i, 1) != 1)
+				return false;
+		}
+	}
+
+	if (write(fd, &end, 1) != 1)
+		return false;
+
+	return true;
+}
+
 static void send_flush(struct mesh_io_private *pvt)
 {
 	uint8_t buf[512] = { 0 };
@@ -428,10 +576,10 @@ static void send_flush(struct mesh_io_private *pvt)
 	struct silvair_tx_cmd_hdr *tx_hdr;
 	struct silvair_tx_cmd_pld *tx_pld;
 	uint8_t *adv_data;
-	int fd;
 	int len;
 	struct tx_pkt *tx;
 	uint32_t instant = get_instant();
+	struct mesh_io *io = l_container_of(&pvt, struct mesh_io, pvt);
 
 	pkt_hdr = (struct silvair_pkt_hdr *)buf;
 	tx_hdr = (struct silvair_tx_cmd_hdr *)(pkt_hdr + 1);
@@ -473,12 +621,18 @@ static void send_flush(struct mesh_io_private *pvt)
 		tx = l_queue_pop_head(pvt->tx_pkts);
 		l_free(tx);
 
-		fd = io_get_fd(pvt->io);
 		len = pkt_hdr->hdr_len + pkt_hdr->pld_len;
 
-		if (write(fd, buf, len) != len) {
-			l_error("write failed: %s", strerror(errno));
-			return;
+		if (pvt->iface_fd >= 0) {
+			if (!send_packet(io, buf, len)) {
+				l_error("write failed: %s", strerror(errno));
+				return;
+			}
+		} else {
+			if (!send_slip(io, buf, len)) {
+				l_error("write failed: %s", strerror(errno));
+				return;
+			}
 		}
 
 		pvt->counter += 2;
