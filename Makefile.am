@@ -96,6 +96,14 @@ gdbus_libgdbus_internal_la_SOURCES = gdbus/gdbus.h \
 				gdbus/mainloop.c gdbus/watch.c \
 				gdbus/object.c gdbus/client.c gdbus/polkit.c
 
+if OPENSSL
+openssl_cflags = @OPENSSL_CFLAGS@
+openssl_ldadd = @OPENSSL_LIBS@
+else
+openssl_cflags =
+openssl_ldadd =
+endif
+
 if EXTERNAL_ELL
 ell_cflags = @ELL_CFLAGS@
 ell_ldadd = @ELL_LIBS@
