@@ -20,9 +20,170 @@
 #include "mesh/mesh-defs.h"
 #include "mesh/net.h"
 #include "mesh/crypto.h"
+#include "mesh/util.h"
 
-/* Multiply used Zero array */
-static const uint8_t zero[16] = { 0, };
+#if HAVE_OPENSSL
+
+#include <openssl/conf.h>
+#include <openssl/err.h>
+#include <openssl/evp.h>
+#include <openssl/cmac.h>
+
+static bool aes_ecb_one(const uint8_t key[16], const uint8_t in[16],
+								uint8_t out[16])
+{
+	int len;
+	bool result = false;
+	EVP_CIPHER_CTX *cipher = EVP_CIPHER_CTX_new();
+
+	if (!cipher)
+		return false;
+
+	if (!EVP_EncryptInit_ex(cipher, EVP_aes_128_ecb(), NULL, key, NULL))
+		goto done;
+
+	if (!EVP_EncryptUpdate(cipher, out, &len, in, 16))
+		goto done;
+
+	result = true;
+
+done:
+	EVP_CIPHER_CTX_free(cipher);
+	return result;
+}
+
+static bool aes_cmac_one(const uint8_t key[16], const void *msg,
+					size_t msg_len, uint8_t res[16])
+{
+	bool result = false;
+	size_t res_len;
+	CMAC_CTX *checksum = CMAC_CTX_new();
+
+	if (!checksum)
+		return false;
+
+	if (!CMAC_Init(checksum, key, 16, EVP_aes_128_cbc(), NULL))
+		goto done;
+
+	if (!CMAC_Update(checksum, msg, msg_len))
+		goto done;
+
+	if (!CMAC_Final(checksum, res, &res_len))
+		goto done;
+
+	result = !!(res_len == 16);
+
+done:
+	CMAC_CTX_free(checksum);
+	return result;
+}
+
+bool mesh_crypto_aes_ccm_encrypt(const uint8_t nonce[13], const uint8_t key[16],
+					const uint8_t *aad, uint16_t aad_len,
+					const void *msg, uint16_t msg_len,
+					void *out_msg,
+					void *out_mic, size_t mic_size)
+{
+	int len;
+	int out_len;
+	bool result = false;
+	EVP_CIPHER_CTX *cipher = EVP_CIPHER_CTX_new();
+
+	if (!cipher)
+		return false;
+
+	if (!EVP_EncryptInit_ex(cipher, EVP_aes_128_ccm(), NULL, NULL, NULL))
+		goto done;
+
+	EVP_CIPHER_CTX_ctrl(cipher, EVP_CTRL_CCM_SET_TAG, mic_size, NULL);
+	EVP_CIPHER_CTX_ctrl(cipher, EVP_CTRL_CCM_SET_IVLEN, 13, NULL);
+
+	if (!EVP_EncryptInit_ex(cipher, NULL, NULL, key, nonce))
+		goto done;
+
+	if (!EVP_EncryptUpdate(cipher, NULL, &len, NULL, msg_len))
+		goto done;
+
+	if (aad && !EVP_EncryptUpdate(cipher, NULL, &len, aad, aad_len))
+		goto done;
+
+	if (!EVP_EncryptUpdate(cipher, out_msg, &out_len, msg, msg_len))
+		goto done;
+
+	EVP_CIPHER_CTX_ctrl(cipher, EVP_CTRL_CCM_GET_TAG,
+						mic_size, out_msg + out_len);
+
+	if (out_mic) {
+		if (mic_size == 4)
+			*(uint32_t *)out_mic = l_get_be32(out_msg + out_len);
+		else
+			*(uint64_t *)out_mic = l_get_be64(out_msg + out_len);
+	}
+
+	out_len += mic_size;
+	result = true;
+
+done:
+	EVP_CIPHER_CTX_free(cipher);
+	return result;
+}
+
+bool mesh_crypto_aes_ccm_decrypt(const uint8_t nonce[13], const uint8_t key[16],
+				const uint8_t *aad, uint16_t aad_len,
+				const void *enc_msg, uint16_t enc_msg_len,
+				void *out_msg,
+				void *out_mic, size_t mic_size)
+{
+	int len;
+	int out_len;
+	bool result = false;
+	EVP_CIPHER_CTX *cipher = EVP_CIPHER_CTX_new();
+
+	if (!cipher)
+		return false;
+
+	enc_msg_len -= mic_size;
+
+	if (!EVP_DecryptInit_ex(cipher, EVP_aes_128_ccm(), NULL, NULL, NULL))
+		goto done;
+
+	EVP_CIPHER_CTX_ctrl(cipher, EVP_CTRL_CCM_SET_IVLEN, 13, NULL);
+
+	EVP_CIPHER_CTX_ctrl(cipher, EVP_CTRL_CCM_SET_TAG, mic_size,
+						(void *)enc_msg + enc_msg_len);
+
+	if (!EVP_DecryptInit_ex(cipher, NULL, NULL, key, nonce))
+		goto done;
+
+	if (!EVP_DecryptUpdate(cipher, NULL, &len, NULL, enc_msg_len))
+		goto done;
+
+	if (aad && !EVP_DecryptUpdate(cipher, NULL, &len, aad, aad_len))
+		goto done;
+
+	if (!EVP_DecryptUpdate(cipher, out_msg, &out_len, enc_msg,
+								enc_msg_len))
+		goto done;
+
+	memcpy(out_msg + out_len, enc_msg + enc_msg_len, mic_size);
+
+	if (out_mic) {
+		if (mic_size == 4)
+			*(uint32_t *)out_mic =
+				l_get_be32(enc_msg + enc_msg_len);
+		else
+			*(uint64_t *)out_mic =
+				l_get_be64(enc_msg + enc_msg_len);
+	}
+
+	result = true;
+
+done:
+	EVP_CIPHER_CTX_free(cipher);
+	return result;
+}
+
+#else
 
 static bool aes_ecb_one(const uint8_t key[16], const uint8_t in[16],
 								uint8_t out[16])
@@ -60,12 +221,6 @@ static bool aes_cmac_one(const uint8_t key[16], const void *msg,
 	l_checksum_free(checksum);
 
 	return result;
-}
-
-bool mesh_crypto_aes_cmac(const uint8_t key[16], const uint8_t *msg,
-					size_t msg_len, uint8_t res[16])
-{
-	return aes_cmac_one(key, msg, msg_len, res);
 }
 
 bool mesh_crypto_aes_ccm_encrypt(const uint8_t nonce[13], const uint8_t key[16],
@@ -124,8 +279,19 @@ bool mesh_crypto_aes_ccm_decrypt(const uint8_t nonce[13], const uint8_t key[16],
 	return result;
 }
 
+#endif
+
+/* Multiply used Zero array */
+static const uint8_t zero[16] = { 0, };
+
+bool mesh_crypto_aes_cmac(const uint8_t key[16], const uint8_t *msg,
+					size_t msg_len, uint8_t res[16])
+{
+	return aes_cmac_one(key, msg, msg_len, res);
+}
+
 bool mesh_crypto_k1(const uint8_t ikm[16], const uint8_t salt[16],
-		const void *info, size_t info_len, uint8_t okm[16])
+			const void *info, size_t info_len, uint8_t okm[16])
 {
 	uint8_t res[16];
 
@@ -1003,6 +1169,9 @@ static const uint8_t crypto_test_result[] = {
 
 bool mesh_crypto_check_avail()
 {
+#if HAVE_OPENSSL
+	return true;
+#else
 	void *cipher;
 	bool result;
 	uint8_t i;
@@ -1041,4 +1210,5 @@ bool mesh_crypto_check_avail()
 	l_aead_cipher_free(cipher);
 
 	return result;
+#endif
 }
