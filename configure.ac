@@ -403,4 +403,17 @@ fi
 AC_DEFINE_UNQUOTED(ANDROID_STORAGEDIR, "${storagedir}/android",
 			[Directory for the Android daemon storage files])
 
+AC_ARG_ENABLE(openssl, AC_HELP_STRING([--enable-openssl],
+		[enable openssl]), [enable_openssl=${enableval}])
+AM_CONDITIONAL(OPENSSL, test "${enable_openssl}" = "yes")
+
+if (test "${enable_openssl}" = "yes"); then
+	AC_DEFINE(HAVE_OPENSSL, 1,
+			[Define to 1 if you have openssl support.])
+	PKG_CHECK_MODULES(OPENSSL, openssl, dummy=yes,
+				AC_MSG_ERROR(openssl is required))
+	AC_SUBST(OPENSSL_CFLAGS)
+	AC_SUBST(OPENSSL_LIBS)
+fi
+
 AC_OUTPUT(Makefile src/bluetoothd.8 lib/bluez.pc)
