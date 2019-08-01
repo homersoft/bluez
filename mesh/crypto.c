@@ -51,18 +51,6 @@ static bool aes_ecb_one(const uint8_t key[16], const uint8_t in[16],
 	return result;
 }
 
-static bool aes_cmac(void *checksum, const uint8_t *msg,
-					size_t msg_len, uint8_t res[16])
-{
-	if (!l_checksum_update(checksum, msg, msg_len))
-		return false;
-
-	if (16 == l_checksum_get_digest(checksum, res, 16))
-		return true;
-
-	return false;
-}
-
 static bool aes_cmac_one(const uint8_t key[16], const void *msg,
 					size_t msg_len, uint8_t res[16])
 {
@@ -163,7 +151,6 @@ bool mesh_crypto_k2(const uint8_t n[16], const uint8_t *p, size_t p_len,
 							uint8_t enc_key[16],
 							uint8_t priv_key[16])
 {
-	void *checksum;
 	uint8_t output[16];
 	uint8_t t[16];
 	uint8_t *stage;
@@ -174,19 +161,15 @@ bool mesh_crypto_k2(const uint8_t n[16], const uint8_t *p, size_t p_len,
 		return false;
 
 	if (!mesh_crypto_s1("smk2", 4, stage))
-		goto fail;
+		goto done;
 
 	if (!aes_cmac_one(stage, n, 16, t))
-		goto fail;
-
-	checksum = l_checksum_new_cmac_aes(t, 16);
-	if (!checksum)
-		goto fail;
+		goto done;
 
 	memcpy(stage, p, p_len);
 	stage[p_len] = 1;
 
-	if (!aes_cmac(checksum, stage, p_len + 1, output))
+	if (!aes_cmac_one(t, stage, p_len + 1, output))
 		goto done;
 
 	net_id[0] = output[15] & 0x7f;
@@ -195,7 +178,7 @@ bool mesh_crypto_k2(const uint8_t n[16], const uint8_t *p, size_t p_len,
 	memcpy(stage + 16, p, p_len);
 	stage[p_len + 16] = 2;
 
-	if (!aes_cmac(checksum, stage, p_len + 16 + 1, output))
+	if (!aes_cmac_one(t, stage, p_len + 16 + 1, output))
 		goto done;
 
 	memcpy(enc_key, output, 16);
@@ -204,15 +187,13 @@ bool mesh_crypto_k2(const uint8_t n[16], const uint8_t *p, size_t p_len,
 	memcpy(stage + 16, p, p_len);
 	stage[p_len + 16] = 3;
 
-	if (!aes_cmac(checksum, stage, p_len + 16 + 1, output))
+	if (!aes_cmac_one(t, stage, p_len + 16 + 1, output))
 		goto done;
 
 	memcpy(priv_key, output, 16);
 	success = true;
 
 done:
-	l_checksum_free(checksum);
-fail:
 	l_free(stage);
 
 	return success;
