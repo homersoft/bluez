@@ -15,10 +15,20 @@ mesh_sources = mesh/mesh.h mesh/mesh.c \
 				mesh/mesh-io.h mesh/mesh-io.c \
 				mesh/mesh-mgmt.c mesh/mesh-mgmt.h \
 				mesh/error.h mesh/mesh-io-api.h \
+				mesh/silvair-io.h \
+				mesh/silvair-io.c \
 				mesh/mesh-io-generic.h \
 				mesh/mesh-io-generic.c \
 				mesh/mesh-io-unit.h \
 				mesh/mesh-io-unit.c \
+				mesh/mesh-io-uart.h \
+				mesh/mesh-io-uart.c \
+				mesh/conn-stat.c \
+				mesh/conn-stat.h \
+				mesh/tcpserver-acl.c \
+				mesh/tcpserver-acl.h \
+				mesh/mesh-io-tcpserver.h \
+				mesh/mesh-io-tcpserver.c \
 				mesh/net.h mesh/net.c \
 				mesh/crypto.h mesh/crypto.c \
 				mesh/friend.h mesh/friend.c \
@@ -43,7 +53,8 @@ mesh/mesh.$(OBJEXT): ell/internal
 mesh/main.$(OBJEXT): src/builtin.h lib/bluetooth/bluetooth.h
 
 mesh_bluetooth_meshd_SOURCES = $(mesh_sources) mesh/main.c
-mesh_bluetooth_meshd_LDADD = src/libshared-ell.la $(ell_ldadd) -ljson-c
+mesh_bluetooth_meshd_LDADD = src/libshared-ell.la $(ell_ldadd) -ljson-c \
+							$(openssl_ldadd)
 mesh_bluetooth_meshd_DEPENDENCIES = $(ell_dependencies) src/libshared-ell.la \
 				mesh/bluetooth-mesh.service
 

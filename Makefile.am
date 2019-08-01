@@ -97,6 +97,9 @@ gdbus_libgdbus_internal_la_SOURCES = gdbus/gdbus.h \
 				gdbus/mainloop.c gdbus/watch.c \
 				gdbus/object.c gdbus/client.c gdbus/polkit.c
 
+openssl_cflags = @OPENSSL_CFLAGS@
+openssl_ldadd = @OPENSSL_LIBS@
+
 if EXTERNAL_ELL
 ell_cflags = @ELL_CFLAGS@
 ell_ldadd = @ELL_LIBS@
@@ -147,7 +150,8 @@ ell_headers = ell/util.h \
 			ell/ecc.h \
 			ell/ecc-private.h \
 			ell/cleanup.h \
-			ell/ecdh.h
+			ell/ecdh.h \
+			ell/ringbuf.h
 
 ell_sources = ell/private.h ell/missing.h \
 			ell/util.c \
@@ -192,7 +196,8 @@ ell_sources = ell/private.h ell/missing.h \
 			ell/tls-record.c \
 			ell/ecc.c \
 			ell/ecc-external.c \
-			ell/ecdh.c
+			ell/ecdh.c \
+			ell/ringbuf.c
 
 ell_shared = ell/useful.h
 
@@ -576,7 +581,7 @@ unit_tests += unit/test-mesh-crypto
 unit_test_mesh_crypto_CPPFLAGS = $(ell_cflags)
 unit_test_mesh_crypto_SOURCES = unit/test-mesh-crypto.c \
 				mesh/crypto.h ell/internal ell/ell.h
-unit_test_mesh_crypto_LDADD = $(ell_ldadd)
+unit_test_mesh_crypto_LDADD = $(ell_ldadd) ${openssl_ldadd}
 endif
 
 if MAINTAINER_MODE

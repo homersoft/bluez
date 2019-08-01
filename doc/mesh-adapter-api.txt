@@ -1,0 +1,108 @@
+BlueZ D-Bus Mesh Adapter API description
+********************************
+
+Overview
+========
+
+This document describes API for a mesh-io (e.g. `tcpserver`) configuration.
+
+
+AccessControlList Hierarchy
+===========================
+Service		org.bluez.mesh
+Interface	org.bluez.mesh.AccessControlList1
+Object path	/org/bluez/mesh/{tcpserver_<port>}
+                                where <port> is a TCP port on which
+                                TCP server is listening.
+
+Methods:
+    uint64 token GrantAccess(array{byte}[16] uuid,
+                             array{byte}[16] dev_key,
+                             array{byte}[16] net_key)
+
+        Grants access to an internal TCP server for a TLS Client defined by
+        its UUID & device and network key. Computes an identity and
+        a pre-shared key based on these arguments. Computed values with an
+        randomly generated token are permanently stored in the configuration
+        file as an ACL entry.
+
+        The token parameter is a 64-bit number that has been assigned to
+        the access entry when it was created. The daemon uses the token
+        to verify whether the application is authorized revoke access.
+
+        array{byte}[16] uuid
+
+            UUID of the TLS Client.
+
+        array{byte}[16] dev_key
+
+            Device Key of the TLS Client.
+
+        array{byte}[16] net_key
+
+            Primary Network Key of the TLS Client (device must be provisioned).
+
+        PossibleErrors:
+            org.bluez.mesh.Error.AlreadyExists
+            org.bluez.mesh.Error.InvalidArguments
+            org.bluez.mesh.Error.Failed
+
+    void RevokeAccess(uint64 token)
+
+        Removes the ACL entry identified by the 64-bit token parameter.
+        The token parameter has been obtained as a result of successful
+        GrantAccess() method call.
+
+        PossibleErrors:
+            org.bluez.mesh.Error.InvalidArguments
+            org.bluez.mesh.Error.NotFound
+            org.bluez.mesh.Error.Failed
+
+
+Connection State Hierarchy
+==========================
+Service		org.bluez.mesh
+Interface	org.bluez.mesh.ConnectionState1
+Object path	/org/bluez/mesh/<adapter>/<identity>
+                where <adapter> is an adapter identifier e.g. {tcpserver_65254}
+                <identity> is client TLS identity hint, calculated after
+                calling GrantAccess() method.
+
+Properties:
+    bool Connected [read-only]
+
+        This property indicates if the mesh adapter is connected.
+
+    string LastError [read-only]
+
+        This property indicates last error.
+
+        The defined values are: "none", "handshake-error"
+
+    uint64 TransmittedMsgCount [read-only]
+
+        This property indicates count of transmitted messages.
+
+    uint64 ReceivedMsgCount [read-only]
+
+        This property indicates count of received messages.
+
+    uint64 LastTransmittedMsgTimestamp [read-only]
+
+        This property indicates timestamp of last transmitted message.
+
+    uint64 LastReceivedMsgTimestamp [read-only]
+
+        This property indicates timestamp of last received message.
+
+    uint64 DroppedTransmittedMsgCount [read-only]
+
+        This property indicates count of dropped transmitted messages.
+
+    uint64 DroppedReceivedMsgCount [read-only]
+
+        This property indicates count of dropped received messages.
+
+    string AdditionalInformation [read-only] [optional]
+
+        This property contains additional information about mesh adapter.
