@@ -96,6 +96,14 @@ gdbus_libgdbus_internal_la_SOURCES = gdbus/gdbus.h \
 				gdbus/mainloop.c gdbus/watch.c \
 				gdbus/object.c gdbus/client.c gdbus/polkit.c
 
+if OPENSSL
+openssl_cflags = @OPENSSL_CFLAGS@
+openssl_ldadd = @OPENSSL_LIBS@
+else
+openssl_cflags =
+openssl_ldadd =
+endif
+
 if EXTERNAL_ELL
 ell_cflags = @ELL_CFLAGS@
 ell_ldadd = @ELL_LIBS@
@@ -525,7 +533,7 @@ unit_tests += unit/test-mesh-crypto
 unit_test_mesh_crypto_CPPFLAGS = $(ell_cflags)
 unit_test_mesh_crypto_SOURCES = unit/test-mesh-crypto.c \
 				mesh/crypto.h ell/internal ell/ell.h
-unit_test_mesh_crypto_LDADD = $(ell_ldadd)
+unit_test_mesh_crypto_LDADD = $(ell_ldadd) ${openssl_ldadd}
 endif
 
 if MAINTAINER_MODE
