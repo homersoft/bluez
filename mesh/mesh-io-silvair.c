@@ -435,25 +435,10 @@ static bool silvair_user_init(struct mesh_io *io)
 	return true;
 }
 
-static bool silvair_io_init(struct mesh_io *io, void *opts)
+static bool silvair_tty_init(struct mesh_io *io, bool flow)
 {
 	struct termios ttys;
-	const char *tty_mode = NULL;
-	char *delim = strchr(opts, ':');
 
-	if (delim) {
-		*delim = '\0';
-		if (sscanf(delim + 1, "%ms", &tty_mode) != 1) {
-			l_error("%s: missing mode", (char *)opts);
-			return false;
-		}
-	}
-
-	if (!io || io->pvt)
-		return false;
-
-	io->pvt = l_new(struct mesh_io_private, 1);
-	strncpy(io->pvt->tty_name, opts, sizeof(io->pvt->tty_name) - 1);
 	io->pvt->tty_fd = open(io->pvt->tty_name, O_RDWR);
 
 	if (io->pvt->tty_fd < 0) {
@@ -464,24 +449,82 @@ static bool silvair_io_init(struct mesh_io *io, void *opts)
 
 	cfmakeraw(&ttys);
 	cfsetspeed(&ttys, B1000000);
-	ttys.c_cflag |= CRTSCTS;
+
+	if (flow)
+		ttys.c_cflag |= CRTSCTS;
+	else
+		ttys.c_cflag &= ~CRTSCTS;
 
 	if (tcsetattr(io->pvt->tty_fd, TCSANOW, &ttys) != 0) {
-		l_error("%s: cannot set terminal: %s", io->pvt->tty_name,
+		l_error("%s: cannot configure tty: %s", io->pvt->tty_name,
 							strerror(errno));
 		return false;
 	}
 
-	if (!tty_mode || !strcmp(tty_mode, "kernel")) {
-		if (!silvair_kernel_init(io)) {
-			l_error("kernel initialization failed");
+	return true;
+}
+
+static bool silvair_io_init(struct mesh_io *io, void *opts)
+{
+	bool tty_kernel = false;
+	bool tty_flow = true;
+
+	char *opts_delim = strchr(opts, ':');
+	char *opt;
+	char *delim;
+
+	if (opts_delim) {
+		*opts_delim = '\0';
+		opt = opts_delim + 1;
+
+		if (!*opt) {
+			l_error("missing options");
 			return false;
 		}
-	} else if (tty_mode && !strcmp(tty_mode, "user")) {
-		if (!silvair_user_init(io)) {
-			l_error("user initialization failed");
-			return false;
-		}
+
+		do {
+			delim = strchr(opt, ',');
+
+			if (delim)
+				*delim = '\0';
+
+			if (!strcmp(opt, "kernel"))
+				tty_kernel = true;
+
+			if (!strcmp(opt, "nokernel"))
+				tty_kernel = false;
+
+			if (!strcmp(opt, "flow"))
+				tty_flow = true;
+
+			if (!strcmp(opt, "noflow"))
+				tty_flow = false;
+
+			opt = delim + 1;
+
+		} while (delim);
+	}
+
+
+
+	if (!io || io->pvt)
+		return false;
+
+	io->pvt = l_new(struct mesh_io_private, 1);
+	strncpy(io->pvt->tty_name, opts, sizeof(io->pvt->tty_name) - 1);
+
+	l_debug("%s: flow control %s, slip in %s", io->pvt->tty_name,
+					tty_flow ? "on" : "off",
+					tty_kernel ? "kernel" : "userspace");
+
+	if (!silvair_tty_init(io, tty_flow)) {
+		l_error("tty initialization failed");
+		return false;
+	}
+
+	if (!(tty_kernel ? silvair_kernel_init : silvair_user_init)(io)) {
+		l_error("initialization failed");
+		return false;
 	}
 
 	io->pvt->rx_regs = l_queue_new();
@@ -492,6 +535,7 @@ static bool silvair_io_init(struct mesh_io *io, void *opts)
 
 	io->pvt->tx_timeout = l_timeout_create_ms(0, send_timeout, io->pvt,
 									NULL);
+
 	return true;
 }
 
