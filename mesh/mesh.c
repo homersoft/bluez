@@ -303,7 +303,7 @@ static void send_join_failed(const char *owner, const char *path,
 						"JoinFailed");
 
 	l_dbus_message_set_arguments(msg, "s", mesh_prov_status_str(status));
-	l_dbus_send(dbus_get_bus(), msg);
+	l_dbus_send_with_reply(dbus_get_bus(), msg, dbus_call_reply, msg, NULL);
 
 	free_pending_join_call(true);
 }
@@ -343,7 +343,7 @@ static bool prov_complete_cb(void *user_data, uint8_t status,
 
 	l_dbus_message_set_arguments(msg, "t", l_get_be64(token));
 
-	l_dbus_send(dbus, msg);
+	l_dbus_send_with_reply(dbus, msg, dbus_call_reply, msg, NULL);
 
 	free_pending_join_call(false);
 

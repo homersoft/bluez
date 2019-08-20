@@ -114,7 +114,7 @@ static void send_add_failed(const char *owner, const char *path,
 						mesh_prov_status_str(status));
 	l_dbus_message_builder_finalize(builder);
 	l_dbus_message_builder_destroy(builder);
-	l_dbus_send(dbus, msg);
+	l_dbus_send_with_reply(dbus, msg, dbus_call_reply, msg, NULL);
 
 	free_pending_add_call();
 }
@@ -159,7 +159,7 @@ static bool add_cmplt(void *user_data, uint8_t status,
 	l_dbus_message_builder_finalize(builder);
 	l_dbus_message_builder_destroy(builder);
 
-	l_dbus_send(dbus, msg);
+	l_dbus_send_with_reply(dbus, msg, dbus_call_reply, msg, NULL);
 
 	free_pending_add_call();
 
@@ -175,8 +175,10 @@ static void mgr_prov_data (struct l_dbus_message *reply, void *user_data)
 	if (pending != add_pending)
 		return;
 
-	if (l_dbus_message_is_error(reply))
+	if (l_dbus_message_is_error(reply)) {
+		dbus_call_reply(reply, pending->msg);
 		return;
+	}
 
 	if (!l_dbus_message_get_arguments(reply, "qq", &net_idx, &primary))
 		return;
@@ -189,7 +191,6 @@ static void mgr_prov_data (struct l_dbus_message *reply, void *user_data)
 static bool add_data_get(void *user_data, uint8_t num_ele)
 {
 	struct add_data *pending = user_data;
-	struct l_dbus_message *msg;
 	struct l_dbus *dbus;
 	const char *app_path;
 	const char *sender;
@@ -201,12 +202,13 @@ static bool add_data_get(void *user_data, uint8_t num_ele)
 	app_path = node_get_app_path(add_pending->node);
 	sender = node_get_owner(add_pending->node);
 
-	msg = l_dbus_message_new_method_call(dbus, sender, app_path,
+	pending->msg = l_dbus_message_new_method_call(dbus, sender, app_path,
 						MESH_PROVISIONER_INTERFACE,
 						"RequestProvData");
 
-	l_dbus_message_set_arguments(msg, "y", num_ele);
-	l_dbus_send_with_reply(dbus, msg, mgr_prov_data, add_pending, NULL);
+	l_dbus_message_set_arguments(pending->msg, "y", num_ele);
+	l_dbus_send_with_reply(dbus, pending->msg, mgr_prov_data, add_pending,
+									NULL);
 
 	add_pending->num_ele = num_ele;
 
@@ -362,7 +364,7 @@ static void prov_beacon_recv(void *user_data, struct mesh_io_recv_info *info,
 	l_dbus_message_builder_finalize(builder);
 	l_dbus_message_builder_destroy(builder);
 
-	l_dbus_send(dbus, msg);
+	l_dbus_send_with_reply(dbus, msg, dbus_call_reply, msg, NULL);
 }
 
 static struct l_dbus_message *start_scan_call(struct l_dbus *dbus,

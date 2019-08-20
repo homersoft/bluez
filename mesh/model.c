@@ -251,7 +251,7 @@ static void config_update_model_pub_period(struct mesh_node *node,
 	l_dbus_message_builder_leave_array(builder);
 	l_dbus_message_builder_finalize(builder);
 	l_dbus_message_builder_destroy(builder);
-	l_dbus_send(dbus, msg);
+	l_dbus_send_with_reply(dbus, msg, dbus_call_reply, msg, NULL);
 }
 
 static void append_dict_uint16_array(struct l_dbus_message_builder *builder,
@@ -292,7 +292,7 @@ static void config_update_model_bindings(struct mesh_node *node,
 	l_dbus_message_builder_leave_array(builder);
 	l_dbus_message_builder_finalize(builder);
 	l_dbus_message_builder_destroy(builder);
-	l_dbus_send(dbus, msg);
+	l_dbus_send_with_reply(dbus, msg, dbus_call_reply, msg, NULL);
 }
 
 static void forward_model(void *a, void *b)
@@ -764,7 +764,7 @@ static void send_dev_key_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
 	l_dbus_message_builder_finalize(builder);
 	l_dbus_message_builder_destroy(builder);
 
-	l_dbus_send(dbus, msg);
+	l_dbus_send_with_reply(dbus, msg, dbus_call_reply, msg, NULL);
 }
 
 static void send_msg_rcvd(struct mesh_node *node, uint8_t ele_idx, bool is_sub,
@@ -797,7 +797,7 @@ static void send_msg_rcvd(struct mesh_node *node, uint8_t ele_idx, bool is_sub,
 
 	l_dbus_message_builder_finalize(builder);
 	l_dbus_message_builder_destroy(builder);
-	l_dbus_send(dbus, msg);
+	l_dbus_send_with_reply(dbus, msg, dbus_call_reply, msg, NULL);
 }
 
 bool mesh_model_rx(struct mesh_node *node, bool szmict, uint32_t seq0,

@@ -143,3 +143,22 @@ void dbus_append_dict_entry_basic(struct l_dbus_message_builder *builder,
 	l_dbus_message_builder_leave_variant(builder);
 	l_dbus_message_builder_leave_dict(builder);
 }
+
+void dbus_call_reply(struct l_dbus_message *reply, void *user_data)
+{
+	struct l_dbus_message *msg = user_data;
+
+	if (l_dbus_message_is_error(reply)) {
+		const char *name = NULL;
+		const char *desc = NULL;
+
+		l_dbus_message_get_error(reply, &name, &desc);
+
+		l_error("Failed to call %s.%s on (%s)%s: %s %s",
+					l_dbus_message_get_interface(msg),
+					l_dbus_message_get_member(msg),
+					l_dbus_message_get_destination(msg),
+					l_dbus_message_get_path(msg),
+					name, desc);
+	}
+}
