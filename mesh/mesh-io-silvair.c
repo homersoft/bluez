@@ -467,7 +467,7 @@ static bool silvair_tty_init(struct mesh_io *io, bool flow)
 static bool silvair_io_init(struct mesh_io *io, void *opts)
 {
 	bool tty_kernel = false;
-	bool tty_flow = true;
+	bool tty_flow = false;
 
 	char *opts_delim = strchr(opts, ':');
 	char *opt;
