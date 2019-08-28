@@ -29,7 +29,8 @@ struct mesh_io;
 enum mesh_io_type {
 	MESH_IO_TYPE_NONE = 0,
 	MESH_IO_TYPE_GENERIC,
-	MESH_IO_TYPE_SILVAIR
+	MESH_IO_TYPE_SILVAIR,
+	MESH_IO_TYPE_TCPSERVER
 };
 
 enum mesh_io_timing_type {
