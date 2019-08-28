@@ -35,8 +35,8 @@
 
 /* List of Supported Mesh-IO Types */
 static const struct mesh_io_table table[] = {
-	{MESH_IO_TYPE_GENERIC,	&mesh_io_generic},
-	{MESH_IO_TYPE_SILVAIR,	&mesh_io_silvair}
+	{MESH_IO_TYPE_GENERIC,		&mesh_io_generic},
+	{MESH_IO_TYPE_SILVAIR,		&mesh_io_silvair}
 };
 
 static struct l_queue *io_list;
