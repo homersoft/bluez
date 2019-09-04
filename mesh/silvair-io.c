@@ -217,6 +217,12 @@ void silvair_process_slip(struct mesh_io *io, struct slip *slip,
 
 			slip->esc = false;
 		}
+
+		if (slip->offset >= sizeof(slip->buf)) {
+			slip->offset = 0;
+			slip->esc = false;
+			return;
+		}
 	}
 }
 
