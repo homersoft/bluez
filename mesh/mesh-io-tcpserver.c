@@ -48,11 +48,9 @@
 #include "mesh/silvair-io.h"
 
 struct mesh_io_private {
-	int server_fd;
 	struct sockaddr_in server_addr;
 	struct io *server_io;
 
-	int client_fd;
 	struct sockaddr_in client_addr;
 	struct io *client_io;
 
@@ -148,17 +146,14 @@ static bool io_read_callback(struct io *io, void *user_data)
 		l_info("Disconnected %s:%hu",
 				inet_ntoa(mesh_io->pvt->client_addr.sin_addr),
 				ntohs(mesh_io->pvt->client_addr.sin_port));
-
-		close(fd);
-		mesh_io->pvt->client_fd = -1;
+		mesh_io->pvt->client_io = NULL;
 		return false;
 	}
 
 	instant = get_instant();
 
-	if (mesh_io->pvt->client_fd >= 0)
-		silvair_process_slip(mesh_io, &mesh_io->pvt->slip,
-						buf, r, instant, process_rx);
+	silvair_process_slip(mesh_io, &mesh_io->pvt->slip, buf, r, instant,
+								process_rx);
 
 	return true;
 }
@@ -178,7 +173,7 @@ static bool io_accept_callback(struct io *io, void *user_data)
 	client_fd = accept(server_fd, (struct sockaddr *)&client_addr,
 							&client_addrlen);
 
-	if (mesh_io->pvt->client_fd >= 0) {
+	if (mesh_io->pvt->client_io) {
 		l_info("Dropped %s:%hu",
 				inet_ntoa(client_addr.sin_addr),
 				ntohs(client_addr.sin_port));
@@ -190,10 +185,10 @@ static bool io_accept_callback(struct io *io, void *user_data)
 	if (client_fd < 0)
 		return false;
 
-	mesh_io->pvt->client_fd = client_fd;
 	memcpy(&mesh_io->pvt->client_addr, &client_addr, sizeof(client_addr));
 
-	mesh_io->pvt->client_io = io_new(mesh_io->pvt->client_fd);
+	mesh_io->pvt->client_io = io_new(client_fd);
+	io_set_close_on_destroy(mesh_io->pvt->client_io, true);
 	io_set_read_handler(mesh_io->pvt->client_io, io_read_callback, mesh_io,
 									NULL);
 
@@ -208,6 +203,7 @@ static void send_timeout(struct l_timeout *timeout, void *user_data);
 
 static bool tcpserver_io_init(struct mesh_io *io, void *opts)
 {
+	int server_fd;
 	uint16_t port = 0;
 
 	char *opt = opts;
@@ -233,27 +229,26 @@ static bool tcpserver_io_init(struct mesh_io *io, void *opts)
 		return false;
 
 	io->pvt = l_new(struct mesh_io_private, 1);
-	io->pvt->client_fd = -1;
 
-	io->pvt->server_fd = socket(AF_INET, SOCK_STREAM, 0);
-	setsockopt(io->pvt->server_fd, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 },
+	server_fd = socket(AF_INET, SOCK_STREAM, 0);
+	setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 },
 								sizeof(int));
 	io->pvt->server_addr.sin_addr.s_addr = INADDR_ANY;
 	io->pvt->server_addr.sin_port = htons(port);
-	if (bind(io->pvt->server_fd, (struct sockaddr *)&io->pvt->server_addr,
+	if (bind(server_fd, (struct sockaddr *)&io->pvt->server_addr,
 					sizeof(io->pvt->server_addr)) < 0) {
 		l_error("Failed to start mesh io (bind): %s",
 							strerror(errno));
 		return false;
 	}
 
-	if (listen(io->pvt->server_fd, 1) < 0) {
+	if (listen(server_fd, 1) < 0) {
 		l_error("Failed to start mesh io (listen): %s",
 							strerror(errno));
 		return false;
 	}
 
-	io->pvt->server_io = io_new(io->pvt->server_fd);
+	io->pvt->server_io = io_new(server_fd);
 
 	io->pvt->rx_regs = l_queue_new();
 	io->pvt->tx_pkts = l_queue_new();
@@ -277,10 +272,7 @@ static bool tcpserver_io_destroy(struct mesh_io *io)
 	if (!pvt)
 		return true;
 
-	close(io->pvt->server_fd);
 	io_destroy(io->pvt->server_io);
-
-	close(io->pvt->client_fd);
 	io_destroy(io->pvt->client_io);
 
 	l_timeout_remove(pvt->tx_timeout);
@@ -329,6 +321,8 @@ static void send_flush(struct mesh_io_private *pvt)
 		if (!silvair_send_slip(io, tx->data, tx->len, tx->instant,
 								client_write)) {
 			l_error("write failed: %s", strerror(errno));
+			close(io_get_fd(io->pvt->client_io));
+			io->pvt->client_io = NULL;
 			return;
 		}
 
