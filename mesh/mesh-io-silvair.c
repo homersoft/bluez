@@ -388,9 +388,6 @@ static void send_flush(struct mesh_io_private *pvt)
 		if (!tx || tx->instant > instant)
 			break;
 
-		tx = l_queue_pop_head(pvt->tx_pkts);
-		l_free(tx);
-
 		if (pvt->iface_fd >= 0) {
 			if (!silvair_send_packet(io, tx->data, tx->len,
 								tx->instant,
@@ -406,6 +403,10 @@ static void send_flush(struct mesh_io_private *pvt)
 				return;
 			}
 		}
+
+		tx = l_queue_pop_head(pvt->tx_pkts);
+		l_free(tx);
+
 	} while (tx);
 
 	if (tx)
