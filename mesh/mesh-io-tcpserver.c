@@ -321,9 +321,6 @@ static void send_flush(struct mesh_io *mesh_io)
 		if (!tx || tx->instant > instant)
 			break;
 
-		tx = l_queue_pop_head(mesh_io->pvt->tx_pkts);
-		l_free(tx);
-
 		if (!silvair_send_slip(mesh_io, tx->data, tx->len, tx->instant,
 								client_write)) {
 			l_error("write failed: %s", strerror(errno));
@@ -331,6 +328,9 @@ static void send_flush(struct mesh_io *mesh_io)
 			mesh_io->pvt->client_io = NULL;
 			return;
 		}
+
+		tx = l_queue_pop_head(mesh_io->pvt->tx_pkts);
+		l_free(tx);
 	} while (tx);
 
 	if (tx)
