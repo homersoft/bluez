@@ -326,14 +326,14 @@ static void send_flush(struct mesh_io_private *pvt)
 		if (!tx || tx->instant > instant)
 			break;
 
-		tx = l_queue_pop_head(pvt->tx_pkts);
-		l_free(tx);
-
 		if (!silvair_send_slip(io, tx->data, tx->len, tx->instant,
 								client_write)) {
 			l_error("write failed: %s", strerror(errno));
 			return;
 		}
+
+		tx = l_queue_pop_head(pvt->tx_pkts);
+		l_free(tx);
 	} while (tx);
 
 	if (tx)
