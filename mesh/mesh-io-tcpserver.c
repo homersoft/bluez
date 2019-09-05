@@ -185,6 +185,8 @@ static bool io_accept_callback(struct io *io, void *user_data)
 	if (client_fd < 0)
 		return false;
 
+	fcntl(client_fd, F_SETFL, fcntl(client_fd, F_GETFL, 0) | O_NONBLOCK);
+
 	memcpy(&mesh_io->pvt->client_addr, &client_addr, sizeof(client_addr));
 
 	mesh_io->pvt->client_io = io_new(client_fd);
@@ -231,6 +233,7 @@ static bool tcpserver_io_init(struct mesh_io *io, void *opts)
 	io->pvt = l_new(struct mesh_io_private, 1);
 
 	server_fd = socket(AF_INET, SOCK_STREAM, 0);
+	fcntl(server_fd, F_SETFL, fcntl(server_fd, F_GETFL, 0) | O_NONBLOCK);
 	setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 },
 								sizeof(int));
 	io->pvt->server_addr.sin_addr.s_addr = INADDR_ANY;
