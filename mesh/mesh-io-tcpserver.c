@@ -203,7 +203,7 @@ static bool io_accept_callback(struct io *io, void *user_data)
 
 static void send_timeout(struct l_timeout *timeout, void *user_data);
 
-static bool tcpserver_io_init(struct mesh_io *io, void *opts)
+static bool tcpserver_io_init(struct mesh_io *mesh_io, void *opts)
 {
 	int server_fd;
 	uint16_t port = 0;
@@ -224,22 +224,22 @@ static bool tcpserver_io_init(struct mesh_io *io, void *opts)
 
 	} while (delim);
 
-	if (!io || io->pvt)
+	if (!mesh_io || mesh_io->pvt)
 		return false;
 
 	if (!port)
 		return false;
 
-	io->pvt = l_new(struct mesh_io_private, 1);
+	mesh_io->pvt = l_new(struct mesh_io_private, 1);
 
 	server_fd = socket(AF_INET, SOCK_STREAM, 0);
 	fcntl(server_fd, F_SETFL, fcntl(server_fd, F_GETFL, 0) | O_NONBLOCK);
 	setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 },
 								sizeof(int));
-	io->pvt->server_addr.sin_addr.s_addr = INADDR_ANY;
-	io->pvt->server_addr.sin_port = htons(port);
-	if (bind(server_fd, (struct sockaddr *)&io->pvt->server_addr,
-					sizeof(io->pvt->server_addr)) < 0) {
+	mesh_io->pvt->server_addr.sin_addr.s_addr = INADDR_ANY;
+	mesh_io->pvt->server_addr.sin_port = htons(port);
+	if (bind(server_fd, (struct sockaddr *)&mesh_io->pvt->server_addr,
+					sizeof(mesh_io->pvt->server_addr)) < 0) {
 		l_error("Failed to start mesh io (bind): %s",
 							strerror(errno));
 		return false;
@@ -251,45 +251,45 @@ static bool tcpserver_io_init(struct mesh_io *io, void *opts)
 		return false;
 	}
 
-	io->pvt->server_io = io_new(server_fd);
+	mesh_io->pvt->server_io = io_new(server_fd);
 
-	io->pvt->rx_regs = l_queue_new();
-	io->pvt->tx_pkts = l_queue_new();
+	mesh_io->pvt->rx_regs = l_queue_new();
+	mesh_io->pvt->tx_pkts = l_queue_new();
 
-	if (!io_set_read_handler(io->pvt->server_io, io_accept_callback, io,
-									NULL))
+	if (!io_set_read_handler(mesh_io->pvt->server_io, io_accept_callback,
+								mesh_io, NULL))
 		return false;
 
-	io->pvt->tx_timeout = l_timeout_create_ms(0, send_timeout, io->pvt,
-									NULL);
+	mesh_io->pvt->tx_timeout = l_timeout_create_ms(0, send_timeout,
+							mesh_io, NULL);
 
 	l_info("Started mesh on tcp port %d", port);
 
 	return true;
 }
 
-static bool tcpserver_io_destroy(struct mesh_io *io)
+static bool tcpserver_io_destroy(struct mesh_io *mesh_io)
 {
-	struct mesh_io_private *pvt = io->pvt;
+	struct mesh_io_private *pvt = mesh_io->pvt;
 
 	if (!pvt)
 		return true;
 
-	io_destroy(io->pvt->server_io);
-	io_destroy(io->pvt->client_io);
+	io_destroy(pvt->server_io);
+	io_destroy(pvt->client_io);
 
 	l_timeout_remove(pvt->tx_timeout);
 	l_queue_destroy(pvt->rx_regs, l_free);
 	l_queue_destroy(pvt->tx_pkts, l_free);
 	l_free(pvt);
-	io->pvt = NULL;
+	mesh_io->pvt = NULL;
 
 	return true;
 }
 
-static bool tcpserver_io_caps(struct mesh_io *io, struct mesh_io_caps *caps)
+static bool tcpserver_io_caps(struct mesh_io *mesh_io, struct mesh_io_caps *caps)
 {
-	struct mesh_io_private *pvt = io->pvt;
+	struct mesh_io_private *pvt = mesh_io->pvt;
 
 	if (!pvt || !caps)
 		return false;
@@ -309,42 +309,42 @@ static bool client_write(struct mesh_io_private *pvt, uint32_t instant,
 	return (w > 0 && (size_t)w == size);
 }
 
-static void send_flush(struct mesh_io_private *pvt)
+static void send_flush(struct mesh_io *mesh_io)
 {
 	struct tx_pkt *tx;
 	uint32_t instant = get_instant();
-	struct mesh_io *io = l_container_of(&pvt, struct mesh_io, pvt);
 
 	do {
-		tx = l_queue_peek_head(pvt->tx_pkts);
+		tx = l_queue_peek_head(mesh_io->pvt->tx_pkts);
 
 		if (!tx || tx->instant > instant)
 			break;
 
-		if (!silvair_send_slip(io, tx->data, tx->len, tx->instant,
+		if (!silvair_send_slip(mesh_io, tx->data, tx->len, tx->instant,
 								client_write)) {
 			l_error("write failed: %s", strerror(errno));
-			close(io_get_fd(io->pvt->client_io));
-			io->pvt->client_io = NULL;
+			close(io_get_fd(mesh_io->pvt->client_io));
+			mesh_io->pvt->client_io = NULL;
 			return;
 		}
 
-		tx = l_queue_pop_head(pvt->tx_pkts);
+		tx = l_queue_pop_head(mesh_io->pvt->tx_pkts);
 		l_free(tx);
 	} while (tx);
 
 	if (tx)
-		l_timeout_modify_ms(pvt->tx_timeout, tx->instant - instant);
+		l_timeout_modify_ms(mesh_io->pvt->tx_timeout,
+							tx->instant - instant);
 }
 
 static void send_timeout(struct l_timeout *timeout, void *user_data)
 {
-	struct mesh_io_private *pvt = user_data;
+	struct mesh_io *mesh_io = user_data;
 
-	if (!pvt)
+	if (!mesh_io)
 		return;
 
-	send_flush(pvt);
+	send_flush(mesh_io);
 }
 
 static int compare_tx_pkt_instant(const void *a, const void *b,
@@ -359,7 +359,7 @@ static int compare_tx_pkt_instant(const void *a, const void *b,
 	return lhs->instant < rhs->instant ? -1 : 1;
 }
 
-static void send_pkt(struct mesh_io_private *pvt,
+static void send_pkt(struct mesh_io *mesh_io,
 			const uint8_t *data, uint16_t len, uint32_t instant)
 {
 	struct tx_pkt *tx = l_new(struct tx_pkt, 1);
@@ -368,16 +368,15 @@ static void send_pkt(struct mesh_io_private *pvt,
 	tx->len = len;
 	memcpy(tx->data, data, len);
 
-	l_queue_insert(pvt->tx_pkts, tx, compare_tx_pkt_instant, NULL);
+	l_queue_insert(mesh_io->pvt->tx_pkts, tx, compare_tx_pkt_instant, NULL);
 
-	send_flush(pvt);
+	send_flush(mesh_io);
 }
 
-static bool tcpserver_io_send(struct mesh_io *io,
+static bool tcpserver_io_send(struct mesh_io *mesh_io,
 					struct mesh_io_send_info *info,
 					const uint8_t *data, uint16_t len)
 {
-	struct mesh_io_private *pvt = io->pvt;
 	uint32_t instant;
 	uint16_t interval;
 	uint8_t delay;
@@ -400,7 +399,7 @@ static bool tcpserver_io_send(struct mesh_io *io,
 		}
 
 		for (i = 0; i < info->u.gen.cnt; ++i)
-			send_pkt(pvt, data, len,
+			send_pkt(mesh_io, data, len,
 					instant + delay + interval * i);
 		break;
 	case MESH_IO_TIMING_TYPE_POLL:
@@ -414,14 +413,14 @@ static bool tcpserver_io_send(struct mesh_io *io,
 			delay += info->u.gen.min_delay;
 		}
 
-		send_pkt(pvt, data, len, instant + delay);
+		send_pkt(mesh_io, data, len, instant + delay);
 		break;
 
 	case MESH_IO_TIMING_TYPE_POLL_RSP:
 		instant = info->u.poll_rsp.instant;
 		delay = info->u.poll_rsp.delay;
 
-		send_pkt(pvt, data, len, instant + delay);
+		send_pkt(mesh_io, data, len, instant + delay);
 		break;
 	}
 
@@ -438,10 +437,10 @@ static bool find_by_filter_id(const void *a, const void *b)
 	return rx_reg->filter_id == filter_id;
 }
 
-static bool tcpserver_io_reg(struct mesh_io *io, uint8_t filter_id,
+static bool tcpserver_io_reg(struct mesh_io *mesh_io, uint8_t filter_id,
 				mesh_io_recv_func_t cb, void *user_data)
 {
-	struct mesh_io_private *pvt = io->pvt;
+	struct mesh_io_private *pvt = mesh_io->pvt;
 	struct pvt_rx_reg *rx_reg;
 
 	l_info("%s %d", __func__, filter_id);
@@ -466,9 +465,9 @@ static bool tcpserver_io_reg(struct mesh_io *io, uint8_t filter_id,
 	return true;
 }
 
-static bool tcpserver_io_dereg(struct mesh_io *io, uint8_t filter_id)
+static bool tcpserver_io_dereg(struct mesh_io *mesh_io, uint8_t filter_id)
 {
-	struct mesh_io_private *pvt = io->pvt;
+	struct mesh_io_private *pvt = mesh_io->pvt;
 
 	struct pvt_rx_reg *rx_reg;
 
@@ -481,11 +480,11 @@ static bool tcpserver_io_dereg(struct mesh_io *io, uint8_t filter_id)
 	return true;
 }
 
-static bool tcpserver_io_set(struct mesh_io *io,
+static bool tcpserver_io_set(struct mesh_io *mesh_io,
 		uint8_t filter_id, const uint8_t *data, uint8_t len,
 		mesh_io_status_func_t callback, void *user_data)
 {
-	struct mesh_io_private *pvt = io->pvt;
+	struct mesh_io_private *pvt = mesh_io->pvt;
 
 	l_info("%s id: %d, --> %2.2x", __func__, filter_id, data[0]);
 	if (!data || !len || !filter_id || filter_id > sizeof(pvt->filters))
@@ -509,10 +508,10 @@ static bool find_by_pattern(const void *a, const void *b)
 	return (!memcmp(tx->data, pattern->data, pattern->len));
 }
 
-static bool tcpserver_io_cancel(struct mesh_io *io, const uint8_t *data,
+static bool tcpserver_io_cancel(struct mesh_io *mesh_io, const uint8_t *data,
 								uint8_t len)
 {
-	struct mesh_io_private *pvt = io->pvt;
+	struct mesh_io_private *pvt = mesh_io->pvt;
 	struct tx_pkt *tx;
 	const struct tx_pattern pattern = {
 		.data = data,
