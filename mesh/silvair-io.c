@@ -21,6 +21,20 @@
 #define SLIP_ESC_END 0334
 #define SLIP_ESC_ESC 0335
 
+static const uint32_t silvair_access_address = 0x8e89bed6;
+
+static const uint8_t silvair_channels[8] = {
+	0x00, 0x00, 0x00, 0x0e,
+	0x00, 0x00, 0x00, 0x00,
+};
+
+enum silvair_adv_type
+{
+    SILVAIR_ADV_TYPE_ADV_IND         = 0x00,
+    SILVAIR_ADV_TYPE_ADV_DIRECT_IND  = 0x01,
+    SILVAIR_ADV_TYPE_ADV_NONCONN_IND = 0x02,
+};
+
 enum silvair_phy {
 	SILVAIR_PHY_1MBIT	= 0x03,
 	SILVAIR_PHY_2MBIT	= 0x04,
@@ -291,13 +305,12 @@ static bool send_packet(struct mesh_io *io, uint8_t *buf, size_t size,
 	pkt_hdr->type = SILVAIR_CMD_TX;
 
 	tx_hdr->hdr_len = sizeof(*tx_hdr);
-	tx_hdr->channels[3] = 0xe0;
+	memcpy(tx_hdr->channels, silvair_channels, sizeof(tx_hdr->channels));
 	tx_hdr->phy = SILVAIR_PHY_1MBIT;
 	tx_hdr->pwr = SILVAIR_PWR_MINUS_8_DBM;
 
-	tx_pld->access_address = L_CPU_TO_BE32(0x8e89bed6);
-	/* ADV_NOCONN_IND */
-	tx_pld->header.type = 2;
+	tx_pld->access_address = silvair_access_address;
+	tx_pld->header.type = SILVAIR_ADV_TYPE_ADV_NONCONN_IND;
 
 	/* bdaddress + type tag + data */
 	tx_pld->header.size = 6 + size + 1;
