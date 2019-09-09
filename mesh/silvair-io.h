@@ -46,5 +46,8 @@ void silvair_process_slip(struct mesh_io *io, struct slip *slip,
 bool silvair_send_packet(struct mesh_io *io, uint8_t *buf, size_t size,
 					uint32_t instant, send_data_cb cb);
 
+bool silvair_send_keepalive_request(struct mesh_io *io, uint32_t instant,
+					send_data_cb cb);
+
 bool silvair_send_slip(struct mesh_io *io, uint8_t *buf, size_t size,
 					uint32_t instant, send_data_cb cb);
