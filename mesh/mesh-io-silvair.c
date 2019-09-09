@@ -377,8 +377,8 @@ static bool io_write(struct mesh_io_private *pvt, uint32_t instant,
 					const uint8_t *buf, size_t size)
 {
 	int fd = io_get_fd(pvt->io);
-
 	int w = write(fd, buf, size);
+
 	return (w > 0 && (size_t)w == size);
 }
 

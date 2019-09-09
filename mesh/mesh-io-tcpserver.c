@@ -142,8 +142,7 @@ static bool io_read_callback(struct io *io, void *user_data)
 
 	r = read(fd, buf, sizeof(buf));
 
-	if (r <= 0)
-	{
+	if (r <= 0) {
 		l_info("Disconnected %s:%hu",
 				inet_ntoa(mesh_io->pvt->client_addr.sin_addr),
 				ntohs(mesh_io->pvt->client_addr.sin_port));
@@ -241,7 +240,7 @@ static bool tcpserver_io_init(struct mesh_io *mesh_io, void *opts)
 	mesh_io->pvt->server_addr.sin_addr.s_addr = INADDR_ANY;
 	mesh_io->pvt->server_addr.sin_port = htons(port);
 	if (bind(server_fd, (struct sockaddr *)&mesh_io->pvt->server_addr,
-					sizeof(mesh_io->pvt->server_addr)) < 0) {
+				sizeof(mesh_io->pvt->server_addr)) < 0) {
 		l_error("Failed to start mesh io (bind): %s",
 							strerror(errno));
 		return false;
@@ -293,7 +292,8 @@ static bool tcpserver_io_destroy(struct mesh_io *mesh_io)
 	return true;
 }
 
-static bool tcpserver_io_caps(struct mesh_io *mesh_io, struct mesh_io_caps *caps)
+static bool tcpserver_io_caps(struct mesh_io *mesh_io,
+						struct mesh_io_caps *caps)
 {
 	struct mesh_io_private *pvt = mesh_io->pvt;
 
@@ -310,8 +310,8 @@ static bool client_write(struct mesh_io_private *pvt, uint32_t instant,
 					const uint8_t *buf, size_t size)
 {
 	int fd = io_get_fd(pvt->client_io);
-
 	int w = write(fd, buf, size);
+
 	return (w > 0 && (size_t)w == size);
 }
 
