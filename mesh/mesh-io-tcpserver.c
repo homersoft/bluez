@@ -55,6 +55,7 @@ struct mesh_io_private {
 	struct io *client_io;
 
 	struct l_timeout *tx_timeout;
+	struct l_timeout *keep_alive_timeout;
 	struct l_queue *rx_regs;
 	struct l_queue *tx_pkts;
 	uint8_t filters[3]; /* Simple filtering on AD type only */
@@ -202,6 +203,7 @@ static bool io_accept_callback(struct io *io, void *user_data)
 }
 
 static void send_timeout(struct l_timeout *timeout, void *user_data);
+static void send_keep_alive(struct l_timeout *timeout, void *user_data);
 
 static bool tcpserver_io_init(struct mesh_io *mesh_io, void *opts)
 {
@@ -263,6 +265,9 @@ static bool tcpserver_io_init(struct mesh_io *mesh_io, void *opts)
 	mesh_io->pvt->tx_timeout = l_timeout_create_ms(0, send_timeout,
 							mesh_io, NULL);
 
+	mesh_io->pvt->keep_alive_timeout = l_timeout_create(10, send_keep_alive,
+							mesh_io, NULL);
+
 	l_info("Started mesh on tcp port %d", port);
 
 	return true;
@@ -279,6 +284,7 @@ static bool tcpserver_io_destroy(struct mesh_io *mesh_io)
 	io_destroy(pvt->client_io);
 
 	l_timeout_remove(pvt->tx_timeout);
+	l_timeout_remove(pvt->keep_alive_timeout);
 	l_queue_destroy(pvt->rx_regs, l_free);
 	l_queue_destroy(pvt->tx_pkts, l_free);
 	l_free(pvt);
@@ -345,6 +351,17 @@ static void send_timeout(struct l_timeout *timeout, void *user_data)
 		return;
 
 	send_flush(mesh_io);
+}
+
+static void send_keep_alive(struct l_timeout *timeout, void *user_data)
+{
+	struct mesh_io *io = user_data;
+
+	if (!io)
+		return;
+
+	silvair_send_keepalive_request(io, get_instant(), client_write);
+	l_timeout_modify(timeout, 10);
 }
 
 static int compare_tx_pkt_instant(const void *a, const void *b,
@@ -426,8 +443,6 @@ static bool tcpserver_io_send(struct mesh_io *mesh_io,
 
 	return true;
 }
-
-
 
 static bool find_by_filter_id(const void *a, const void *b)
 {
