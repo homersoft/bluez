@@ -120,6 +120,16 @@ struct silvair_tx_cmd_pld {
 	uint8_t			adv_data[0];
 } __packed;
 
+struct silvair_keep_alive_cmd_pld {
+	uint8_t silvair_version_len;
+
+	/* Max supported version: AA.BB.CC-rcDD-12345678\0*/
+	char     silvair_version[23];
+	uint32_t reset_reason;
+	uint32_t uptime;
+	uint8_t  last_fault_len;
+	uint8_t  last_fault[128];
+} __packed;
 
 typedef bool (*write_cb)(struct mesh_io *io, uint8_t *buf, size_t size,
 					uint32_t instant, send_data_cb cb);
@@ -168,6 +178,20 @@ static void process_evt_rx(struct mesh_io *io,
 	}
 }
 
+static void process_evt_keep_alive(struct mesh_io *io,
+						   uint32_t instant,
+						   const struct silvair_pkt_hdr *pkt_hdr,
+						   size_t len,
+						   process_packet_cb cb)
+{
+	const struct silvair_keep_alive_cmd_pld *keep_alive_pld;
+
+	keep_alive_pld = (struct silvair_keep_alive_cmd_pld *)(pkt_hdr + 1);
+	l_info("Version: %s", keep_alive_pld->silvair_version);
+
+	/* ToDo: JWI - add reset reason, uptime and last fault */
+}
+
 void silvair_process_packet(struct mesh_io *io, uint8_t *buf, size_t size,
 					uint32_t instant, process_packet_cb cb)
 {
@@ -187,9 +211,7 @@ void silvair_process_packet(struct mesh_io *io, uint8_t *buf, size_t size,
 		break;
 
 	case SILVAIR_CMD_KEEP_ALIVE:
-		l_info("VERSION: ");
-		for(size_t i = 0; i < size; i++)
-			l_info("%02x", buf[i]);
+		process_evt_keep_alive(io, instant, pkt_hdr, len, cb);
 		break;
 
 	case SILVAIR_EVT_RESET:
