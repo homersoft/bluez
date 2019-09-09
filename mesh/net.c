@@ -2735,8 +2735,6 @@ static void update_iv_kr_state(struct mesh_subnet *subnet, uint32_t iv_index,
 	}
 
 	if (net->iv_upd_state == IV_UPD_INIT) {
-		if (iv_index > net->iv_index)
-			mesh_net_set_seq_num(net, 0);
 		net->iv_index = iv_index;
 
 		if (iv_update) {
@@ -2756,6 +2754,12 @@ static void update_iv_kr_state(struct mesh_subnet *subnet, uint32_t iv_index,
 
 		mesh_config_write_iv_index(node_config_get(net->node), iv_index,
 							net->iv_upd_state);
+
+		/* Reset seq num if iv index used for *outgoing* messages has
+		 * just been increased
+		 */
+		if (mesh_net_get_iv_index(net) > local_iv_index)
+			mesh_net_set_seq_num(net, 0);
 
 		/* Figure out the key refresh phase */
 		if (kr_transition) {
