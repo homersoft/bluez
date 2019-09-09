@@ -334,7 +334,7 @@ static bool silvair_io_init(struct mesh_io *io, void *opts)
 	io->pvt->tx_timeout = l_timeout_create_ms(0, send_timeout, io->pvt,
 									NULL);
 
-	io->pvt->keep_alive_timeout = l_timeout_create(3, send_keep_alive, io,
+	io->pvt->keep_alive_timeout = l_timeout_create(10, send_keep_alive, io,
 									NULL);
 
 	return true;
@@ -437,7 +437,7 @@ static void send_keep_alive(struct l_timeout *timeout, void *user_data)
 		return;
 
 	silvair_send_keepalive_request(io, get_instant(), io_write);
-	l_timeout_modify(timeout, 3);
+	l_timeout_modify(timeout, 10);
 }
 static int compare_tx_pkt_instant(const void *a, const void *b,
 							void *user_data)
