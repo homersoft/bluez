@@ -187,6 +187,8 @@ static void process_evt_keep_alive(struct mesh_io *io,
 	keep_alive_pld = (struct silvair_keep_alive_cmd_pld *)(pkt_hdr + 1);
 	l_info("Version: %s", keep_alive_pld->silvair_version);
 
+	mesh_io_silvair_keep_alive_refresh(io);
+
 	/* ToDo: JWI - add reset reason, uptime and last fault */
 }
 

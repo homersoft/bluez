@@ -43,6 +43,10 @@
 #include "mesh/mesh-io-silvair.h"
 #include "mesh/silvair-io.h"
 
+const uint8_t KEEP_ALIVE_TMOUT_PERIOD = 10;
+const uint8_t KEEP_ALIVE_WATCHDOG_PERIOD = 2 * KEEP_ALIVE_TMOUT_PERIOD;
+static bool keep_alive_watchdog_started = false;
+
 struct mesh_io_private {
 	char tty_name[PATH_MAX];
 	int tty_fd;
@@ -54,6 +58,7 @@ struct mesh_io_private {
 
 	struct l_timeout *tx_timeout;
 	struct l_timeout *keep_alive_timeout;
+	struct l_timeout *keep_alive_watchdog;
 	struct l_queue *rx_regs;
 	struct l_queue *tx_pkts;
 	uint8_t filters[3]; /* Simple filtering on AD type only */
@@ -157,6 +162,7 @@ static bool io_read_callback(struct io *io, void *user_data)
 
 static void send_timeout(struct l_timeout *timeout, void *user_data);
 static void send_keep_alive(struct l_timeout *timeout, void *user_data);
+static void keep_alive_error(struct l_timeout *timeout, void *user_data);
 
 static bool silvair_kernel_init(struct mesh_io *io)
 {
@@ -334,9 +340,13 @@ static bool silvair_io_init(struct mesh_io *io, void *opts)
 	io->pvt->tx_timeout = l_timeout_create_ms(0, send_timeout, io->pvt,
 									NULL);
 
-	io->pvt->keep_alive_timeout = l_timeout_create(10, send_keep_alive, io,
+	io->pvt->keep_alive_timeout = l_timeout_create(KEEP_ALIVE_TMOUT_PERIOD, send_keep_alive, io,
 									NULL);
 
+	io->pvt->keep_alive_watchdog = l_timeout_create(KEEP_ALIVE_WATCHDOG_PERIOD, keep_alive_error, io,
+									NULL);
+
+	keep_alive_watchdog_started = true;
 	return true;
 }
 
@@ -352,6 +362,7 @@ static bool silvair_io_destroy(struct mesh_io *io)
 	io_destroy(io->pvt->io);
 	l_timeout_remove(pvt->tx_timeout);
 	l_timeout_remove(pvt->keep_alive_timeout);
+	l_timeout_remove(pvt->keep_alive_watchdog);
 	l_queue_destroy(pvt->rx_regs, l_free);
 	l_queue_destroy(pvt->tx_pkts, l_free);
 	l_free(pvt);
@@ -448,6 +459,11 @@ static void send_keep_alive(struct l_timeout *timeout, void *user_data)
 	l_timeout_modify(timeout, 10);
 }
 
+static void keep_alive_error(struct l_timeout *timeout, void *user_data)
+{
+	l_error("USB cable disconnected !");
+}
+
 static int compare_tx_pkt_instant(const void *a, const void *b,
 							void *user_data)
 {
@@ -527,8 +543,6 @@ static bool silvair_io_send(struct mesh_io *io, struct mesh_io_send_info *info,
 
 	return true;
 }
-
-
 
 static bool find_by_filter_id(const void *a, const void *b)
 {
@@ -647,3 +661,11 @@ const struct mesh_io_api mesh_io_silvair = {
 	.set = silvair_io_set,
 	.cancel = silvair_io_cancel,
 };
+
+void mesh_io_silvair_keep_alive_refresh(struct mesh_io *io)
+{
+	if (!io || !keep_alive_watchdog_started)
+		return;
+
+	l_timeout_modify(io->pvt->keep_alive_watchdog, KEEP_ALIVE_WATCHDOG_PERIOD);
+}

@@ -18,3 +18,5 @@
  */
 
 extern const struct mesh_io_api mesh_io_silvair;
+
+void mesh_io_silvair_keep_alive_refresh(struct mesh_io *io);
