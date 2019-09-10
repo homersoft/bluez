@@ -29,11 +29,10 @@ static const uint8_t silvair_channels[8] = {
 	0x00, 0x00, 0x00, 0x00,
 };
 
-enum silvair_adv_type
-{
-    SILVAIR_ADV_TYPE_ADV_IND         = 0x00,
-    SILVAIR_ADV_TYPE_ADV_DIRECT_IND  = 0x01,
-    SILVAIR_ADV_TYPE_ADV_NONCONN_IND = 0x02,
+enum silvair_adv_type {
+	SILVAIR_ADV_TYPE_ADV_IND         = 0x00,
+	SILVAIR_ADV_TYPE_ADV_DIRECT_IND  = 0x01,
+	SILVAIR_ADV_TYPE_ADV_NONCONN_IND = 0x02,
 };
 
 enum silvair_phy {
@@ -179,10 +178,9 @@ static void process_evt_rx(struct mesh_io *io,
 }
 
 static void process_evt_keep_alive(struct mesh_io *io,
-						   uint32_t instant,
-						   const struct silvair_pkt_hdr *pkt_hdr,
-						   size_t len,
-						   process_packet_cb cb)
+					uint32_t instant,
+					const struct silvair_pkt_hdr *pkt_hdr,
+					size_t len, process_packet_cb cb)
 {
 	const struct silvair_keep_alive_cmd_pld *keep_alive_pld;
 
@@ -312,7 +310,8 @@ static bool simple_write(struct mesh_io *io, uint8_t *buf, size_t size,
 	return cb(io->pvt, instant, buf, size);
 }
 
-static int build_packet(uint8_t *data, uint8_t *buf, size_t size, enum silvair_pkt_type type)
+static int build_packet(uint8_t *data, uint8_t *buf, size_t size,
+					enum silvair_pkt_type type)
 {
 	struct silvair_pkt_hdr *pkt_hdr;
 	struct silvair_tx_cmd_hdr *tx_hdr;
@@ -367,8 +366,8 @@ static bool send_packet(struct mesh_io *io, uint8_t *buf, size_t size,
 	return write(io, data, len, instant, cb);
 }
 
-static bool send_keep_alive_request(struct mesh_io *io, uint8_t *buf, size_t size,
-						uint32_t instant,
+static bool send_keep_alive_request(struct mesh_io *io, uint8_t *buf,
+						size_t size, uint32_t instant,
 						write_cb write, send_data_cb cb)
 {
 	int len = 0;
@@ -379,19 +378,41 @@ static bool send_keep_alive_request(struct mesh_io *io, uint8_t *buf, size_t siz
 }
 
 bool silvair_send_packet(struct mesh_io *io, uint8_t *buf, size_t size,
-					uint32_t instant, send_data_cb cb)
+						uint32_t instant,
+						send_data_cb cb,
+						enum packet_type type)
 {
-	return send_packet(io, buf, size, instant, simple_write, cb);
-}
+	switch(type) {
 
-bool silvair_send_keepalive_request(struct mesh_io *io, uint32_t instant,
-					send_data_cb cb)
-{
-	return send_keep_alive_request(io, NULL, 0, instant, slip_write, cb);
+	case PACKET_TYPE_MESSAGE:
+		return send_packet(io, buf, size, instant, simple_write, cb);
+
+	case PACKET_TYPE_KEEP_ALIVE:
+		return send_keep_alive_request(io, NULL, 0, instant,
+			simple_write, cb);
+
+	default:
+		l_error("Unsupported type to be sent");
+		break;
+	}
 }
 
 bool silvair_send_slip(struct mesh_io *io, uint8_t *buf, size_t size,
-					uint32_t instant, send_data_cb cb)
+						uint32_t instant,
+						send_data_cb cb,
+						enum packet_type type)
 {
-	return send_packet(io, buf, size, instant, slip_write, cb);
+	switch(type) {
+
+	case PACKET_TYPE_MESSAGE:
+		return send_packet(io, buf, size, instant, slip_write, cb);
+
+	case PACKET_TYPE_KEEP_ALIVE:
+		return send_keep_alive_request(io, NULL, 0, instant,
+			slip_write, cb);
+
+	default:
+		l_error("Unsupported type to be sent");
+		break;
+	}
 }

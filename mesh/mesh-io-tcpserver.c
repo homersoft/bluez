@@ -327,7 +327,7 @@ static void send_flush(struct mesh_io *mesh_io)
 			break;
 
 		if (!silvair_send_slip(mesh_io, tx->data, tx->len, tx->instant,
-								client_write)) {
+					client_write, PACKET_TYPE_MESSAGE)) {
 			l_error("write failed: %s", strerror(errno));
 			close(io_get_fd(mesh_io->pvt->client_io));
 			mesh_io->pvt->client_io = NULL;
@@ -355,12 +355,19 @@ static void send_timeout(struct l_timeout *timeout, void *user_data)
 
 static void send_keep_alive(struct l_timeout *timeout, void *user_data)
 {
+	int fd;
 	struct mesh_io *io = user_data;
 
 	if (!io)
 		return;
 
-	silvair_send_keepalive_request(io, get_instant(), client_write);
+	fd = io_get_fd(io->pvt->client_io);
+
+	if (fd < 0)
+		return;
+
+	silvair_send_slip(io, NULL, 0, get_instant(),
+		client_write, PACKET_TYPE_KEEP_ALIVE);
 	l_timeout_modify(timeout, 10);
 }
 

@@ -396,15 +396,17 @@ static void send_flush(struct mesh_io_private *pvt)
 
 		if (pvt->iface_fd >= 0) {
 			if (!silvair_send_packet(io, tx->data, tx->len,
-								tx->instant,
-								io_write)) {
+							tx->instant,
+							io_write,
+							PACKET_TYPE_MESSAGE)) {
 				l_error("write failed: %s", strerror(errno));
 				return;
 			}
 		} else {
 			if (!silvair_send_slip(io, tx->data, tx->len,
-								tx->instant,
-								io_write)) {
+							tx->instant,
+							io_write,
+							PACKET_TYPE_MESSAGE)) {
 				l_error("write failed: %s", strerror(errno));
 				return;
 			}
@@ -436,9 +438,16 @@ static void send_keep_alive(struct l_timeout *timeout, void *user_data)
 	if (!io)
 		return;
 
-	silvair_send_keepalive_request(io, get_instant(), io_write);
+	if (io->pvt->iface_fd >= 0)
+		silvair_send_packet(io, NULL, 0, get_instant(),
+			io_write, PACKET_TYPE_KEEP_ALIVE);
+	else
+		silvair_send_slip(io, NULL, 0, get_instant(),
+			io_write, PACKET_TYPE_KEEP_ALIVE);
+
 	l_timeout_modify(timeout, 10);
 }
+
 static int compare_tx_pkt_instant(const void *a, const void *b,
 							void *user_data)
 {
