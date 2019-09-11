@@ -88,6 +88,15 @@ struct tx_pattern {
 	uint8_t				len;
 };
 
+static void process_rx(struct mesh_io_private *pvt, int8_t rssi,
+					uint32_t instant,
+					const uint8_t *data, uint8_t len);
+
+static const struct rx_process_cb rx_cbk = {
+	.process_packet_cb = process_rx,
+	.process_keep_alive_cb = NULL,
+};
+
 static uint32_t get_instant(void)
 {
 	struct timeval tm;
@@ -153,7 +162,7 @@ static bool io_read_callback(struct io *io, void *user_data)
 	instant = get_instant();
 
 	silvair_process_slip(mesh_io, &mesh_io->pvt->slip, buf, r, instant,
-								process_rx);
+						&rx_cbk);
 
 	return true;
 }

@@ -45,7 +45,6 @@
 
 const uint8_t KEEP_ALIVE_TMOUT_PERIOD = 10;
 const uint8_t KEEP_ALIVE_WATCHDOG_PERIOD = 2 * KEEP_ALIVE_TMOUT_PERIOD;
-static bool keep_alive_watchdog_started = false;
 
 struct mesh_io_private {
 	char tty_name[PATH_MAX];
@@ -103,6 +102,21 @@ static uint32_t get_instant(void)
 	return instant;
 }
 
+static void send_timeout(struct l_timeout *timeout, void *user_data);
+static void send_keep_alive(struct l_timeout *timeout, void *user_data);
+static void keep_alive_error(struct l_timeout *timeout, void *user_data);
+
+static void process_rx(struct mesh_io_private *pvt, int8_t rssi,
+					uint32_t instant,
+					const uint8_t *data, uint8_t len);
+
+static void process_keep_alive_refresh(struct mesh_io *io);
+
+static const struct rx_process_cb rx_cbk = {
+	.process_packet_cb = process_rx,
+	.process_keep_alive_cb = process_keep_alive_refresh,
+};
+
 static void process_rx_callbacks(void *v_rx, void *v_reg)
 {
 	struct pvt_rx_reg *rx_reg = v_rx;
@@ -131,6 +145,15 @@ static void process_rx(struct mesh_io_private *pvt, int8_t rssi,
 	l_queue_foreach(pvt->rx_regs, process_rx_callbacks, &rx);
 }
 
+static void process_keep_alive_refresh(struct mesh_io *io)
+{
+	if (!io)
+		return;
+
+	l_timeout_modify(io->pvt->keep_alive_watchdog,
+					KEEP_ALIVE_WATCHDOG_PERIOD);
+}
+
 static bool io_read_callback(struct io *io, void *user_data)
 {
 	struct mesh_io *mesh_io = user_data;
@@ -152,17 +175,13 @@ static bool io_read_callback(struct io *io, void *user_data)
 	instant = get_instant();
 
 	if (mesh_io->pvt->iface_fd >= 0)
-		silvair_process_packet(mesh_io, buf, r, instant, process_rx);
+		silvair_process_packet(mesh_io, buf, r, instant, &rx_cbk);
 	else
 		silvair_process_slip(mesh_io, &mesh_io->pvt->slip,
-						buf, r, instant, process_rx);
+						buf, r, instant, &rx_cbk);
 
 	return true;
 }
-
-static void send_timeout(struct l_timeout *timeout, void *user_data);
-static void send_keep_alive(struct l_timeout *timeout, void *user_data);
-static void keep_alive_error(struct l_timeout *timeout, void *user_data);
 
 static bool silvair_kernel_init(struct mesh_io *io)
 {
@@ -340,13 +359,13 @@ static bool silvair_io_init(struct mesh_io *io, void *opts)
 	io->pvt->tx_timeout = l_timeout_create_ms(0, send_timeout, io->pvt,
 									NULL);
 
-	io->pvt->keep_alive_timeout = l_timeout_create(KEEP_ALIVE_TMOUT_PERIOD, send_keep_alive, io,
-									NULL);
+	io->pvt->keep_alive_timeout = l_timeout_create(KEEP_ALIVE_TMOUT_PERIOD,
+		send_keep_alive, io, NULL);
 
-	io->pvt->keep_alive_watchdog = l_timeout_create(KEEP_ALIVE_WATCHDOG_PERIOD, keep_alive_error, io,
-									NULL);
+	io->pvt->keep_alive_watchdog =
+		l_timeout_create(KEEP_ALIVE_WATCHDOG_PERIOD, keep_alive_error,
+			io, NULL);
 
-	keep_alive_watchdog_started = true;
 	return true;
 }
 
@@ -462,6 +481,8 @@ static void send_keep_alive(struct l_timeout *timeout, void *user_data)
 static void keep_alive_error(struct l_timeout *timeout, void *user_data)
 {
 	l_error("USB cable disconnected !");
+
+	/* TODO: JWI - perform some action */
 }
 
 static int compare_tx_pkt_instant(const void *a, const void *b,
@@ -662,10 +683,3 @@ const struct mesh_io_api mesh_io_silvair = {
 	.cancel = silvair_io_cancel,
 };
 
-void mesh_io_silvair_keep_alive_refresh(struct mesh_io *io)
-{
-	if (!io || !keep_alive_watchdog_started)
-		return;
-
-	l_timeout_modify(io->pvt->keep_alive_watchdog, KEEP_ALIVE_WATCHDOG_PERIOD);
-}
