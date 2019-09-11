@@ -90,18 +90,6 @@ struct tx_pattern {
 	uint8_t				len;
 };
 
-static uint32_t get_instant(void)
-{
-	struct timeval tm;
-	uint32_t instant;
-
-	gettimeofday(&tm, NULL);
-	instant = tm.tv_sec * 1000;
-	instant += tm.tv_usec / 1000;
-
-	return instant;
-}
-
 static void send_timeout(struct l_timeout *timeout, void *user_data);
 static void send_keep_alive(struct l_timeout *timeout, void *user_data);
 static void keep_alive_error(struct l_timeout *timeout, void *user_data);
@@ -116,6 +104,18 @@ static const struct rx_process_cb rx_cbk = {
 	.process_packet_cb = process_rx,
 	.process_keep_alive_cb = process_keep_alive_refresh,
 };
+
+static uint32_t get_instant(void)
+{
+	struct timeval tm;
+	uint32_t instant;
+
+	gettimeofday(&tm, NULL);
+	instant = tm.tv_sec * 1000;
+	instant += tm.tv_usec / 1000;
+
+	return instant;
+}
 
 static void process_rx_callbacks(void *v_rx, void *v_reg)
 {
@@ -475,7 +475,7 @@ static void send_keep_alive(struct l_timeout *timeout, void *user_data)
 		silvair_send_slip(io, NULL, 0, get_instant(),
 			io_write, PACKET_TYPE_KEEP_ALIVE);
 
-	l_timeout_modify(timeout, 10);
+	l_timeout_modify(timeout, KEEP_ALIVE_TMOUT_PERIOD);
 }
 
 static void keep_alive_error(struct l_timeout *timeout, void *user_data)

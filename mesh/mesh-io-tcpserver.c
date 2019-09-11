@@ -47,6 +47,9 @@
 #include "mesh/mesh-io-tcpserver.h"
 #include "mesh/silvair-io.h"
 
+const uint8_t TCP_KEEP_ALIVE_TMOUT_PERIOD = 10;
+const uint8_t TCP_KEEP_ALIVE_WATCHDOG_PERIOD = 2 * TCP_KEEP_ALIVE_TMOUT_PERIOD;
+
 struct mesh_io_private {
 	struct sockaddr_in server_addr;
 	struct io *server_io;
@@ -56,6 +59,7 @@ struct mesh_io_private {
 
 	struct l_timeout *tx_timeout;
 	struct l_timeout *keep_alive_timeout;
+	struct l_timeout *keep_alive_watchdog;
 	struct l_queue *rx_regs;
 	struct l_queue *tx_pkts;
 	uint8_t filters[3]; /* Simple filtering on AD type only */
@@ -88,13 +92,19 @@ struct tx_pattern {
 	uint8_t				len;
 };
 
+static void send_timeout(struct l_timeout *timeout, void *user_data);
+static void send_keep_alive(struct l_timeout *timeout, void *user_data);
+static void keep_alive_error(struct l_timeout *timeout, void *user_data);
+
 static void process_rx(struct mesh_io *io, int8_t rssi,
 					uint32_t instant,
 					const uint8_t *data, uint8_t len);
 
+static void process_keep_alive_refresh(struct mesh_io *io);
+
 static const struct rx_process_cb rx_cbk = {
 	.process_packet_cb = process_rx,
-	.process_keep_alive_cb = NULL,
+	.process_keep_alive_cb = process_keep_alive_refresh,
 };
 
 static uint32_t get_instant(void)
@@ -135,6 +145,15 @@ static void process_rx(struct mesh_io *io, int8_t rssi,
 	};
 
 	l_queue_foreach(io->pvt->rx_regs, process_rx_callbacks, &rx);
+}
+
+static void process_keep_alive_refresh(struct mesh_io *io)
+{
+	if (!io)
+		return;
+
+	l_timeout_modify(io->pvt->keep_alive_watchdog,
+					 TCP_KEEP_ALIVE_WATCHDOG_PERIOD);
 }
 
 static bool io_read_callback(struct io *io, void *user_data)
@@ -210,9 +229,6 @@ static bool io_accept_callback(struct io *io, void *user_data)
 	return true;
 }
 
-static void send_timeout(struct l_timeout *timeout, void *user_data);
-static void send_keep_alive(struct l_timeout *timeout, void *user_data);
-
 static bool tcpserver_io_init(struct mesh_io *mesh_io, void *opts)
 {
 	int server_fd;
@@ -273,8 +289,13 @@ static bool tcpserver_io_init(struct mesh_io *mesh_io, void *opts)
 	mesh_io->pvt->tx_timeout = l_timeout_create_ms(0, send_timeout,
 							mesh_io, NULL);
 
-	mesh_io->pvt->keep_alive_timeout = l_timeout_create(10, send_keep_alive,
-							mesh_io, NULL);
+	mesh_io->pvt->keep_alive_timeout =
+		l_timeout_create(TCP_KEEP_ALIVE_TMOUT_PERIOD,
+			send_keep_alive, mesh_io, NULL);
+
+	mesh_io->pvt->keep_alive_watchdog =
+		l_timeout_create(TCP_KEEP_ALIVE_WATCHDOG_PERIOD,
+			keep_alive_error, mesh_io, NULL);
 
 	l_info("Started mesh on tcp port %d", port);
 
@@ -293,6 +314,7 @@ static bool tcpserver_io_destroy(struct mesh_io *mesh_io)
 
 	l_timeout_remove(pvt->tx_timeout);
 	l_timeout_remove(pvt->keep_alive_timeout);
+	l_timeout_remove(pvt->keep_alive_watchdog);
 	l_queue_destroy(pvt->rx_regs, l_free);
 	l_queue_destroy(pvt->tx_pkts, l_free);
 	l_free(pvt);
@@ -377,7 +399,19 @@ static void send_keep_alive(struct l_timeout *timeout, void *user_data)
 
 	silvair_send_slip(io, NULL, 0, get_instant(),
 		client_write, PACKET_TYPE_KEEP_ALIVE);
-	l_timeout_modify(timeout, 10);
+	l_timeout_modify(timeout, TCP_KEEP_ALIVE_TMOUT_PERIOD);
+}
+
+static void keep_alive_error(struct l_timeout *timeout, void *user_data)
+{
+	struct mesh_io *io = user_data;
+
+	if (!io)
+		return;
+
+	l_error("Ethernet cable disconnected !");
+
+	/* TODO: JWI - perform some action */
 }
 
 static int compare_tx_pkt_instant(const void *a, const void *b,
