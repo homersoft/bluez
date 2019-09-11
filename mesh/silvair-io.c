@@ -137,7 +137,7 @@ static void process_evt_rx(struct mesh_io *io,
 					uint32_t instant,
 					const struct silvair_pkt_hdr *pkt_hdr,
 					size_t len,
-					process_packet_cb cb)
+					const struct rx_process_cb *cb)
 {
 	const struct silvair_rx_evt_hdr *rx_hdr;
 	const struct silvair_rx_evt_pld *rx_pld;
@@ -145,6 +145,9 @@ static void process_evt_rx(struct mesh_io *io,
 	int8_t rssi;
 
 	if (len < sizeof(*rx_hdr))
+		return;
+
+	if (!cb)
 		return;
 
 	rx_hdr = (struct silvair_rx_evt_hdr *)(pkt_hdr + 1);
@@ -171,7 +174,8 @@ static void process_evt_rx(struct mesh_io *io,
 			(const uint8_t *)rx_pld + pkt_hdr->pld_len)
 			break;
 
-		cb(io->pvt, rssi, instant, adv + 1, field_len);
+		cb->process_packet_cb(io->pvt, rssi,
+			instant, adv + 1, field_len);
 
 		adv += field_len + 1;
 	}
@@ -180,25 +184,36 @@ static void process_evt_rx(struct mesh_io *io,
 static void process_evt_keep_alive(struct mesh_io *io,
 					uint32_t instant,
 					const struct silvair_pkt_hdr *pkt_hdr,
-					size_t len, process_packet_cb cb)
+					size_t len,
+					const struct rx_process_cb *cb)
 {
+
+	if (!cb)
+		return;
+
 	const struct silvair_keep_alive_cmd_pld *keep_alive_pld;
 
 	keep_alive_pld = (struct silvair_keep_alive_cmd_pld *)(pkt_hdr + 1);
 	l_info("Version: %s", keep_alive_pld->silvair_version);
 
-	mesh_io_silvair_keep_alive_refresh(io);
+	cb->process_keep_alive_cb(io);
 
 	/* ToDo: JWI - add reset reason, uptime and last fault */
 }
 
-void silvair_process_packet(struct mesh_io *io, uint8_t *buf, size_t size,
-					uint32_t instant, process_packet_cb cb)
+void silvair_process_packet(struct mesh_io *io,
+					uint8_t *buf,
+					size_t size,
+					uint32_t instant,
+					const struct rx_process_cb *cb)
 {
 	const struct silvair_pkt_hdr *pkt_hdr;
 	size_t len = size;
 
 	if (len < sizeof(*pkt_hdr))
+		return;
+
+	if (!cb)
 		return;
 
 	pkt_hdr = (struct silvair_pkt_hdr *)buf;
@@ -223,10 +238,16 @@ void silvair_process_packet(struct mesh_io *io, uint8_t *buf, size_t size,
 	}
 }
 
-void silvair_process_slip(struct mesh_io *io, struct slip *slip,
-					uint8_t *buf, size_t size,
-					uint32_t instant, process_packet_cb cb)
+void silvair_process_slip(struct mesh_io *io,
+					struct slip *slip,
+					uint8_t *buf,
+					size_t size,
+					uint32_t instant,
+					const struct rx_process_cb *cb)
 {
+	if (!cb)
+		return;
+
 	for (uint8_t *i = buf; i != buf + size; ++i) {
 		switch (*i) {
 		case SLIP_END:

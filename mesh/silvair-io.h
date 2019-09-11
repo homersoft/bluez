@@ -34,19 +34,30 @@ enum packet_type {
 	PACKET_TYPE_KEEP_ALIVE,
 };
 
-typedef void (*process_packet_cb)(struct mesh_io_private *pvt, int8_t rssi,
-					uint32_t instant,
+struct rx_process_cb {
+	void (*process_packet_cb)(struct mesh_io_private *pvt,
+					int8_t rssi, uint32_t instant,
 					const uint8_t *data, uint8_t len);
+
+	void (*process_keep_alive_cb)(struct mesh_io *io);
+};
+
 
 typedef bool (*send_data_cb)(struct mesh_io_private *pvt, uint32_t instant,
 					const uint8_t *data, size_t len);
 
-void silvair_process_packet(struct mesh_io *io, uint8_t *buf, size_t size,
-					uint32_t instant, process_packet_cb cb);
+void silvair_process_packet(struct mesh_io *io,
+					uint8_t *buf,
+					size_t size,
+					uint32_t instant,
+					const struct rx_process_cb *cb);
 
-void silvair_process_slip(struct mesh_io *io, struct slip *slip,
-					uint8_t *buf, size_t size,
-					uint32_t instant, process_packet_cb cb);
+void silvair_process_slip(struct mesh_io *io,
+					struct slip *slip,
+					uint8_t *buf,
+					size_t size,
+					uint32_t instant,
+					const struct rx_process_cb *cb);
 
 bool silvair_send_packet(struct mesh_io *io, uint8_t *buf, size_t size,
 					uint32_t instant, send_data_cb cb,
