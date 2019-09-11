@@ -88,7 +88,7 @@ struct tx_pattern {
 	uint8_t				len;
 };
 
-static void process_rx(struct mesh_io_private *pvt, int8_t rssi,
+static void process_rx(struct mesh_io *io, int8_t rssi,
 					uint32_t instant,
 					const uint8_t *data, uint8_t len);
 
@@ -121,12 +121,12 @@ static void process_rx_callbacks(void *v_rx, void *v_reg)
 		rx_reg->cb(rx_reg->user_data, &rx->info, rx->data, rx->len);
 }
 
-static void process_rx(struct mesh_io_private *pvt, int8_t rssi,
+static void process_rx(struct mesh_io *io, int8_t rssi,
 					uint32_t instant,
 					const uint8_t *data, uint8_t len)
 {
 	struct process_data rx = {
-		.pvt = pvt,
+		.pvt = io->pvt,
 		.data = data,
 		.len = len,
 		.info.instant = instant,
@@ -134,7 +134,7 @@ static void process_rx(struct mesh_io_private *pvt, int8_t rssi,
 		.info.rssi = rssi,
 	};
 
-	l_queue_foreach(pvt->rx_regs, process_rx_callbacks, &rx);
+	l_queue_foreach(io->pvt->rx_regs, process_rx_callbacks, &rx);
 }
 
 static bool io_read_callback(struct io *io, void *user_data)

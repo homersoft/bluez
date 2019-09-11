@@ -106,7 +106,7 @@ static void send_timeout(struct l_timeout *timeout, void *user_data);
 static void send_keep_alive(struct l_timeout *timeout, void *user_data);
 static void keep_alive_error(struct l_timeout *timeout, void *user_data);
 
-static void process_rx(struct mesh_io_private *pvt, int8_t rssi,
+static void process_rx(struct mesh_io *io, int8_t rssi,
 					uint32_t instant,
 					const uint8_t *data, uint8_t len);
 
@@ -129,12 +129,12 @@ static void process_rx_callbacks(void *v_rx, void *v_reg)
 		rx_reg->cb(rx_reg->user_data, &rx->info, rx->data, rx->len);
 }
 
-static void process_rx(struct mesh_io_private *pvt, int8_t rssi,
+static void process_rx(struct mesh_io *io, int8_t rssi,
 					uint32_t instant,
 					const uint8_t *data, uint8_t len)
 {
 	struct process_data rx = {
-		.pvt = pvt,
+		.pvt = io->pvt,
 		.data = data,
 		.len = len,
 		.info.instant = instant,
@@ -142,7 +142,7 @@ static void process_rx(struct mesh_io_private *pvt, int8_t rssi,
 		.info.rssi = rssi,
 	};
 
-	l_queue_foreach(pvt->rx_regs, process_rx_callbacks, &rx);
+	l_queue_foreach(io->pvt->rx_regs, process_rx_callbacks, &rx);
 }
 
 static void process_keep_alive_refresh(struct mesh_io *io)
@@ -480,6 +480,11 @@ static void send_keep_alive(struct l_timeout *timeout, void *user_data)
 
 static void keep_alive_error(struct l_timeout *timeout, void *user_data)
 {
+	struct mesh_io *io = user_data;
+
+	if (!io)
+		return;
+
 	l_error("USB cable disconnected !");
 
 	/* TODO: JWI - perform some action */

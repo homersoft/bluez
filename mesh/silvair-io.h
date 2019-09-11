@@ -35,7 +35,7 @@ enum packet_type {
 };
 
 struct rx_process_cb {
-	void (*process_packet_cb)(struct mesh_io_private *pvt,
+	void (*process_packet_cb)(struct mesh_io *io,
 					int8_t rssi, uint32_t instant,
 					const uint8_t *data, uint8_t len);
 

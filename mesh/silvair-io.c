@@ -174,8 +174,11 @@ static void process_evt_rx(struct mesh_io *io,
 			(const uint8_t *)rx_pld + pkt_hdr->pld_len)
 			break;
 
-		cb->process_packet_cb(io->pvt, rssi,
-			instant, adv + 1, field_len);
+		if (!cb->process_packet_cb)
+			break;
+
+		cb->process_packet_cb(io, rssi,
+				instant, adv + 1, field_len);
 
 		adv += field_len + 1;
 	}
@@ -195,6 +198,9 @@ static void process_evt_keep_alive(struct mesh_io *io,
 
 	keep_alive_pld = (struct silvair_keep_alive_cmd_pld *)(pkt_hdr + 1);
 	l_info("Version: %s", keep_alive_pld->silvair_version);
+
+	if (!cb->process_keep_alive_cb)
+		return;
 
 	cb->process_keep_alive_cb(io);
 
