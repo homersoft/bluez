@@ -196,7 +196,8 @@ static void process_evt_keep_alive(struct mesh_io *io,
 		return;
 
 	keep_alive_pld = (struct silvair_keep_alive_cmd_pld *)(pkt_hdr + 1);
-	l_info("Version: %s", keep_alive_pld->silvair_version);
+	l_info("Version: %s, uptime %u", keep_alive_pld->silvair_version,
+							keep_alive_pld->uptime);
 
 	if (!cb->process_keep_alive_cb)
 		return;
