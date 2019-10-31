@@ -47,8 +47,8 @@
 #include "mesh/mesh-io-tcpserver.h"
 #include "mesh/silvair-io.h"
 
-const uint8_t TCP_KEEP_ALIVE_TMOUT_PERIOD = 10;
-const uint8_t TCP_KEEP_ALIVE_WATCHDOG_PERIOD = 2 * TCP_KEEP_ALIVE_TMOUT_PERIOD;
+const unsigned long TCP_KEEP_ALIVE_TMOUT_PERIOD = 10000;
+const unsigned long TCP_KEEP_ALIVE_WATCHDOG_PERIOD = 2 * TCP_KEEP_ALIVE_TMOUT_PERIOD;
 
 struct mesh_io_private {
 	struct sockaddr_in server_addr;
@@ -152,7 +152,7 @@ static void process_keep_alive_refresh(struct mesh_io *io)
 	if (!io)
 		return;
 
-	l_timeout_modify(io->pvt->keep_alive_watchdog,
+	l_timeout_modify_ms(io->pvt->keep_alive_watchdog,
 					 TCP_KEEP_ALIVE_WATCHDOG_PERIOD);
 }
 
@@ -226,6 +226,16 @@ static bool io_accept_callback(struct io *io, void *user_data)
 				inet_ntoa(mesh_io->pvt->client_addr.sin_addr),
 				ntohs(mesh_io->pvt->client_addr.sin_port));
 
+	mesh_io->pvt->keep_alive_timeout =
+		l_timeout_create_ms(TCP_KEEP_ALIVE_TMOUT_PERIOD,
+			send_keep_alive, mesh_io, NULL);
+
+	send_keep_alive(mesh_io->pvt->keep_alive_timeout, mesh_io);
+
+	mesh_io->pvt->keep_alive_watchdog =
+		l_timeout_create_ms(TCP_KEEP_ALIVE_WATCHDOG_PERIOD,
+			keep_alive_error, mesh_io, NULL);
+
 	return true;
 }
 
@@ -288,14 +298,6 @@ static bool tcpserver_io_init(struct mesh_io *mesh_io, void *opts)
 
 	mesh_io->pvt->tx_timeout = l_timeout_create_ms(0, send_timeout,
 							mesh_io, NULL);
-
-	mesh_io->pvt->keep_alive_timeout =
-		l_timeout_create(TCP_KEEP_ALIVE_TMOUT_PERIOD,
-			send_keep_alive, mesh_io, NULL);
-
-	mesh_io->pvt->keep_alive_watchdog =
-		l_timeout_create(TCP_KEEP_ALIVE_WATCHDOG_PERIOD,
-			keep_alive_error, mesh_io, NULL);
 
 	l_info("Started mesh on tcp port %d", port);
 
@@ -398,8 +400,8 @@ static void send_keep_alive(struct l_timeout *timeout, void *user_data)
 		return;
 
 	silvair_send_slip(io, NULL, 0, get_instant(),
-		client_write, PACKET_TYPE_KEEP_ALIVE);
-	l_timeout_modify(timeout, TCP_KEEP_ALIVE_TMOUT_PERIOD);
+			  client_write, PACKET_TYPE_KEEP_ALIVE);
+	l_timeout_modify_ms(timeout, TCP_KEEP_ALIVE_TMOUT_PERIOD);
 }
 
 static void keep_alive_error(struct l_timeout *timeout, void *user_data)
