@@ -225,6 +225,9 @@ void silvair_process_packet(struct mesh_io *io,
 	pkt_hdr = (struct silvair_pkt_hdr *)buf;
 	len -= sizeof(*pkt_hdr);
 
+	if (len < pkt_hdr->pld_len)
+		return;
+
 	switch (pkt_hdr->type) {
 
 	case SILVAIR_EVT_RX:
