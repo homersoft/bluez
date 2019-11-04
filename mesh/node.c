@@ -1155,6 +1155,10 @@ static bool register_node_object(struct mesh_node *node)
 					MESH_MANAGEMENT_INTERFACE, node))
 		return false;
 
+	if (!l_dbus_object_add_interface(dbus_get_bus(), node->obj_path,
+					L_DBUS_INTERFACE_PROPERTIES, NULL))
+		return false;
+
 	return true;
 }
 
