@@ -17,4 +17,4 @@
  *
  */
 
-extern const struct mesh_io_api mesh_io_silvair;
+extern const struct mesh_io_api mesh_io_uart;

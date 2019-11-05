@@ -19,50 +19,52 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <ell/ell.h>
 
-struct mesh_io;
-struct mesh_io_private;
+struct silvair_io;
+
+typedef void (*process_packet_cb)(struct silvair_io *io,
+				  int8_t rssi,
+				  const uint8_t *data,
+				  uint8_t len,
+				  void *user_data);
+
+typedef void (*keep_alive_tmout_cb)(struct l_timeout *timeout, void *user_data);
+typedef void (*io_disconnect_cb)(struct silvair_io *io);
+typedef void (*io_error_cb)(struct silvair_io *io);
 
 struct slip {
-	uint8_t buf[512];
-	size_t offset;
-	bool esc;
+	uint8_t	buf[512];
+	size_t	offset;
+	bool	esc;
+	bool	kernel_support;
 };
 
-enum packet_type {
-	PACKET_TYPE_MESSAGE,
-	PACKET_TYPE_KEEP_ALIVE,
+struct silvair_io {
+	struct l_io		*l_io;
+
+	struct l_timeout	*keep_alive_watchdog;
+	struct l_timeout	*disconnect_watchdog;
+
+	io_disconnect_cb	disconnect_cb;
+	io_error_cb		error_cb;
+
+	struct slip		slip;
+	process_packet_cb	process_rx_cb;
+	void *context;
 };
 
-struct rx_process_cb {
-	void (*process_packet_cb)(struct mesh_io *io,
-					int8_t rssi, uint32_t instant,
-					const uint8_t *data, uint8_t len);
+struct silvair_io *silvair_io_new(int fd,
+				bool kernel_support,
+				process_packet_cb rx_cb,
+				io_error_cb read_failed_cb,
+				io_disconnect_cb disc_cb,
+				void *context);
 
-	void (*process_keep_alive_cb)(struct mesh_io *io);
-};
+int silvair_io_get_fd(struct silvair_io *io);
 
+void silvair_io_destroy(struct silvair_io *io);
 
-typedef bool (*send_data_cb)(struct mesh_io_private *pvt, uint32_t instant,
-					const uint8_t *data, size_t len);
+void silvair_io_keep_alive_wdt_refresh(struct silvair_io *io);
 
-void silvair_process_packet(struct mesh_io *io,
-					uint8_t *buf,
-					size_t size,
-					uint32_t instant,
-					const struct rx_process_cb *cb);
-
-void silvair_process_slip(struct mesh_io *io,
-					struct slip *slip,
-					uint8_t *buf,
-					size_t size,
-					uint32_t instant,
-					const struct rx_process_cb *cb);
-
-bool silvair_send_packet(struct mesh_io *io, uint8_t *buf, size_t size,
-					uint32_t instant, send_data_cb cb,
-					enum packet_type type);
-
-bool silvair_send_slip(struct mesh_io *io, uint8_t *buf, size_t size,
-					uint32_t instant, send_data_cb cb,
-					enum packet_type type);
+void silvair_io_send_message(struct silvair_io *io, uint8_t *buf, size_t size);
