@@ -18,8 +18,8 @@ mesh_sources = mesh/mesh.h mesh/mesh.c \
 				mesh/silvair-io.c \
 				mesh/mesh-io-generic.h \
 				mesh/mesh-io-generic.c \
-				mesh/mesh-io-silvair.h \
-				mesh/mesh-io-silvair.c \
+				mesh/mesh-io-uart.h \
+				mesh/mesh-io-uart.c \
 				mesh/mesh-io-tcpserver.h \
 				mesh/mesh-io-tcpserver.c \
 				mesh/net.h mesh/net.c \
