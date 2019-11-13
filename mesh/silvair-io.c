@@ -30,9 +30,9 @@ static const uint8_t silvair_channels[8] = {
 };
 
 enum silvair_adv_type {
-	SILVAIR_ADV_TYPE_ADV_IND         = 0x00,
-	SILVAIR_ADV_TYPE_ADV_DIRECT_IND  = 0x01,
-	SILVAIR_ADV_TYPE_ADV_NONCONN_IND = 0x02,
+	SILVAIR_ADV_TYPE_ADV_IND		= 0x00,
+	SILVAIR_ADV_TYPE_ADV_DIRECT_IND		= 0x01,
+	SILVAIR_ADV_TYPE_ADV_NONCONN_IND	= 0x02,
 };
 
 enum silvair_phy {
@@ -66,15 +66,15 @@ enum silvair_pkt_type {
 	SILVAIR_CMD_BOOTLOADER	= 0x1A,
 	SILVAIR_CMD_FILTER	= 0x1B,
 	SILVAIR_EVT_RESET	= 0x1C,
-	SILVAIR_CMD_KEEP_ALIVE  = 0x1D,
+	SILVAIR_CMD_KEEP_ALIVE	= 0x1D,
 };
 
 struct silvair_pkt_hdr {
-	uint8_t				hdr_len;
-	uint8_t				pld_len;
-	uint8_t				version;
-	uint16_t			counter;
-	enum silvair_pkt_type		type :8;
+	uint8_t			hdr_len;
+	uint8_t			pld_len;
+	uint8_t			version;
+	uint16_t		counter;
+	enum silvair_pkt_type	type :8;
 } __packed;
 
 struct silvair_rx_evt_hdr {
@@ -87,12 +87,12 @@ struct silvair_rx_evt_hdr {
 } __packed;
 
 struct silvair_adv_hdr {
-	uint8_t		type	: 4;
-	uint8_t		__rfu1	: 2;
-	uint8_t		tx_add	: 1;
-	uint8_t		rx_add	: 1;
-	uint8_t		size	: 6;
-	uint8_t		__rfu2	: 2;
+	uint8_t	type	: 4;
+	uint8_t	__rfu1	: 2;
+	uint8_t	tx_add	: 1;
+	uint8_t	rx_add	: 1;
+	uint8_t	size	: 6;
+	uint8_t	__rfu2	: 2;
 } __packed;
 
 struct silvair_rx_evt_pld {
@@ -120,24 +120,28 @@ struct silvair_tx_cmd_pld {
 } __packed;
 
 struct silvair_keep_alive_cmd_pld {
-	uint8_t silvair_version_len;
+	uint8_t 	silvair_version_len;
 
 	/* Max supported version: AA.BB.CC-rcDD-12345678\0*/
-	char     silvair_version[23];
-	uint32_t reset_reason;
-	uint32_t uptime;
-	uint8_t  last_fault_len;
-	uint8_t  last_fault[128];
+	char		silvair_version[23];
+	uint32_t	reset_reason;
+	uint32_t	uptime;
+	uint8_t		last_fault_len;
+	uint8_t		last_fault[128];
 } __packed;
 
-typedef bool (*write_cb)(struct mesh_io *io, uint8_t *buf, size_t size,
-					uint32_t instant, send_data_cb cb);
+typedef bool (*write_cb)(struct silvair_io *io,
+				uint8_t *buf,
+				size_t size,
+				uint32_t instant,
+				send_data_cb cb);
 
-static void process_evt_rx(struct mesh_io *io,
-					uint32_t instant,
-					const struct silvair_pkt_hdr *pkt_hdr,
-					size_t len,
-					const struct rx_process_cb *cb)
+static void process_evt_rx(struct silvair_io *io,
+				uint32_t instant,
+				const struct silvair_pkt_hdr *pkt_hdr,
+				size_t len,
+				const struct rx_process_cb *cb,
+				void *user_data)
 {
 	const struct silvair_rx_evt_hdr *rx_hdr;
 	const struct silvair_rx_evt_pld *rx_pld;
@@ -178,17 +182,17 @@ static void process_evt_rx(struct mesh_io *io,
 			break;
 
 		cb->process_packet_cb(io, rssi,
-				instant, adv + 1, field_len);
+				instant, adv + 1, field_len, user_data);
 
 		adv += field_len + 1;
 	}
 }
 
-static void process_evt_keep_alive(struct mesh_io *io,
-					uint32_t instant,
-					const struct silvair_pkt_hdr *pkt_hdr,
-					size_t len,
-					const struct rx_process_cb *cb)
+static void process_evt_keep_alive(struct silvair_io *io,
+				uint32_t instant,
+				const struct silvair_pkt_hdr *pkt_hdr,
+				size_t len,
+				const struct rx_process_cb *cb)
 {
 	const struct silvair_keep_alive_cmd_pld *keep_alive_pld;
 
@@ -196,22 +200,22 @@ static void process_evt_keep_alive(struct mesh_io *io,
 		return;
 
 	keep_alive_pld = (struct silvair_keep_alive_cmd_pld *)(pkt_hdr + 1);
+
 	l_info("Version: %s, uptime %u", keep_alive_pld->silvair_version,
-							keep_alive_pld->uptime);
+					keep_alive_pld->uptime);
 
 	if (!cb->process_keep_alive_cb)
 		return;
 
 	cb->process_keep_alive_cb(io);
-
-	/* ToDo: JWI - add reset reason, uptime and last fault */
 }
 
-void silvair_process_packet(struct mesh_io *io,
-					uint8_t *buf,
-					size_t size,
-					uint32_t instant,
-					const struct rx_process_cb *cb)
+void silvair_process_packet(struct silvair_io *io,
+				uint8_t *buf,
+				size_t size,
+				uint32_t instant,
+				const struct rx_process_cb *cb,
+				void *user_data)
 {
 	const struct silvair_pkt_hdr *pkt_hdr;
 	size_t len = size;
@@ -231,7 +235,7 @@ void silvair_process_packet(struct mesh_io *io,
 	switch (pkt_hdr->type) {
 
 	case SILVAIR_EVT_RX:
-		process_evt_rx(io, instant, pkt_hdr, len, cb);
+		process_evt_rx(io, instant, pkt_hdr, len, cb, user_data);
 		break;
 
 	case SILVAIR_CMD_KEEP_ALIVE:
@@ -247,12 +251,12 @@ void silvair_process_packet(struct mesh_io *io,
 	}
 }
 
-void silvair_process_slip(struct mesh_io *io,
-					struct slip *slip,
-					uint8_t *buf,
-					size_t size,
-					uint32_t instant,
-					const struct rx_process_cb *cb)
+void silvair_process_slip(struct silvair_io *io,
+				struct slip *slip,
+				uint8_t *buf,
+				size_t size,
+				uint32_t instant,
+				const struct rx_process_cb *cb)
 {
 	if (!cb)
 		return;
@@ -263,7 +267,8 @@ void silvair_process_slip(struct mesh_io *io,
 			if (slip->offset)
 				silvair_process_packet(io, slip->buf,
 							slip->offset, instant,
-							cb);
+							cb,
+							NULL);//todo);
 
 			slip->offset = 0;
 			break;
@@ -302,48 +307,56 @@ void silvair_process_slip(struct mesh_io *io,
 	}
 }
 
-static bool slip_write(struct mesh_io *io, uint8_t *buf, size_t size,
-					uint32_t instant, send_data_cb cb)
+static bool slip_write(struct silvair_io *io,
+				uint8_t *buf,
+				size_t size,
+				uint32_t instant,
+				send_data_cb cb)
 {
 	static const uint8_t end = SLIP_END;
 	static const uint8_t esc_end[2] = { SLIP_ESC, SLIP_ESC_END };
 	static const uint8_t esc_esc[2] = { SLIP_ESC, SLIP_ESC_ESC };
 
-	if (!cb(io->pvt, instant, &end, 1))
+	if (!cb(io, instant, &end, 1))
 		return false;
 
 	for (uint8_t *i = buf; i != buf + size; ++i) {
 		switch (*i) {
 		case SLIP_END:
-			if (!cb(io->pvt, instant, esc_end, 2))
+			if (!cb(io, instant, esc_end, 2))
 				return false;
 			break;
 
 		case SLIP_ESC:
-			if (!cb(io->pvt, instant, esc_esc, 2))
+			if (!cb(io, instant, esc_esc, 2))
 				return false;
 			break;
 
 		default:
-			if (cb(io->pvt, instant, i, 1) != 1)
+			if (cb(io, instant, i, 1) != 1)
 				return false;
 		}
 	}
 
-	if (!cb(io->pvt, instant, &end, 1))
+	if (!cb(io, instant, &end, 1))
 		return false;
 
 	return true;
 }
 
-static bool simple_write(struct mesh_io *io, uint8_t *buf, size_t size,
-					uint32_t instant, send_data_cb cb)
+static bool simple_write(struct silvair_io *io,
+				uint8_t *buf,
+				size_t size,
+				uint32_t instant,
+				send_data_cb cb)
 {
-	return cb(io->pvt, instant, buf, size);
+	return cb(io, instant, buf, size);
 }
 
-static int build_packet(uint8_t *data, uint8_t *buf, size_t size,
-					enum silvair_pkt_type type)
+static int build_packet(uint8_t *data,
+				uint8_t *buf,
+				size_t size,
+				enum silvair_pkt_type type)
 {
 	struct silvair_pkt_hdr *pkt_hdr;
 	struct silvair_tx_cmd_hdr *tx_hdr;
@@ -361,7 +374,7 @@ static int build_packet(uint8_t *data, uint8_t *buf, size_t size,
 					   size + 1;
 
 	pkt_hdr->version = 1;
-	pkt_hdr->counter = 0; // TODO: L_CPU_TO_BE16(pvt->counter);
+	pkt_hdr->counter = 0;
 	pkt_hdr->type = type;
 
 	tx_hdr->hdr_len = sizeof(*tx_hdr);
@@ -374,7 +387,7 @@ static int build_packet(uint8_t *data, uint8_t *buf, size_t size,
 
 	/* bdaddress + type tag + data */
 	tx_pld->header.size = 6 + size + 1;
-	tx_hdr->counter = 0; // TODO: L_CPU_TO_BE16(pvt->counter + 1);
+	tx_hdr->counter = 0;
 
 	l_getrandom(tx_pld->address, sizeof(tx_pld->address));
 	tx_pld->address[5] |= 0xc0;
@@ -383,13 +396,15 @@ static int build_packet(uint8_t *data, uint8_t *buf, size_t size,
 	memcpy(adv_data + 1, buf, size);
 
 	len = pkt_hdr->hdr_len + pkt_hdr->pld_len;
-
 	return len;
 }
 
-static bool send_packet(struct mesh_io *io, uint8_t *buf, size_t size,
+static bool send_packet(struct silvair_io *io,
+				uint8_t *buf,
+				size_t size,
 				uint32_t instant,
-				write_cb write, send_data_cb cb)
+				write_cb write,
+				send_data_cb cb)
 {
 	int len = 0;
 	uint8_t data[512] = { 0 };
@@ -398,9 +413,12 @@ static bool send_packet(struct mesh_io *io, uint8_t *buf, size_t size,
 	return write(io, data, len, instant, cb);
 }
 
-static bool send_keep_alive_request(struct mesh_io *io, uint8_t *buf,
-						size_t size, uint32_t instant,
-						write_cb write, send_data_cb cb)
+static bool send_keep_alive_request(struct silvair_io *io,
+				uint8_t *buf,
+				size_t size,
+				uint32_t instant,
+				write_cb write,
+				send_data_cb cb)
 {
 	int len = 0;
 	uint8_t data[512] = { 0 };
@@ -409,10 +427,12 @@ static bool send_keep_alive_request(struct mesh_io *io, uint8_t *buf,
 	return write(io, data, len, instant, cb);
 }
 
-bool silvair_send_packet(struct mesh_io *io, uint8_t *buf, size_t size,
-						uint32_t instant,
-						send_data_cb cb,
-						enum packet_type type)
+bool silvair_send_packet(struct silvair_io *io,
+				uint8_t *buf,
+				size_t size,
+				uint32_t instant,
+				send_data_cb cb,
+				enum packet_type type)
 {
 	switch(type) {
 
@@ -431,10 +451,12 @@ bool silvair_send_packet(struct mesh_io *io, uint8_t *buf, size_t size,
 	return false;
 }
 
-bool silvair_send_slip(struct mesh_io *io, uint8_t *buf, size_t size,
-						uint32_t instant,
-						send_data_cb cb,
-						enum packet_type type)
+bool silvair_send_slip(struct silvair_io *io,
+				uint8_t *buf,
+				size_t size,
+				uint32_t instant,
+				send_data_cb cb,
+				enum packet_type type)
 {
 	switch(type) {
 
