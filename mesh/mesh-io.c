@@ -38,7 +38,7 @@
 static const struct mesh_io_table table[] = {
 	{MESH_IO_TYPE_GENERIC,		&mesh_io_generic},
 	{MESH_IO_TYPE_SILVAIR,		&mesh_io_silvair},
-	{MESH_IO_TYPE_TCPSERVER,	&mesh_io_tcpserver}
+//	{MESH_IO_TYPE_TCPSERVER,	&mesh_io_tcpserver}
 };
 
 static struct l_queue *io_list;
