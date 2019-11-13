@@ -49,7 +49,6 @@ struct mesh_io_private {
 	char			tty_name[PATH_MAX];
 	int			tty_fd;
 	char			iface_name[IFNAMSIZ];
-	int			iface_fd;
 	struct silvair_io	*silvair_io;
 	struct l_timeout	*tx_timeout;
 	struct l_queue		*rx_regs;
@@ -197,15 +196,15 @@ static bool silvair_kernel_init(struct mesh_io *io)
 
 	l_strlcpy(req.ifr_name, io->pvt->iface_name, sizeof(req.ifr_name));
 
-	io->pvt->iface_fd = socket(PF_PACKET, SOCK_RAW, 0);
+	io->pvt->silvair_io->fd = socket(PF_PACKET, SOCK_RAW, 0);
 
-	if (io->pvt->iface_fd < 0) {
+	if (io->pvt->silvair_io->fd < 0) {
 		l_error("%s: cannot open socket: %s",
 					io->pvt->iface_name, strerror(errno));
 		return false;
 	}
 
-	if (ioctl(io->pvt->iface_fd, SIOCGIFINDEX, &req) != 0) {
+	if (ioctl(io->pvt->silvair_io->fd, SIOCGIFINDEX, &req) != 0) {
 		l_error("%s: cannot get interface index: %s",
 					io->pvt->iface_name, strerror(errno));
 		return false;
@@ -217,13 +216,13 @@ static bool silvair_kernel_init(struct mesh_io *io)
 	addr.sll_pkttype = PACKET_HOST;
 
 	req.ifr_flags |= IFF_UP;
-	if (ioctl(io->pvt->iface_fd, SIOCSIFFLAGS, &req) != 0) {
+	if (ioctl(io->pvt->silvair_io->fd, SIOCSIFFLAGS, &req) != 0) {
 		l_error("%s: cannot bring interface up: %s",
 					io->pvt->iface_name, strerror(errno));
 		return false;
 	}
 
-	if (bind(io->pvt->iface_fd, (struct sockaddr *)&addr,
+	if (bind(io->pvt->silvair_io->fd, (struct sockaddr *)&addr,
 							sizeof(addr)) != 0) {
 		l_error("%s: cannot bind interface: %s",
 					io->pvt->iface_name, strerror(errno));
@@ -233,14 +232,14 @@ static bool silvair_kernel_init(struct mesh_io *io)
 	l_info("Started mesh on tty %s, interface %s", io->pvt->tty_name,
 							io->pvt->iface_name);
 
-	io->pvt->silvair_io->io = l_io_new(io->pvt->iface_fd);
+	io->pvt->silvair_io->l_io = l_io_new(io->pvt->silvair_io->fd);
 	return true;
 }
 
 static bool silvair_user_init(struct mesh_io *io)
 {
-	io->pvt->silvair_io->io = l_io_new(io->pvt->tty_fd);
-	io->pvt->iface_fd = -1;
+	io->pvt->silvair_io->l_io = l_io_new(io->pvt->tty_fd);
+	io->pvt->silvair_io->fd = -1;
 	io->pvt->silvair_io->slip.offset = 0;
 	io->pvt->silvair_io->slip.esc = false;
 
@@ -342,11 +341,12 @@ static bool silvair_io_init(struct mesh_io *io, void *opts)
 	io->pvt->rx_regs = l_queue_new();
 	io->pvt->tx_pkts = l_queue_new();
 
-	if (!l_io_set_read_handler(io->pvt->silvair_io->io, io_read_callback, io, NULL))
+	if (!l_io_set_read_handler(io->pvt->silvair_io->l_io,
+						io_read_callback, io, NULL))
 		return false;
 
-	io->pvt->tx_timeout = l_timeout_create_ms(0, send_timeout, io->pvt,
-									NULL);
+	io->pvt->tx_timeout = l_timeout_create_ms(0, send_timeout,
+								io->pvt, NULL);
 
 	send_keep_alive(io);
 
@@ -390,7 +390,7 @@ static bool silvair_io_caps(struct mesh_io *io, struct mesh_io_caps *caps)
 	return true;
 }
 
-static bool io_write(struct mesh_io_private *pvt, uint32_t instant,
+static bool io_write(struct silvair_io *io, uint32_t instant,
 					const uint8_t *buf, size_t size)
 {
 //	int fd = io_get_fd(pvt->io);
@@ -450,12 +450,12 @@ static void send_timeout(struct l_timeout *timeout, void *user_data)
 
 static void send_keep_alive(void *user_data)
 {
-//	struct mesh_io *io = user_data;
+//	struct silvair_io *io = user_data;
 //
 //	if (!io)
 //		return;
 //
-//	if (io->pvt->iface_fd >= 0)
+//	if (io->fd >= 0)
 //		silvair_send_packet(io, NULL, 0, get_instant(),
 //			io_write, PACKET_TYPE_KEEP_ALIVE);
 //	else

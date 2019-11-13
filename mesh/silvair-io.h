@@ -27,7 +27,8 @@ struct slip {
 };
 
 struct silvair_io {
-	struct l_io		*io;
+	int fd;
+	struct l_io		*l_io;
 	struct l_timeout	*keep_alive_watchdog;
 	struct slip		slip;
 };
