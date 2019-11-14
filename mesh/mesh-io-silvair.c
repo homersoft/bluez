@@ -174,39 +174,40 @@ static bool io_read_callback(struct l_io *silvair_io, void *user_data)
 	return true;
 }
 
-static bool silvair_kernel_init(struct mesh_io *io)
+static bool silvair_kernel_init(struct mesh_io *mesh_io)
 {
 	struct ifreq req;
 	struct sockaddr_ll addr;
 	int disc = N_SLIP;
 	int encap = 0;
 
-	if (ioctl(io->pvt->tty_fd, TIOCSETD, &disc) != 0) {
+	if (ioctl(mesh_io->pvt->tty_fd, TIOCSETD, &disc) != 0) {
 		l_error("cannot set line discipline: %s", strerror(errno));
 		return false;
 	}
 
-	if (ioctl(io->pvt->tty_fd, SIOCSIFENCAP, &encap) != 0) {
+	if (ioctl(mesh_io->pvt->tty_fd, SIOCSIFENCAP, &encap) != 0) {
 		l_error("cannot set encapsulation: %s", strerror(errno));
 		return false;
 	}
 
-	if (ioctl(io->pvt->tty_fd, SIOCGIFNAME, io->pvt->iface_name) != 0)
+	if (ioctl(mesh_io->pvt->tty_fd, SIOCGIFNAME,
+				mesh_io->pvt->iface_name) != 0)
 		return false;
 
-	l_strlcpy(req.ifr_name, io->pvt->iface_name, sizeof(req.ifr_name));
+	l_strlcpy(req.ifr_name, mesh_io->pvt->iface_name, sizeof(req.ifr_name));
 
-	io->pvt->silvair_io->fd = socket(PF_PACKET, SOCK_RAW, 0);
+	mesh_io->pvt->silvair_io->fd = socket(PF_PACKET, SOCK_RAW, 0);
 
-	if (io->pvt->silvair_io->fd < 0) {
+	if (mesh_io->pvt->silvair_io->fd < 0) {
 		l_error("%s: cannot open socket: %s",
-					io->pvt->iface_name, strerror(errno));
+			mesh_io->pvt->iface_name, strerror(errno));
 		return false;
 	}
 
-	if (ioctl(io->pvt->silvair_io->fd, SIOCGIFINDEX, &req) != 0) {
+	if (ioctl(mesh_io->pvt->silvair_io->fd, SIOCGIFINDEX, &req) != 0) {
 		l_error("%s: cannot get interface index: %s",
-					io->pvt->iface_name, strerror(errno));
+			mesh_io->pvt->iface_name, strerror(errno));
 		return false;
 	}
 
@@ -216,46 +217,47 @@ static bool silvair_kernel_init(struct mesh_io *io)
 	addr.sll_pkttype = PACKET_HOST;
 
 	req.ifr_flags |= IFF_UP;
-	if (ioctl(io->pvt->silvair_io->fd, SIOCSIFFLAGS, &req) != 0) {
+
+	if (ioctl(mesh_io->pvt->silvair_io->fd, SIOCSIFFLAGS, &req) != 0) {
 		l_error("%s: cannot bring interface up: %s",
-					io->pvt->iface_name, strerror(errno));
+			mesh_io->pvt->iface_name, strerror(errno));
 		return false;
 	}
 
-	if (bind(io->pvt->silvair_io->fd, (struct sockaddr *)&addr,
-							sizeof(addr)) != 0) {
+	if (bind(mesh_io->pvt->silvair_io->fd,
+				(struct sockaddr *)&addr, sizeof(addr)) != 0) {
 		l_error("%s: cannot bind interface: %s",
-					io->pvt->iface_name, strerror(errno));
+			mesh_io->pvt->iface_name, strerror(errno));
 		return false;
 	}
 
-	l_info("Started mesh on tty %s, interface %s", io->pvt->tty_name,
-							io->pvt->iface_name);
+	l_info("Started mesh on tty %s, interface %s", mesh_io->pvt->tty_name,
+		mesh_io->pvt->iface_name);
 
-	io->pvt->silvair_io->l_io = l_io_new(io->pvt->silvair_io->fd);
+	mesh_io->pvt->silvair_io->l_io = l_io_new(mesh_io->pvt->silvair_io->fd);
 	return true;
 }
 
-static bool silvair_user_init(struct mesh_io *io)
+static bool silvair_user_init(struct mesh_io *mesh_io)
 {
-	io->pvt->silvair_io->l_io = l_io_new(io->pvt->tty_fd);
-	io->pvt->silvair_io->fd = -1;
-	io->pvt->silvair_io->slip.offset = 0;
-	io->pvt->silvair_io->slip.esc = false;
+	mesh_io->pvt->silvair_io->l_io = l_io_new(mesh_io->pvt->tty_fd);
+	mesh_io->pvt->silvair_io->fd = -1;
+	mesh_io->pvt->silvair_io->slip.offset = 0;
+	mesh_io->pvt->silvair_io->slip.esc = false;
 
-	l_info("Started mesh on tty %s", io->pvt->tty_name);
+	l_info("Started mesh on tty %s", mesh_io->pvt->tty_name);
 
 	return true;
 }
 
-static bool silvair_tty_init(struct mesh_io *io, bool flow)
+static bool silvair_tty_init(struct mesh_io *mesh_io, bool flow)
 {
 	struct termios ttys;
 
-	io->pvt->tty_fd = open(io->pvt->tty_name, O_RDWR);
+	mesh_io->pvt->tty_fd = open(mesh_io->pvt->tty_name, O_RDWR);
 
-	if (io->pvt->tty_fd < 0) {
-		l_error("%s: cannot open: %s", io->pvt->tty_name,
+	if (mesh_io->pvt->tty_fd < 0) {
+		l_error("%s: cannot open: %s", mesh_io->pvt->tty_name,
 							strerror(errno));
 		return false;
 	}
@@ -268,16 +270,16 @@ static bool silvair_tty_init(struct mesh_io *io, bool flow)
 	else
 		ttys.c_cflag &= ~CRTSCTS;
 
-	if (tcsetattr(io->pvt->tty_fd, TCSANOW, &ttys) != 0) {
-		l_error("%s: cannot configure tty: %s", io->pvt->tty_name,
-							strerror(errno));
+	if (tcsetattr(mesh_io->pvt->tty_fd, TCSANOW, &ttys) != 0) {
+		l_error("%s: cannot configure tty: %s",
+			mesh_io->pvt->tty_name, strerror(errno));
 		return false;
 	}
 
 	return true;
 }
 
-static bool silvair_io_init(struct mesh_io *io, void *opts)
+static bool silvair_io_init(struct mesh_io *mesh_io, void *opts)
 {
 	bool tty_kernel = false;
 	bool tty_flow = false;
@@ -318,41 +320,44 @@ static bool silvair_io_init(struct mesh_io *io, void *opts)
 		} while (delim);
 	}
 
-	if (!io || io->pvt)
+	if (!mesh_io || mesh_io->pvt)
 		return false;
 
-	io->pvt = l_new(struct mesh_io_private, 1);
-	strncpy(io->pvt->tty_name, opts, sizeof(io->pvt->tty_name) - 1);
+	mesh_io->pvt = l_new(struct mesh_io_private, 1);
+	mesh_io->pvt->silvair_io = l_new(struct silvair_io, 1);
 
-	l_debug("%s: flow control %s, slip in %s", io->pvt->tty_name,
-					tty_flow ? "on" : "off",
-					tty_kernel ? "kernel" : "userspace");
+	strncpy(mesh_io->pvt->tty_name, opts,
+		sizeof(mesh_io->pvt->tty_name) - 1);
 
-	if (!silvair_tty_init(io, tty_flow)) {
+	l_debug("%s: flow control %s, slip in %s",
+		mesh_io->pvt->tty_name, tty_flow ? "on" : "off",
+		tty_kernel ? "kernel" : "userspace");
+
+	if (!silvair_tty_init(mesh_io, tty_flow)) {
 		l_error("tty initialization failed");
 		return false;
 	}
 
-	if (!(tty_kernel ? silvair_kernel_init : silvair_user_init)(io)) {
+	if (!(tty_kernel ? silvair_kernel_init : silvair_user_init)(mesh_io)) {
 		l_error("initialization failed");
 		return false;
 	}
 
-	io->pvt->rx_regs = l_queue_new();
-	io->pvt->tx_pkts = l_queue_new();
+	mesh_io->pvt->rx_regs = l_queue_new();
+	mesh_io->pvt->tx_pkts = l_queue_new();
 
-	if (!l_io_set_read_handler(io->pvt->silvair_io->l_io,
-						io_read_callback, io, NULL))
+	if (!l_io_set_read_handler(mesh_io->pvt->silvair_io->l_io,
+					io_read_callback, mesh_io, NULL))
 		return false;
 
-	io->pvt->tx_timeout = l_timeout_create_ms(0, send_timeout,
-								io->pvt, NULL);
+	mesh_io->pvt->tx_timeout = l_timeout_create_ms(0, send_timeout,
+					mesh_io->pvt, NULL);
 
-	send_keep_alive(io);
+	send_keep_alive(mesh_io->pvt->silvair_io);
 
-	io->pvt->silvair_io->keep_alive_watchdog =
+	mesh_io->pvt->silvair_io->keep_alive_watchdog =
 		l_timeout_create_ms(KEEP_ALIVE_WATCHDOG_PERIOD,
-			keep_alive_error, io, NULL);
+			keep_alive_error, mesh_io, NULL);
 
 	return true;
 }
@@ -450,17 +455,17 @@ static void send_timeout(struct l_timeout *timeout, void *user_data)
 
 static void send_keep_alive(void *user_data)
 {
-//	struct silvair_io *io = user_data;
-//
-//	if (!io)
-//		return;
-//
-//	if (io->fd >= 0)
-//		silvair_send_packet(io, NULL, 0, get_instant(),
-//			io_write, PACKET_TYPE_KEEP_ALIVE);
-//	else
-//		silvair_send_slip(io, NULL, 0, get_instant(),
-//			io_write, PACKET_TYPE_KEEP_ALIVE);
+	struct silvair_io *io = user_data;
+
+	if (!io)
+		return;
+
+	if (io->fd >= 0)
+		silvair_send_packet(io, NULL, 0, get_instant(),
+			io_write, PACKET_TYPE_KEEP_ALIVE);
+	else
+		silvair_send_slip(io, NULL, 0, get_instant(),
+			io_write, PACKET_TYPE_KEEP_ALIVE);
 }
 
 static void keep_alive_error(struct l_timeout *timeout, void *user_data)
