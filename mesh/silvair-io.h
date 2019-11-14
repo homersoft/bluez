@@ -70,7 +70,8 @@ void silvair_process_slip(struct silvair_io *io,
 				uint8_t *buf,
 				size_t size,
 				uint32_t instant,
-				const struct rx_process_cb *cb);
+				const struct rx_process_cb *cb,
+				void *user_data);
 
 bool silvair_send_packet(struct silvair_io *io,
 				uint8_t *buf,

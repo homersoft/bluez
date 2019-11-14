@@ -257,7 +257,8 @@ void silvair_process_slip(struct silvair_io *io,
 				uint8_t *buf,
 				size_t size,
 				uint32_t instant,
-				const struct rx_process_cb *cb)
+				const struct rx_process_cb *cb,
+				void *user_data)
 {
 	if (!cb)
 		return;
@@ -269,8 +270,7 @@ void silvair_process_slip(struct silvair_io *io,
 				silvair_process_packet(io, slip->buf,
 							slip->offset, instant,
 							cb,
-							NULL);//todo);
-
+							user_data);
 			slip->offset = 0;
 			break;
 
@@ -465,6 +465,7 @@ bool silvair_send_slip(struct silvair_io *io,
 		return send_packet(io, buf, size, instant, slip_write, cb);
 
 	case PACKET_TYPE_KEEP_ALIVE:
+		l_info("PACKET_TYPE_KEEP_ALIVE");
 		return send_keep_alive_request(io, NULL, 0, instant,
 			slip_write, cb);
 

@@ -131,47 +131,58 @@ static void process_rx(struct silvair_io *silvair_io,
 				uint8_t len,
 				void *user_data)
 {
-//	struct process_data rx = {
-//		.pvt = user_data,
-//		.data = data,
-//		.len = len,
-//		.info.instant = instant,
-//		.info.chan = 7,
-//		.info.rssi = rssi,
-//	};
-//
-//	/* Refresh keep alive watchdog */
+	struct mesh_io *mesh_io = user_data;
+
+	if (!mesh_io)
+	{
+		l_error("mesh_io");
+		return;
+	}
+
+	struct process_data rx = {
+		.pvt = mesh_io->pvt,
+		.data = data,
+		.len = len,
+		.info.instant = instant,
+		.info.chan = 7,
+		.info.rssi = rssi,
+	};
+	l_info("process rx");
+	/* Refresh keep alive watchdog */
 //	l_timeout_modify_ms(io->pvt->keep_alive_watchdog,
 //						KEEP_ALIVE_WATCHDOG_PERIOD);
-//
-//	l_queue_foreach(io->pvt->rx_regs, process_rx_callbacks, &rx);
+
+	l_queue_foreach(mesh_io->pvt->rx_regs, process_rx_callbacks, &rx);
 }
 
-static bool io_read_callback(struct l_io *silvair_io, void *user_data)
+static bool io_read_callback(struct l_io *l_io, void *user_data)
 {
-//	struct mesh_io *mesh_io = user_data;
-//	uint8_t buf[512];
-//	uint32_t instant;
-//	int r;
-//	int fd;
-//
-//	fd = io_get_fd(mesh_io->pvt->io);
-//	if (fd < 0)
-//		return false;
-//
-//	r = read(fd, buf, sizeof(buf));
-//
-//	if (r <= 0)
-//		return false;
-//
-//
-//	instant = get_instant();
-//
-//	if (mesh_io->pvt->iface_fd >= 0)
-//		silvair_process_packet(silvair_io, buf, r, instant, &rx_cbk, mesh_io);
-//	else
-//		silvair_process_slip(mesh_io, &mesh_io->pvt->slip,
-//						buf, r, instant, &rx_cbk);
+	struct mesh_io *mesh_io = user_data;
+	uint8_t buf[512];
+	uint32_t instant;
+	int r, fd;
+
+	if ((fd = l_io_get_fd(l_io)) < 0)
+	{
+		l_error("fd error");
+		return false;
+	}
+
+	if ((r = read(fd, buf, sizeof(buf))) <= 0)
+	{
+		l_info("read error");
+		return false;
+	}
+
+	instant = get_instant();
+
+	if (mesh_io->pvt->iface_fd >= 0)
+		silvair_process_packet(mesh_io->pvt->silvair_io, buf, r,
+					instant, &rx_cbk, mesh_io);
+	else
+		silvair_process_slip(mesh_io->pvt->silvair_io,
+					&mesh_io->pvt->silvair_io->slip,
+					buf, r, instant, &rx_cbk, mesh_io);
 
 	return true;
 }
@@ -348,7 +359,10 @@ static bool silvair_io_init(struct mesh_io *mesh_io, void *opts)
 
 	if (!l_io_set_read_handler(mesh_io->pvt->silvair_io->l_io,
 					io_read_callback, mesh_io, NULL))
+	{
+		l_error("l_io_set_read_handler failed");
 		return false;
+	}
 
 	mesh_io->pvt->tx_timeout = l_timeout_create_ms(0, send_timeout,
 					mesh_io->pvt, NULL);
