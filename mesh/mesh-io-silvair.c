@@ -152,7 +152,8 @@ static void process_rx(struct silvair_io *silvair_io,
 
 static bool io_read_callback(struct l_io *l_io, void *user_data)
 {
-	struct mesh_io *mesh_io = user_data;
+	struct silvair_io *silvair_io = user_data;
+	struct mesh_io *mesh_io = silvair_io->context;
 	uint8_t buf[512];
 	uint32_t instant;
 	int r, fd;
@@ -172,11 +173,11 @@ static bool io_read_callback(struct l_io *l_io, void *user_data)
 	instant = get_instant();
 
 	if (mesh_io->pvt->iface_fd >= 0)
-		silvair_process_packet(mesh_io->pvt->silvair_io, buf, r,
+		silvair_process_packet(silvair_io, buf, r,
 					instant, &rx_cbk, mesh_io);
 	else
-		silvair_process_slip(mesh_io->pvt->silvair_io,
-					&mesh_io->pvt->silvair_io->slip,
+		silvair_process_slip(silvair_io,
+					&silvair_io->slip,
 					buf, r, instant, &rx_cbk, mesh_io);
 
 	return true;
@@ -243,14 +244,16 @@ static bool silvair_kernel_init(struct mesh_io *mesh_io)
 		mesh_io->pvt->iface_name);
 
 	mesh_io->pvt->silvair_io = silvair_io_new(mesh_io->pvt->iface_fd,
-							keep_alive_error);
+							keep_alive_error,
+							mesh_io);
 	return true;
 }
 
 static bool silvair_user_init(struct mesh_io *mesh_io)
 {
 	mesh_io->pvt->silvair_io = silvair_io_new(mesh_io->pvt->tty_fd,
-							keep_alive_error);
+							keep_alive_error,
+							mesh_io);
 	mesh_io->pvt->iface_fd = -1;
 
 	l_info("Started mesh on tty %s", mesh_io->pvt->tty_name);
@@ -353,7 +356,7 @@ static bool silvair_io_init(struct mesh_io *mesh_io, void *opts)
 	mesh_io->pvt->tx_pkts = l_queue_new();
 
 	if (!l_io_set_read_handler(mesh_io->pvt->silvair_io->l_io,
-					io_read_callback, mesh_io, NULL))
+					io_read_callback, mesh_io->pvt->silvair_io, NULL))
 	{
 		l_error("l_io_set_read_handler failed");
 		return false;

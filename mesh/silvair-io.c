@@ -476,9 +476,12 @@ bool silvair_send_slip(struct silvair_io *io,
 	return false;
 }
 
-struct silvair_io *silvair_io_new(int fd, keep_alive_tmout_cb tmout_cb)
+struct silvair_io *silvair_io_new(int fd,
+				keep_alive_tmout_cb tmout_cb,
+				void *context)
 {
 	struct silvair_io *io = l_new(struct silvair_io, 1);
+	io->context = context;
 
 	io->slip.offset = 0;
 	io->slip.esc = false;
