@@ -171,15 +171,8 @@ static bool io_read_callback(struct l_io *l_io, void *user_data)
 	}
 
 	instant = get_instant();
-
-	if (mesh_io->pvt->iface_fd >= 0)
-		silvair_process_packet(silvair_io, buf, r,
-					instant, &rx_cbk, mesh_io);
-	else
-		silvair_process_slip(silvair_io,
-					&silvair_io->slip,
-					buf, r, instant, &rx_cbk, mesh_io);
-
+	silvair_process_rx(silvair_io, &silvair_io->slip, buf, r,
+						instant, &rx_cbk, mesh_io);
 	return true;
 }
 
@@ -245,6 +238,7 @@ static bool uart_kernel_init(struct mesh_io *mesh_io)
 
 	mesh_io->pvt->silvair_io = silvair_io_new(mesh_io->pvt->iface_fd,
 							keep_alive_error,
+							true,
 							mesh_io);
 	return true;
 }
@@ -253,6 +247,7 @@ static bool uart_user_init(struct mesh_io *mesh_io)
 {
 	mesh_io->pvt->silvair_io = silvair_io_new(mesh_io->pvt->tty_fd,
 							keep_alive_error,
+							false,
 							mesh_io);
 	mesh_io->pvt->iface_fd = -1;
 

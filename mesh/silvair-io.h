@@ -24,6 +24,7 @@ struct slip {
 	uint8_t	buf[512];
 	size_t	offset;
 	bool	esc;
+	bool	kernel_support;
 };
 
 struct silvair_io {
@@ -57,23 +58,20 @@ typedef bool (*send_data_cb)(struct silvair_io *io,
 
 typedef void (*keep_alive_tmout_cb)(struct l_timeout *timeout, void *user_data);
 
-struct silvair_io *silvair_io_new(int fd, keep_alive_tmout_cb tmout_cb, void *context);
+struct silvair_io *silvair_io_new(int fd,
+				keep_alive_tmout_cb tmout_cb,
+				bool kernel_support,
+				void *context);
+
 void silvair_io_kepp_alive_wdt_refresh(struct silvair_io *io);
 
-void silvair_process_packet(struct silvair_io *io,
-				uint8_t *buf,
-				size_t size,
-				uint32_t instant,
-				const struct rx_process_cb *cb,
-				void *user_data);
-
-void silvair_process_slip(struct silvair_io *io,
-				struct slip *slip,
-				uint8_t *buf,
-				size_t size,
-				uint32_t instant,
-				const struct rx_process_cb *cb,
-				void *user_data);
+void silvair_process_rx(struct silvair_io *io,
+			struct slip *slip,
+			uint8_t *buf,
+			size_t size,
+			uint32_t instant,
+			const struct rx_process_cb *cb,
+			void *user_data);
 
 bool silvair_send_packet(struct silvair_io *io,
 				uint8_t *buf,

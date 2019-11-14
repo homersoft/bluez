@@ -211,7 +211,8 @@ static void process_evt_keep_alive(struct silvair_io *io,
 	cb->process_keep_alive_cb(io);
 }
 
-void silvair_process_packet(struct silvair_io *io,
+static void silvair_process_packet(struct silvair_io *io,
+				struct slip *slip,
 				uint8_t *buf,
 				size_t size,
 				uint32_t instant,
@@ -220,6 +221,7 @@ void silvair_process_packet(struct silvair_io *io,
 {
 	const struct silvair_pkt_hdr *pkt_hdr;
 	size_t len = size;
+	(void)slip;
 
 	if (len < sizeof(*pkt_hdr))
 		return;
@@ -252,7 +254,7 @@ void silvair_process_packet(struct silvair_io *io,
 	}
 }
 
-void silvair_process_slip(struct silvair_io *io,
+static void silvair_process_slip(struct silvair_io *io,
 				struct slip *slip,
 				uint8_t *buf,
 				size_t size,
@@ -267,7 +269,7 @@ void silvair_process_slip(struct silvair_io *io,
 		switch (*i) {
 		case SLIP_END:
 			if (slip->offset)
-				silvair_process_packet(io, slip->buf,
+				silvair_process_packet(io, NULL, slip->buf,
 							slip->offset, instant,
 							cb,
 							user_data);
@@ -306,6 +308,22 @@ void silvair_process_slip(struct silvair_io *io,
 			return;
 		}
 	}
+}
+
+void silvair_process_rx(struct silvair_io *io,
+				struct slip *slip,
+				uint8_t *buf,
+				size_t size,
+				uint32_t instant,
+				const struct rx_process_cb *cb,
+				void *user_data)
+{
+	if (io->slip.kernel_support)
+		silvair_process_packet(io, NULL, buf, size, instant,
+								cb, user_data);
+	else
+		silvair_process_slip(io, &io->slip, buf, size, instant,
+								cb, user_data);
 }
 
 static bool slip_write(struct silvair_io *io,
@@ -478,6 +496,7 @@ bool silvair_send_slip(struct silvair_io *io,
 
 struct silvair_io *silvair_io_new(int fd,
 				keep_alive_tmout_cb tmout_cb,
+				bool kernel_support,
 				void *context)
 {
 	struct silvair_io *io = l_new(struct silvair_io, 1);
@@ -487,6 +506,7 @@ struct silvair_io *silvair_io_new(int fd,
 	io->slip.esc = false;
 
 	io->l_io = l_io_new(fd);
+	io->slip.kernel_support = kernel_support;
 
 	if (tmout_cb)
 		io->keep_alive_watchdog =
