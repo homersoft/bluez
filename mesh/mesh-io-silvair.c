@@ -132,11 +132,6 @@ static void process_rx(struct silvair_io *silvair_io,
 {
 	struct mesh_io *mesh_io = user_data;
 
-	if (!mesh_io) {
-		l_error("mesh_io does not exist");
-		return;
-	}
-
 	struct process_data rx = {
 		.pvt = mesh_io->pvt,
 		.data = data,
@@ -145,6 +140,11 @@ static void process_rx(struct silvair_io *silvair_io,
 		.info.chan = 7,
 		.info.rssi = rssi,
 	};
+
+	if (!mesh_io) {
+		l_error("mesh_io does not exist");
+		return;
+	}
 
 	silvair_io_kepp_alive_wdt_refresh(silvair_io);
 	l_queue_foreach(mesh_io->pvt->rx_regs, process_rx_callbacks, &rx);
@@ -407,9 +407,9 @@ static bool silvair_io_caps(struct mesh_io *mesh_io, struct mesh_io_caps *caps)
 static bool io_write(struct silvair_io *silvair_io, uint32_t instant,
 					const uint8_t *buf, size_t size)
 {
-	(void)instant;
 	int fd = l_io_get_fd(silvair_io->l_io);
 	int w = write(fd, buf, size);
+	(void)instant;
 
 	return (w > 0 && (size_t)w == size);
 }
@@ -488,9 +488,9 @@ static void keep_alive_error(struct l_timeout *timeout, void *user_data)
 static int compare_tx_pkt_instant(const void *a, const void *b,
 							void *user_data)
 {
-	(void)user_data;
 	const struct tx_pkt *lhs = a;
 	const struct tx_pkt *rhs = b;
+	(void)user_data;
 
 	if (lhs->instant == rhs->instant)
 		return 0;
