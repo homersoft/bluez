@@ -367,22 +367,26 @@ static bool silvair_io_init(struct mesh_io *mesh_io, void *opts)
 	return true;
 }
 
-static bool silvair_io_destroy(struct mesh_io *io)
+static bool silvair_io_destroy(struct mesh_io *mesh_io)
 {
-//	struct mesh_io_private *pvt = io->pvt;
-//
-//	if (!pvt)
-//		return true;
-//
-//	close(io->pvt->iface_fd);
-//	close(io->pvt->tty_fd);
-//	io_destroy(io->pvt->io);
-//	l_timeout_remove(pvt->tx_timeout);
-//	l_timeout_remove(pvt->keep_alive_watchdog);
-//	l_queue_destroy(pvt->rx_regs, l_free);
-//	l_queue_destroy(pvt->tx_pkts, l_free);
-//	l_free(pvt);
-//	io->pvt = NULL;
+	struct mesh_io_private *pvt = mesh_io->pvt;
+	struct silvair_io *silvair_io = mesh_io->pvt->silvair_io;
+
+	if (!pvt)
+		return true;
+
+	if (silvair_io) {
+		l_io_destroy(silvair_io->l_io);
+		l_timeout_remove(silvair_io->keep_alive_watchdog);
+		l_free(silvair_io);
+	}
+
+	close(pvt->iface_fd);
+	close(pvt->tty_fd);
+	l_timeout_remove(pvt->tx_timeout);
+	l_queue_destroy(pvt->rx_regs, l_free);
+	l_queue_destroy(pvt->tx_pkts, l_free);
+	l_free(pvt);
 
 	return true;
 }
