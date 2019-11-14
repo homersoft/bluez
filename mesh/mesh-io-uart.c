@@ -40,7 +40,7 @@
 
 #include "mesh/mesh-io.h"
 #include "mesh/mesh-io-api.h"
-#include "mesh/mesh-io-silvair.h"
+#include "mesh/mesh-io-uart.h"
 #include "mesh/silvair-io.h"
 
 
@@ -183,7 +183,7 @@ static bool io_read_callback(struct l_io *l_io, void *user_data)
 	return true;
 }
 
-static bool silvair_kernel_init(struct mesh_io *mesh_io)
+static bool uart_kernel_init(struct mesh_io *mesh_io)
 {
 	struct ifreq req;
 	struct sockaddr_ll addr;
@@ -249,7 +249,7 @@ static bool silvair_kernel_init(struct mesh_io *mesh_io)
 	return true;
 }
 
-static bool silvair_user_init(struct mesh_io *mesh_io)
+static bool uart_user_init(struct mesh_io *mesh_io)
 {
 	mesh_io->pvt->silvair_io = silvair_io_new(mesh_io->pvt->tty_fd,
 							keep_alive_error,
@@ -260,7 +260,7 @@ static bool silvair_user_init(struct mesh_io *mesh_io)
 	return true;
 }
 
-static bool silvair_tty_init(struct mesh_io *mesh_io, bool flow)
+static bool uart_tty_init(struct mesh_io *mesh_io, bool flow)
 {
 	struct termios ttys;
 
@@ -289,7 +289,7 @@ static bool silvair_tty_init(struct mesh_io *mesh_io, bool flow)
 	return true;
 }
 
-static bool silvair_io_init(struct mesh_io *mesh_io, void *opts)
+static bool uart_io_init(struct mesh_io *mesh_io, void *opts)
 {
 	bool tty_kernel = false;
 	bool tty_flow = false;
@@ -342,12 +342,12 @@ static bool silvair_io_init(struct mesh_io *mesh_io, void *opts)
 		mesh_io->pvt->tty_name, tty_flow ? "on" : "off",
 		tty_kernel ? "kernel" : "userspace");
 
-	if (!silvair_tty_init(mesh_io, tty_flow)) {
+	if (!uart_tty_init(mesh_io, tty_flow)) {
 		l_error("tty initialization failed");
 		return false;
 	}
 
-	if (!(tty_kernel ? silvair_kernel_init : silvair_user_init)(mesh_io)) {
+	if (!(tty_kernel ? uart_kernel_init : uart_user_init)(mesh_io)) {
 		l_error("initialization failed");
 		return false;
 	}
@@ -370,7 +370,7 @@ static bool silvair_io_init(struct mesh_io *mesh_io, void *opts)
 	return true;
 }
 
-static bool silvair_io_destroy(struct mesh_io *mesh_io)
+static bool uart_io_destroy(struct mesh_io *mesh_io)
 {
 	struct mesh_io_private *pvt = mesh_io->pvt;
 	struct silvair_io *silvair_io = mesh_io->pvt->silvair_io;
@@ -394,7 +394,7 @@ static bool silvair_io_destroy(struct mesh_io *mesh_io)
 	return true;
 }
 
-static bool silvair_io_caps(struct mesh_io *mesh_io, struct mesh_io_caps *caps)
+static bool uart_io_caps(struct mesh_io *mesh_io, struct mesh_io_caps *caps)
 {
 	struct mesh_io_private *pvt = mesh_io->pvt;
 
@@ -515,7 +515,7 @@ static void send_pkt(struct mesh_io *mesh_io,
 	send_flush(mesh_io);
 }
 
-static bool silvair_io_send(struct mesh_io *mesh_io, struct mesh_io_send_info *info,
+static bool uart_io_send(struct mesh_io *mesh_io, struct mesh_io_send_info *info,
 					const uint8_t *data, uint16_t len)
 {
 	uint32_t instant;
@@ -576,7 +576,7 @@ static bool find_by_filter_id(const void *a, const void *b)
 	return rx_reg->filter_id == filter_id;
 }
 
-static bool silvair_io_reg(struct mesh_io *mesh_io, uint8_t filter_id,
+static bool uart_io_reg(struct mesh_io *mesh_io, uint8_t filter_id,
 				mesh_io_recv_func_t cb, void *user_data)
 {
 	struct mesh_io_private *pvt = mesh_io->pvt;
@@ -603,7 +603,7 @@ static bool silvair_io_reg(struct mesh_io *mesh_io, uint8_t filter_id,
 	return true;
 }
 
-static bool silvair_io_dereg(struct mesh_io *mesh_io, uint8_t filter_id)
+static bool uart_io_dereg(struct mesh_io *mesh_io, uint8_t filter_id)
 {
 	struct mesh_io_private *pvt = mesh_io->pvt;
 	struct pvt_rx_reg *rx_reg;
@@ -617,7 +617,7 @@ static bool silvair_io_dereg(struct mesh_io *mesh_io, uint8_t filter_id)
 	return true;
 }
 
-static bool silvair_io_set(struct mesh_io *mesh_io,
+static bool uart_io_set(struct mesh_io *mesh_io,
 		uint8_t filter_id, const uint8_t *data, uint8_t len,
 		mesh_io_status_func_t callback, void *user_data)
 {
@@ -642,7 +642,7 @@ static bool find_by_pattern(const void *a, const void *b)
 	return (!memcmp(tx->data, pattern->data, pattern->len));
 }
 
-static bool silvair_io_cancel(struct mesh_io *mesh_io, const uint8_t *data,
+static bool uart_io_cancel(struct mesh_io *mesh_io, const uint8_t *data,
 								uint8_t len)
 {
 	struct mesh_io_private *pvt = mesh_io->pvt;
@@ -671,13 +671,13 @@ static bool silvair_io_cancel(struct mesh_io *mesh_io, const uint8_t *data,
 	return true;
 }
 
-const struct mesh_io_api mesh_io_silvair = {
-	.init = silvair_io_init,
-	.destroy = silvair_io_destroy,
-	.caps = silvair_io_caps,
-	.send = silvair_io_send,
-	.reg = silvair_io_reg,
-	.dereg = silvair_io_dereg,
-	.set = silvair_io_set,
-	.cancel = silvair_io_cancel,
+const struct mesh_io_api mesh_io_uart = {
+	.init = uart_io_init,
+	.destroy = uart_io_destroy,
+	.caps = uart_io_caps,
+	.send = uart_io_send,
+	.reg = uart_io_reg,
+	.dereg = uart_io_dereg,
+	.set = uart_io_set,
+	.cancel = uart_io_cancel,
 };
