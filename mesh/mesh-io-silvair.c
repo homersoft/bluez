@@ -119,7 +119,6 @@ static void process_rx_callbacks(void *v_rx, void *v_reg)
 	uint8_t ad_type;
 
 	ad_type = rx->pvt->filters[rx_reg->filter_id - 1];
-
 	if (rx->data[0] == ad_type && rx_reg->cb)
 		rx_reg->cb(rx_reg->user_data, &rx->info, rx->data, rx->len);
 }
@@ -147,7 +146,7 @@ static void process_rx(struct silvair_io *silvair_io,
 		.info.chan = 7,
 		.info.rssi = rssi,
 	};
-	l_info("process rx");
+
 	/* Refresh keep alive watchdog */
 //	l_timeout_modify_ms(io->pvt->keep_alive_watchdog,
 //						KEEP_ALIVE_WATCHDOG_PERIOD);
@@ -392,15 +391,15 @@ static bool silvair_io_destroy(struct mesh_io *io)
 	return true;
 }
 
-static bool silvair_io_caps(struct mesh_io *io, struct mesh_io_caps *caps)
+static bool silvair_io_caps(struct mesh_io *mesh_io, struct mesh_io_caps *caps)
 {
-//	struct mesh_io_private *pvt = io->pvt;
-//
-//	if (!pvt || !caps)
-//		return false;
-//
-//	caps->max_num_filters = sizeof(pvt->filters);
-//	caps->window_accuracy = 50;
+	struct mesh_io_private *pvt = mesh_io->pvt;
+
+	if (!pvt || !caps)
+		return false;
+
+	caps->max_num_filters = sizeof(pvt->filters);
+	caps->window_accuracy = 50;
 
 	return true;
 }
@@ -578,31 +577,30 @@ static bool find_by_filter_id(const void *a, const void *b)
 	return rx_reg->filter_id == filter_id;
 }
 
-static bool silvair_io_reg(struct mesh_io *io, uint8_t filter_id,
+static bool silvair_io_reg(struct mesh_io *mesh_io, uint8_t filter_id,
 				mesh_io_recv_func_t cb, void *user_data)
 {
-//	struct mesh_io_private *pvt = io->pvt;
-//	struct pvt_rx_reg *rx_reg;
-//
-//	l_info("%s %d", __func__, filter_id);
-//	if (!cb || !filter_id || filter_id > sizeof(pvt->filters))
-//		return false;
-//
-//	rx_reg = l_queue_remove_if(pvt->rx_regs, find_by_filter_id,
-//						L_UINT_TO_PTR(filter_id));
-//
-//	if (!rx_reg) {
-//		rx_reg = l_new(struct pvt_rx_reg, 1);
-//		if (!rx_reg)
-//			return false;
-//	}
-//
-//	rx_reg->filter_id = filter_id;
-//	rx_reg->cb = cb;
-//	rx_reg->user_data = user_data;
-//
-//	l_queue_push_head(pvt->rx_regs, rx_reg);
+	struct mesh_io_private *pvt = mesh_io->pvt;
+	struct pvt_rx_reg *rx_reg;
 
+	l_info("%s %d", __func__, filter_id);
+	if (!cb || !filter_id || filter_id > sizeof(pvt->filters))
+		return false;
+
+	rx_reg = l_queue_remove_if(pvt->rx_regs, find_by_filter_id,
+						L_UINT_TO_PTR(filter_id));
+
+	if (!rx_reg) {
+		rx_reg = l_new(struct pvt_rx_reg, 1);
+		if (!rx_reg)
+			return false;
+	}
+
+	rx_reg->filter_id = filter_id;
+	rx_reg->cb = cb;
+	rx_reg->user_data = user_data;
+
+	l_queue_push_head(pvt->rx_regs, rx_reg);
 	return true;
 }
 
@@ -621,32 +619,29 @@ static bool silvair_io_dereg(struct mesh_io *io, uint8_t filter_id)
 	return true;
 }
 
-static bool silvair_io_set(struct mesh_io *io,
+static bool silvair_io_set(struct mesh_io *mesh_io,
 		uint8_t filter_id, const uint8_t *data, uint8_t len,
 		mesh_io_status_func_t callback, void *user_data)
 {
-//	struct mesh_io_private *pvt = io->pvt;
-//
-//	l_info("%s id: %d, --> %2.2x", __func__, filter_id, data[0]);
-//	if (!data || !len || !filter_id || filter_id > sizeof(pvt->filters))
-//		return false;
-//
-//	pvt->filters[filter_id - 1] = data[0];
-//
-//	/* TODO: Delayed Call to successful status */
-//
+	struct mesh_io_private *pvt = mesh_io->pvt;
+
+	l_info("%s id: %d, --> %2.2x", __func__, filter_id, data[0]);
+	if (!data || !len || !filter_id || filter_id > sizeof(pvt->filters))
+		return false;
+
+	pvt->filters[filter_id - 1] = data[0];
 	return true;
 }
 
 static bool find_by_pattern(const void *a, const void *b)
 {
-//	const struct tx_pkt *tx = a;
-//	const struct tx_pattern *pattern = b;
-//
-//	if (tx->len < pattern->len)
-//		return false;
-//
-//	return (!memcmp(tx->data, pattern->data, pattern->len));
+	const struct tx_pkt *tx = a;
+	const struct tx_pattern *pattern = b;
+
+	if (tx->len < pattern->len)
+		return false;
+
+	return (!memcmp(tx->data, pattern->data, pattern->len));
 }
 
 static bool silvair_io_cancel(struct mesh_io *io, const uint8_t *data,
