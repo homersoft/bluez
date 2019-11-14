@@ -57,6 +57,7 @@ typedef bool (*send_data_cb)(struct silvair_io *io,
 typedef void (*keep_alive_tmout_cb)(struct l_timeout *timeout, void *user_data);
 
 struct silvair_io *silvair_io_new(int fd, keep_alive_tmout_cb tmout_cb);
+void silvair_io_kepp_alive_wdt_refresh(struct silvair_io *io);
 
 void silvair_process_packet(struct silvair_io *io,
 				uint8_t *buf,

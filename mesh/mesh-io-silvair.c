@@ -132,9 +132,8 @@ static void process_rx(struct silvair_io *silvair_io,
 {
 	struct mesh_io *mesh_io = user_data;
 
-	if (!mesh_io)
-	{
-		l_error("mesh_io");
+	if (!mesh_io) {
+		l_error("mesh_io does not exist");
 		return;
 	}
 
@@ -147,10 +146,7 @@ static void process_rx(struct silvair_io *silvair_io,
 		.info.rssi = rssi,
 	};
 
-	/* Refresh keep alive watchdog */
-//	l_timeout_modify_ms(io->pvt->keep_alive_watchdog,
-//						KEEP_ALIVE_WATCHDOG_PERIOD);
-
+	silvair_io_kepp_alive_wdt_refresh(silvair_io);
 	l_queue_foreach(mesh_io->pvt->rx_regs, process_rx_callbacks, &rx);
 }
 
@@ -479,14 +475,9 @@ static void send_keep_alive(struct silvair_io *silvair_io, void *user_data)
 
 static void keep_alive_error(struct l_timeout *timeout, void *user_data)
 {
-//	struct mesh_io *io = user_data;
-//
-//	if (!io)
-//		return;
-//
-//	l_error("USB cable disconnected !");
-//
-//	/* TODO: JWI - perform some action */
+	(void)timeout;
+	(void)user_data;
+	l_error("USB cable disconnected !");
 }
 
 static int compare_tx_pkt_instant(const void *a, const void *b,

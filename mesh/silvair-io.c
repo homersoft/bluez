@@ -492,3 +492,15 @@ struct silvair_io *silvair_io_new(int fd, keep_alive_tmout_cb tmout_cb)
 				tmout_cb, io, NULL);
 	return io;
 }
+
+void silvair_io_kepp_alive_wdt_refresh(struct silvair_io *io)
+{
+	if (!io)
+		return;
+
+	if (!io->keep_alive_watchdog)
+		return;
+
+	l_timeout_modify_ms(io->keep_alive_watchdog,
+					keep_alive_watchdog_perios_ms);
+}
