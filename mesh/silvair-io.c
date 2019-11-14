@@ -22,7 +22,8 @@
 #define SLIP_ESC_END 0334
 #define SLIP_ESC_ESC 0335
 
-static const uint32_t silvair_access_address = 0x8e89bed6;
+static const uint32_t silvair_access_address		= 0x8e89bed6;
+static const uint16_t keep_alive_watchdog_perios_ms	= 10000;
 
 static const uint8_t silvair_channels[8] = {
 	0x00, 0x00, 0x00, 0x0e,
@@ -473,4 +474,20 @@ bool silvair_send_slip(struct silvair_io *io,
 	}
 
 	return false;
+}
+
+struct silvair_io *silvair_io_new(int fd, keep_alive_tmout_cb tmout_cb)
+{
+	struct silvair_io *io = l_new(struct silvair_io, 1);
+
+	io->slip.offset = 0;
+	io->slip.esc = false;
+
+	io->l_io = l_io_new(fd);
+
+	if (tmout_cb)
+		io->keep_alive_watchdog =
+			l_timeout_create_ms(keep_alive_watchdog_perios_ms,
+				tmout_cb, io, NULL);
+	return io;
 }

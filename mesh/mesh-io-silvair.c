@@ -43,12 +43,14 @@
 #include "mesh/mesh-io-silvair.h"
 #include "mesh/silvair-io.h"
 
-const unsigned long KEEP_ALIVE_WATCHDOG_PERIOD = 10000;
 
 struct mesh_io_private {
 	char			tty_name[PATH_MAX];
 	int			tty_fd;
+
 	char			iface_name[IFNAMSIZ];
+	int			iface_fd;
+
 	struct silvair_io	*silvair_io;
 	struct l_timeout	*tx_timeout;
 	struct l_queue		*rx_regs;
@@ -84,7 +86,7 @@ struct tx_pattern {
 };
 
 static void send_timeout(struct l_timeout *timeout, void *user_data);
-static void send_keep_alive(void *user_data);
+static void send_keep_alive(struct silvair_io *silvair_io, void *user_data);
 static void keep_alive_error(struct l_timeout *timeout, void *user_data);
 
 static void process_rx(struct silvair_io *io,
@@ -197,15 +199,15 @@ static bool silvair_kernel_init(struct mesh_io *mesh_io)
 
 	l_strlcpy(req.ifr_name, mesh_io->pvt->iface_name, sizeof(req.ifr_name));
 
-	mesh_io->pvt->silvair_io->fd = socket(PF_PACKET, SOCK_RAW, 0);
+	mesh_io->pvt->iface_fd = socket(PF_PACKET, SOCK_RAW, 0);
 
-	if (mesh_io->pvt->silvair_io->fd < 0) {
+	if (mesh_io->pvt->iface_fd < 0) {
 		l_error("%s: cannot open socket: %s",
 			mesh_io->pvt->iface_name, strerror(errno));
 		return false;
 	}
 
-	if (ioctl(mesh_io->pvt->silvair_io->fd, SIOCGIFINDEX, &req) != 0) {
+	if (ioctl(mesh_io->pvt->iface_fd, SIOCGIFINDEX, &req) != 0) {
 		l_error("%s: cannot get interface index: %s",
 			mesh_io->pvt->iface_name, strerror(errno));
 		return false;
@@ -218,14 +220,14 @@ static bool silvair_kernel_init(struct mesh_io *mesh_io)
 
 	req.ifr_flags |= IFF_UP;
 
-	if (ioctl(mesh_io->pvt->silvair_io->fd, SIOCSIFFLAGS, &req) != 0) {
+	if (ioctl(mesh_io->pvt->iface_fd, SIOCSIFFLAGS, &req) != 0) {
 		l_error("%s: cannot bring interface up: %s",
 			mesh_io->pvt->iface_name, strerror(errno));
 		return false;
 	}
 
-	if (bind(mesh_io->pvt->silvair_io->fd,
-				(struct sockaddr *)&addr, sizeof(addr)) != 0) {
+	if (bind(mesh_io->pvt->iface_fd, (struct sockaddr *)&addr,
+							sizeof(addr)) != 0) {
 		l_error("%s: cannot bind interface: %s",
 			mesh_io->pvt->iface_name, strerror(errno));
 		return false;
@@ -234,19 +236,18 @@ static bool silvair_kernel_init(struct mesh_io *mesh_io)
 	l_info("Started mesh on tty %s, interface %s", mesh_io->pvt->tty_name,
 		mesh_io->pvt->iface_name);
 
-	mesh_io->pvt->silvair_io->l_io = l_io_new(mesh_io->pvt->silvair_io->fd);
+	mesh_io->pvt->silvair_io = silvair_io_new(mesh_io->pvt->iface_fd,
+							keep_alive_error);
 	return true;
 }
 
 static bool silvair_user_init(struct mesh_io *mesh_io)
 {
-	mesh_io->pvt->silvair_io->l_io = l_io_new(mesh_io->pvt->tty_fd);
-	mesh_io->pvt->silvair_io->fd = -1;
-	mesh_io->pvt->silvair_io->slip.offset = 0;
-	mesh_io->pvt->silvair_io->slip.esc = false;
+	mesh_io->pvt->silvair_io = silvair_io_new(mesh_io->pvt->tty_fd,
+							keep_alive_error);
+	mesh_io->pvt->iface_fd = -1;
 
 	l_info("Started mesh on tty %s", mesh_io->pvt->tty_name);
-
 	return true;
 }
 
@@ -324,7 +325,6 @@ static bool silvair_io_init(struct mesh_io *mesh_io, void *opts)
 		return false;
 
 	mesh_io->pvt = l_new(struct mesh_io_private, 1);
-	mesh_io->pvt->silvair_io = l_new(struct silvair_io, 1);
 
 	strncpy(mesh_io->pvt->tty_name, opts,
 		sizeof(mesh_io->pvt->tty_name) - 1);
@@ -353,11 +353,7 @@ static bool silvair_io_init(struct mesh_io *mesh_io, void *opts)
 	mesh_io->pvt->tx_timeout = l_timeout_create_ms(0, send_timeout,
 					mesh_io->pvt, NULL);
 
-	send_keep_alive(mesh_io->pvt->silvair_io);
-
-	mesh_io->pvt->silvair_io->keep_alive_watchdog =
-		l_timeout_create_ms(KEEP_ALIVE_WATCHDOG_PERIOD,
-			keep_alive_error, mesh_io, NULL);
+	send_keep_alive(mesh_io->pvt->silvair_io, mesh_io);
 
 	return true;
 }
@@ -453,18 +449,18 @@ static void send_timeout(struct l_timeout *timeout, void *user_data)
 //	send_flush(pvt);
 }
 
-static void send_keep_alive(void *user_data)
+static void send_keep_alive(struct silvair_io *silvair_io, void *user_data)
 {
-	struct silvair_io *io = user_data;
+	struct mesh_io *mesh_io = user_data;
 
-	if (!io)
+	if (!mesh_io || !silvair_io)
 		return;
 
-	if (io->fd >= 0)
-		silvair_send_packet(io, NULL, 0, get_instant(),
+	if (mesh_io->pvt->iface_fd >= 0)
+		silvair_send_packet(silvair_io, NULL, 0, get_instant(),
 			io_write, PACKET_TYPE_KEEP_ALIVE);
 	else
-		silvair_send_slip(io, NULL, 0, get_instant(),
+		silvair_send_slip(silvair_io, NULL, 0, get_instant(),
 			io_write, PACKET_TYPE_KEEP_ALIVE);
 }
 

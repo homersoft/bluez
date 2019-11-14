@@ -27,7 +27,6 @@ struct slip {
 };
 
 struct silvair_io {
-	int fd;
 	struct l_io		*l_io;
 	struct l_timeout	*keep_alive_watchdog;
 	struct slip		slip;
@@ -54,6 +53,10 @@ typedef bool (*send_data_cb)(struct silvair_io *io,
 				uint32_t instant,
 				const uint8_t *data,
 				size_t len);
+
+typedef void (*keep_alive_tmout_cb)(struct l_timeout *timeout, void *user_data);
+
+struct silvair_io *silvair_io_new(int fd, keep_alive_tmout_cb tmout_cb);
 
 void silvair_process_packet(struct silvair_io *io,
 				uint8_t *buf,
