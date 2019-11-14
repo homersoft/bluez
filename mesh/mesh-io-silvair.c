@@ -404,13 +404,14 @@ static bool silvair_io_caps(struct mesh_io *mesh_io, struct mesh_io_caps *caps)
 	return true;
 }
 
-static bool io_write(struct silvair_io *io, uint32_t instant,
+static bool io_write(struct silvair_io *silvair_io, uint32_t instant,
 					const uint8_t *buf, size_t size)
 {
-//	int fd = io_get_fd(pvt->io);
-//	int w = write(fd, buf, size);
-//
-//	return (w > 0 && (size_t)w == size);
+	(void)instant;
+	int fd = l_io_get_fd(silvair_io->l_io);
+	int w = write(fd, buf, size);
+
+	return (w > 0 && (size_t)w == size);
 }
 
 static void send_flush(struct mesh_io_private *pvt)
@@ -487,13 +488,14 @@ static void keep_alive_error(struct l_timeout *timeout, void *user_data)
 static int compare_tx_pkt_instant(const void *a, const void *b,
 							void *user_data)
 {
-//	const struct tx_pkt *lhs = a;
-//	const struct tx_pkt *rhs = b;
-//
-//	if (lhs->instant == rhs->instant)
-//		return 0;
-//
-//	return lhs->instant < rhs->instant ? -1 : 1;
+	(void)user_data;
+	const struct tx_pkt *lhs = a;
+	const struct tx_pkt *rhs = b;
+
+	if (lhs->instant == rhs->instant)
+		return 0;
+
+	return lhs->instant < rhs->instant ? -1 : 1;
 }
 
 static void send_pkt(struct mesh_io_private *pvt,
@@ -599,17 +601,16 @@ static bool silvair_io_reg(struct mesh_io *mesh_io, uint8_t filter_id,
 	return true;
 }
 
-static bool silvair_io_dereg(struct mesh_io *io, uint8_t filter_id)
+static bool silvair_io_dereg(struct mesh_io *mesh_io, uint8_t filter_id)
 {
-//	struct mesh_io_private *pvt = io->pvt;
-//
-//	struct pvt_rx_reg *rx_reg;
-//
-//	rx_reg = l_queue_remove_if(pvt->rx_regs, find_by_filter_id,
-//						L_UINT_TO_PTR(filter_id));
-//
-//	if (rx_reg)
-//		l_free(rx_reg);
+	struct mesh_io_private *pvt = mesh_io->pvt;
+	struct pvt_rx_reg *rx_reg;
+
+	rx_reg = l_queue_remove_if(pvt->rx_regs, find_by_filter_id,
+						L_UINT_TO_PTR(filter_id));
+
+	if (rx_reg)
+		l_free(rx_reg);
 
 	return true;
 }
@@ -639,30 +640,31 @@ static bool find_by_pattern(const void *a, const void *b)
 	return (!memcmp(tx->data, pattern->data, pattern->len));
 }
 
-static bool silvair_io_cancel(struct mesh_io *io, const uint8_t *data,
+static bool silvair_io_cancel(struct mesh_io *mesh_io, const uint8_t *data,
 								uint8_t len)
 {
-//	struct mesh_io_private *pvt = io->pvt;
-//	struct tx_pkt *tx;
-//	const struct tx_pattern pattern = {
-//		.data = data,
-//		.len = len
-//	};
-//
-//	if (!data)
-//		return false;
-//
-//	do {
-//		tx = l_queue_remove_if(pvt->tx_pkts, find_by_pattern,
-//							&pattern);
-//		l_free(tx);
-//	} while (tx);
-//
-//	tx = l_queue_peek_head(pvt->tx_pkts);
-//
-//	if (tx)
-//		l_timeout_modify_ms(pvt->tx_timeout,
-//						tx->instant - get_instant());
+	struct mesh_io_private *pvt = mesh_io->pvt;
+	struct tx_pkt *tx;
+
+	const struct tx_pattern pattern = {
+		.data = data,
+		.len = len
+	};
+
+	if (!data)
+		return false;
+
+	do {
+		tx = l_queue_remove_if(pvt->tx_pkts, find_by_pattern,
+								&pattern);
+		l_free(tx);
+	} while (tx);
+
+	tx = l_queue_peek_head(pvt->tx_pkts);
+
+	if (tx)
+		l_timeout_modify_ms(pvt->tx_timeout,
+						tx->instant - get_instant());
 
 	return true;
 }

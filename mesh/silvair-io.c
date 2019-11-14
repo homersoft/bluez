@@ -465,7 +465,6 @@ bool silvair_send_slip(struct silvair_io *io,
 		return send_packet(io, buf, size, instant, slip_write, cb);
 
 	case PACKET_TYPE_KEEP_ALIVE:
-		l_info("PACKET_TYPE_KEEP_ALIVE");
 		return send_keep_alive_request(io, NULL, 0, instant,
 			slip_write, cb);
 
