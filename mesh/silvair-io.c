@@ -191,7 +191,6 @@ static bool io_write(struct silvair_io *io,
 static void process_evt_rx(struct silvair_io *io,
 				const struct silvair_pkt_hdr *pkt_hdr,
 				size_t len,
-				process_packet_cb cb,
 				void *user_data)
 {
 	const struct silvair_rx_evt_hdr *rx_hdr;
@@ -200,9 +199,6 @@ static void process_evt_rx(struct silvair_io *io,
 	int8_t rssi;
 
 	if (len < sizeof(*rx_hdr))
-		return;
-
-	if (!cb)
 		return;
 
 	rx_hdr = (struct silvair_rx_evt_hdr *)(pkt_hdr + 1);
@@ -228,20 +224,16 @@ static void process_evt_rx(struct silvair_io *io,
 			(const uint8_t *)rx_pld + pkt_hdr->pld_len)
 			break;
 
-		cb(io, rssi, adv + 1, field_len, user_data);
+		io->process_rx_cb(io, rssi, adv + 1, field_len, user_data);
 		adv += field_len + 1;
 	}
 }
 
 static void process_evt_keep_alive(struct silvair_io *io,
 				const struct silvair_pkt_hdr *pkt_hdr,
-				size_t len,
-				process_packet_cb cb)
+				size_t len)
 {
 	const struct silvair_keep_alive_cmd_pld *keep_alive_pld;
-
-	if (!cb)
-		return;
 
 	keep_alive_pld = (struct silvair_keep_alive_cmd_pld *)(pkt_hdr + 1);
 
@@ -252,16 +244,12 @@ static void process_evt_keep_alive(struct silvair_io *io,
 static void process_packet(struct silvair_io *io,
 				uint8_t *buf,
 				size_t size,
-				process_packet_cb cb,
 				void *user_data)
 {
 	const struct silvair_pkt_hdr *pkt_hdr;
 	size_t len = size;
 
 	if (len < sizeof(*pkt_hdr))
-		return;
-
-	if (!cb)
 		return;
 
 	pkt_hdr = (struct silvair_pkt_hdr *)buf;
@@ -273,11 +261,11 @@ static void process_packet(struct silvair_io *io,
 	switch (pkt_hdr->type) {
 
 	case SILVAIR_EVT_RX:
-		process_evt_rx(io, pkt_hdr, len, cb, user_data);
+		process_evt_rx(io, pkt_hdr, len, user_data);
 		break;
 
 	case SILVAIR_CMD_KEEP_ALIVE:
-		process_evt_keep_alive(io, pkt_hdr, len, cb);
+		process_evt_keep_alive(io, pkt_hdr, len);
 		break;
 
 	case SILVAIR_EVT_RESET:
@@ -293,18 +281,14 @@ static void process_slip(struct silvair_io *io,
 				struct slip *slip,
 				uint8_t *buf,
 				size_t size,
-				process_packet_cb cb,
 				void *user_data)
 {
-	if (!cb)
-		return;
-
 	for (uint8_t *i = buf; i != buf + size; ++i) {
 		switch (*i) {
 		case SLIP_END:
 			if (slip->offset)
 				process_packet(io, slip->buf, slip->offset,
-								cb, user_data);
+								user_data);
 			slip->offset = 0;
 			break;
 
@@ -437,10 +421,9 @@ static void silvair_process_rx(struct silvair_io *io,
 			void *user_data)
 {
 	if (io->slip.kernel_support)
-		process_packet(io, buf, size, io->process_rx_cb, user_data);
+		process_packet(io, buf, size, user_data);
 	else
-		process_slip(io, &io->slip, buf, size,
-					io->process_rx_cb, user_data);
+		process_slip(io, &io->slip, buf, size, user_data);
 }
 
 static bool io_read_callback(struct l_io *l_io, void *user_data)
