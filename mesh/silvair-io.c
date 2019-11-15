@@ -120,7 +120,7 @@ struct silvair_tx_cmd_pld {
 } __packed;
 
 struct silvair_keep_alive_cmd_pld {
-	uint8_t 	silvair_version_len;
+	uint8_t		silvair_version_len;
 
 	/* Max supported version: AA.BB.CC-rcDD-12345678\0*/
 	char		silvair_version[23];
@@ -140,6 +140,7 @@ static bool simple_write(struct silvair_io *io,
 				size_t size)
 {
 	int w = write(l_io_get_fd(io->l_io), buf, size);
+
 	return (w > 0 && (size_t)w == size);
 }
 
@@ -156,19 +157,20 @@ static bool slip_write(struct silvair_io *io,
 
 	for (uint8_t *i = buf; i != buf + size; ++i) {
 		switch (*i) {
-			case SLIP_END:
-				if (!simple_write(io, esc_end, 2))
-					return false;
-				break;
 
-			case SLIP_ESC:
-				if (!simple_write(io, esc_esc, 2))
-					return false;
-				break;
+		case SLIP_END:
+			if (!simple_write(io, esc_end, 2))
+				return false;
+			break;
 
-			default:
-				if (simple_write(io, i, 1) != 1)
-					return false;
+		case SLIP_ESC:
+			if (!simple_write(io, esc_esc, 2))
+				return false;
+			break;
+
+		default:
+			if (simple_write(io, i, 1) != 1)
+				return false;
 		}
 	}
 
@@ -399,17 +401,17 @@ static bool io_send(struct silvair_io *io,
 				size_t size,
 				enum packet_type type)
 {
-	switch(type) {
+	switch (type) {
 
-		case PACKET_TYPE_MESSAGE:
-			return send_message(io, buf, size);
+	case PACKET_TYPE_MESSAGE:
+		return send_message(io, buf, size);
 
-		case PACKET_TYPE_KEEP_ALIVE:
-			return send_keep_alive_request(io, NULL, 0);
+	case PACKET_TYPE_KEEP_ALIVE:
+		return send_keep_alive_request(io, NULL, 0);
 
-		default:
-			l_error("Unsupported type to be sent");
-			break;
+	default:
+		l_error("Unsupported type to be sent");
+		break;
 	}
 
 	return false;
@@ -433,12 +435,16 @@ static bool io_read_callback(struct l_io *l_io, void *user_data)
 	uint8_t buf[512];
 	int r, fd;
 
-	if ((fd = l_io_get_fd(l_io)) < 0) {
+	fd = l_io_get_fd(l_io);
+
+	if (fd < 0) {
 		l_error("fd error");
 		return false;
 	}
 
-	if ((r = read(fd, buf, sizeof(buf))) <= 0) {
+	r = read(fd, buf, sizeof(buf));
+
+	if (r <= 0) {
 		l_info("read error");
 		return false;
 	}

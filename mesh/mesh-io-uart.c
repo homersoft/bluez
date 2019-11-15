@@ -373,7 +373,8 @@ static void send_flush(struct mesh_io *mesh_io)
 	} while (tx);
 
 	if (tx)
-		l_timeout_modify_ms(mesh_io->pvt->tx_timeout, tx->instant - instant);
+		l_timeout_modify_ms(mesh_io->pvt->tx_timeout,
+						tx->instant - instant);
 }
 
 static void send_timeout(struct l_timeout *timeout, void *user_data)
