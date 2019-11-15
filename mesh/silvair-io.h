@@ -52,11 +52,6 @@ struct rx_process_cb {
 	void (*process_keep_alive_cb)(struct silvair_io *io);
 };
 
-typedef bool (*send_data_cb)(struct silvair_io *io,
-				uint32_t instant,
-				const uint8_t *data,
-				size_t len);
-
 typedef void (*keep_alive_tmout_cb)(struct l_timeout *timeout, void *user_data);
 
 struct silvair_io *silvair_io_new(int fd,
