@@ -219,6 +219,9 @@ static bool io_accept_callback(struct l_io *l_io, void *user_data)
 		return false;
 	}
 
+	/* Send keep alive request */
+	silvair_process_tx(silvair_io, NULL, 0, PACKET_TYPE_KEEP_ALIVE);
+
 	l_io_set_close_on_destroy(silvair_io->l_io, true);
 	l_queue_push_tail(mesh_io->pvt->client_io, silvair_io);
 
@@ -317,6 +320,7 @@ static bool tcpserver_io_init(struct mesh_io *mesh_io, void *opts)
 
 	mesh_io->pvt->tx_timeout = l_timeout_create_ms(0, send_timeout,
 								mesh_io, NULL);
+
 	l_info("Started mesh on tcp port %d", port);
 	return true;
 }
@@ -337,7 +341,7 @@ static bool tcpserver_io_destroy(struct mesh_io *mesh_io)
 //	l_queue_destroy(pvt->tx_pkts, l_free);
 //	l_free(pvt);
 //	mesh_io->pvt = NULL;
-//
+
 	return true;
 }
 
@@ -353,42 +357,29 @@ static bool tcpserver_io_caps(struct mesh_io *mesh_io, struct mesh_io_caps *caps
 	return true;
 }
 
-//static bool client_write(struct mesh_io_private *pvt, uint32_t instant,
-//					const uint8_t *buf, size_t size)
-//{
-//	int fd = io_get_fd(pvt->client_io);
-//	int w = write(fd, buf, size);
-//
-//	return (w > 0 && (size_t)w == size);
-//	return true;
-//}
-
 static void send_flush(struct mesh_io *mesh_io)
 {
-//	struct tx_pkt *tx;
-//	uint32_t instant = get_instant();
-//
-//	do {
-//		tx = l_queue_peek_head(mesh_io->pvt->tx_pkts);
-//
-//		if (!tx || tx->instant > instant)
-//			break;
-//
-//		if (!silvair_send_slip(mesh_io, tx->data, tx->len, tx->instant,
-//					client_write, PACKET_TYPE_MESSAGE)) {
-//			l_error("write failed: %s", strerror(errno));
-//			close(io_get_fd(mesh_io->pvt->client_io));
-//			mesh_io->pvt->client_io = NULL;
-//			return;
-//		}
-//
-//		tx = l_queue_pop_head(mesh_io->pvt->tx_pkts);
-//		l_free(tx);
-//	} while (tx);
-//
-//	if (tx)
-//		l_timeout_modify_ms(mesh_io->pvt->tx_timeout,
-//							tx->instant - instant);
+	struct tx_pkt *tx;
+	uint32_t instant = get_instant();
+//	struct silvair_io *silvair_io = mesh_io->pvt->;
+
+	do {
+		tx = l_queue_peek_head(mesh_io->pvt->tx_pkts);
+
+		if (!tx || tx->instant > instant)
+			break;
+
+		silvair_process_tx(silvair_io, tx->data, tx->len,
+							PACKET_TYPE_MESSAGE);
+
+		tx = l_queue_pop_head(mesh_io->pvt->tx_pkts);
+		l_free(tx);
+
+	} while (tx);
+
+	if (tx)
+		l_timeout_modify_ms(mesh_io->pvt->tx_timeout,
+							tx->instant - instant);
 }
 
 static void send_timeout(struct l_timeout *timeout, void *user_data)
@@ -404,6 +395,7 @@ static void send_timeout(struct l_timeout *timeout, void *user_data)
 static void keep_alive_error(struct l_timeout *timeout, void *user_data)
 {
 	struct silvair_io *silvair_io = user_data;
+	(void)timeout;
 
 	if (!silvair_io)
 		return;
@@ -413,84 +405,84 @@ static void keep_alive_error(struct l_timeout *timeout, void *user_data)
 	/* TODO: JWI - perform some action */
 }
 
-//static int compare_tx_pkt_instant(const void *a, const void *b,
-//							void *user_data)
-//{
-//	const struct tx_pkt *lhs = a;
-//	const struct tx_pkt *rhs = b;
-//
-//	if (lhs->instant == rhs->instant)
-//		return 0;
-//
-//	return lhs->instant < rhs->instant ? -1 : 1;
-//	return true;
-//}
+static int compare_tx_pkt_instant(const void *a, const void *b,
+							void *user_data)
+{
+	const struct tx_pkt *lhs = a;
+	const struct tx_pkt *rhs = b;
 
-//static void send_pkt(struct mesh_io *mesh_io,
-//			const uint8_t *data, uint16_t len, uint32_t instant)
-//{
-//	struct tx_pkt *tx = l_new(struct tx_pkt, 1);
-//
-//	tx->instant = instant;
-//	tx->len = len;
-//	memcpy(tx->data, data, len);
-//
-//	l_queue_insert(mesh_io->pvt->tx_pkts, tx, compare_tx_pkt_instant, NULL);
-//
-//	send_flush(mesh_io);
-//}
+	if (lhs->instant == rhs->instant)
+		return 0;
+
+	return lhs->instant < rhs->instant ? -1 : 1;
+}
+
+static void send_pkt(struct mesh_io *mesh_io,
+			const uint8_t *data, uint16_t len, uint32_t instant)
+{
+	struct tx_pkt *tx = l_new(struct tx_pkt, 1);
+
+	tx->instant = instant;
+	tx->len = len;
+	memcpy(tx->data, data, len);
+
+	l_queue_insert(mesh_io->pvt->tx_pkts, tx, compare_tx_pkt_instant, NULL);
+	send_flush(mesh_io);
+}
 
 static bool tcpserver_io_send(struct mesh_io *mesh_io,
 					struct mesh_io_send_info *info,
 					const uint8_t *data, uint16_t len)
 {
-//	uint32_t instant;
-//	uint16_t interval;
-//	uint8_t delay;
-//	int i;
-//
-//	if (!info || !data || !len)
-//		return false;
-//
-//	switch (info->type) {
-//	case MESH_IO_TIMING_TYPE_GENERAL:
-//		instant = get_instant();
-//		interval = info->u.gen.interval;
-//
-//		if (info->u.gen.min_delay == info->u.gen.max_delay)
-//			delay = info->u.gen.min_delay;
-//		else {
-//			l_getrandom(&delay, sizeof(delay));
-//			delay %= info->u.gen.max_delay - info->u.gen.min_delay;
-//			delay += info->u.gen.min_delay;
-//		}
-//
-//		for (i = 0; i < info->u.gen.cnt; ++i)
-//			send_pkt(mesh_io, data, len,
-//					instant + delay + interval * i);
-//		break;
-//	case MESH_IO_TIMING_TYPE_POLL:
-//		instant = get_instant();
-//
-//		if (info->u.gen.min_delay == info->u.gen.max_delay)
-//			delay = info->u.gen.min_delay;
-//		else {
-//			l_getrandom(&delay, sizeof(delay));
-//			delay %= info->u.gen.max_delay - info->u.gen.min_delay;
-//			delay += info->u.gen.min_delay;
-//		}
-//
-//		send_pkt(mesh_io, data, len, instant + delay);
-//		break;
-//
-//	case MESH_IO_TIMING_TYPE_POLL_RSP:
-//		instant = info->u.poll_rsp.instant;
-//		delay = info->u.poll_rsp.delay;
-//
-//		send_pkt(mesh_io, data, len, instant + delay);
-//		break;
-//	}
-//
+	uint32_t instant;
+	uint16_t interval;
+	uint8_t delay;
+	int i;
+
+	if (!info || !data || !len)
+		return false;
+
+	switch (info->type) {
+
+	case MESH_IO_TIMING_TYPE_GENERAL:
+		instant = get_instant();
+		interval = info->u.gen.interval;
+
+		if (info->u.gen.min_delay == info->u.gen.max_delay)
+			delay = info->u.gen.min_delay;
+		else {
+			l_getrandom(&delay, sizeof(delay));
+			delay %= info->u.gen.max_delay - info->u.gen.min_delay;
+			delay += info->u.gen.min_delay;
+		}
+
+		for (i = 0; i < info->u.gen.cnt; ++i)
+			send_pkt(mesh_io, data, len,
+					instant + delay + interval * i);
+		break;
+
+	case MESH_IO_TIMING_TYPE_POLL:
+		instant = get_instant();
+
+		if (info->u.gen.min_delay == info->u.gen.max_delay)
+			delay = info->u.gen.min_delay;
+		else {
+			l_getrandom(&delay, sizeof(delay));
+			delay %= info->u.gen.max_delay - info->u.gen.min_delay;
+			delay += info->u.gen.min_delay;
+		}
+
+		send_pkt(mesh_io, data, len, instant + delay);
+		break;
+
+	case MESH_IO_TIMING_TYPE_POLL_RSP:
+		instant = info->u.poll_rsp.instant;
+		delay = info->u.poll_rsp.delay;
+
+		send_pkt(mesh_io, data, len, instant + delay);
+		break;
+	}
+
 	return true;
 }
 
@@ -503,7 +495,7 @@ static bool find_by_filter_id(const void *a, const void *b)
 }
 
 static bool tcpserver_io_reg(struct mesh_io *mesh_io, uint8_t filter_id,
-				mesh_io_recv_func_t cb, void *user_data)
+			mesh_io_recv_func_t cb, void *user_data)
 {
 	struct mesh_io_private *pvt = mesh_io->pvt;
 	struct pvt_rx_reg *rx_reg;
@@ -545,8 +537,8 @@ static bool tcpserver_io_dereg(struct mesh_io *mesh_io, uint8_t filter_id)
 }
 
 static bool tcpserver_io_set(struct mesh_io *mesh_io,
-		uint8_t filter_id, const uint8_t *data, uint8_t len,
-		mesh_io_status_func_t callback, void *user_data)
+			uint8_t filter_id, const uint8_t *data, uint8_t len,
+			mesh_io_status_func_t callback, void *user_data)
 {
 	struct mesh_io_private *pvt = mesh_io->pvt;
 
@@ -569,8 +561,8 @@ static bool find_by_pattern(const void *a, const void *b)
 	return (!memcmp(tx->data, pattern->data, pattern->len));
 }
 
-static bool tcpserver_io_cancel(struct mesh_io *mesh_io, const uint8_t *data,
-								uint8_t len)
+static bool tcpserver_io_cancel(struct mesh_io *mesh_io,
+			const uint8_t *data, uint8_t len)
 {
 	struct mesh_io_private *pvt = mesh_io->pvt;
 	struct tx_pkt *tx;
