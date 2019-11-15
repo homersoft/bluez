@@ -17,4 +17,4 @@
  *
  */
 
-//extern const struct mesh_io_api mesh_io_tcpserver;
+extern const struct mesh_io_api mesh_io_tcpserver;

@@ -438,15 +438,25 @@ static bool io_read_callback(struct l_io *l_io, void *user_data)
 	fd = l_io_get_fd(l_io);
 
 	if (fd < 0) {
-		l_error("fd error");
+		l_error("l_io_get_fd error");
+		// toDo remove client
 		return false;
 	}
 
 	r = read(fd, buf, sizeof(buf));
 
 	if (r <= 0) {
-		l_info("read error");
-		return false;
+
+		if (r != 0) {
+			l_error("read error");
+			// toDo remove client
+			return false;
+		}
+
+		/* Disconnect and remove client from the queue */
+		l_info("Client disconnected !");
+		//get_fd_info(fd, "Client disconnected", IO_TYPE_CLIENT);
+		//toDo remove clinet and provide more info
 	}
 
 	silvair_process_rx(io, buf, r, mesh_io);
