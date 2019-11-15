@@ -433,29 +433,7 @@ static bool send_keep_alive_request(struct silvair_io *io,
 	return io_write(io, data, len, instant);
 }
 
-static bool send_packet(struct silvair_io *io,
-				uint8_t *buf,
-				size_t size,
-				uint32_t instant,
-				enum packet_type type)
-{
-	switch(type) {
-
-		case PACKET_TYPE_MESSAGE:
-			return send_message(io, buf, size, instant);
-
-		case PACKET_TYPE_KEEP_ALIVE:
-			return send_keep_alive_request(io, NULL, 0, instant);
-
-		default:
-			l_error("Unsupported type to be sent");
-			break;
-	}
-
-	return false;
-}
-
-static bool send_slip(struct silvair_io *io,
+static bool io_send(struct silvair_io *io,
 				uint8_t *buf,
 				size_t size,
 				uint32_t instant,
@@ -496,17 +474,9 @@ void silvair_process_tx(struct silvair_io *io,
 				uint32_t instant,
 				enum packet_type type)
 {
-	if (io->slip.kernel_support) {
-		if (!send_packet(io, buf, size, instant, PACKET_TYPE_MESSAGE)) {
-			l_error("write failed: %s", strerror(errno));
-			return;
-		}
-	}
-	else {
-		if (!send_slip(io, buf, size, instant, PACKET_TYPE_MESSAGE)) {
-			l_error("write failed: %s", strerror(errno));
-			return;
-		}
+	if (!io_send(io, buf, size, instant, PACKET_TYPE_MESSAGE)) {
+		l_error("write failed: %s", strerror(errno));
+		return;
 	}
 }
 

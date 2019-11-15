@@ -398,8 +398,6 @@ static bool uart_io_caps(struct mesh_io *mesh_io, struct mesh_io_caps *caps)
 	return true;
 }
 
-
-
 static void send_flush(struct mesh_io *mesh_io)
 {
 	struct tx_pkt *tx;
@@ -475,7 +473,6 @@ static void send_pkt(struct mesh_io *mesh_io,
 	memcpy(tx->data, data, len);
 
 	l_queue_insert(mesh_io->pvt->tx_pkts, tx, compare_tx_pkt_instant, NULL);
-
 	send_flush(mesh_io);
 }
 
