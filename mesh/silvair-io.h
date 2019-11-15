@@ -19,6 +19,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <ell/ell.h>
 
 struct slip {
 	uint8_t	buf[512];
@@ -76,5 +77,4 @@ void silvair_process_tx(struct silvair_io *io,
 			uint8_t *buf,
 			size_t size,
 			uint32_t instant,
-			send_data_cb cb,
 			enum packet_type type);

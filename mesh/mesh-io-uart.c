@@ -398,15 +398,7 @@ static bool uart_io_caps(struct mesh_io *mesh_io, struct mesh_io_caps *caps)
 	return true;
 }
 
-static bool io_write(struct silvair_io *silvair_io, uint32_t instant,
-					const uint8_t *buf, size_t size)
-{
-	int fd = l_io_get_fd(silvair_io->l_io);
-	int w = write(fd, buf, size);
-	(void)instant;
 
-	return (w > 0 && (size_t)w == size);
-}
 
 static void send_flush(struct mesh_io *mesh_io)
 {
@@ -421,7 +413,7 @@ static void send_flush(struct mesh_io *mesh_io)
 			break;
 
 		silvair_process_tx(silvair_io, tx->data, tx->len,
-				tx->instant, io_write, PACKET_TYPE_MESSAGE);
+					tx->instant, PACKET_TYPE_MESSAGE);
 
 		tx = l_queue_pop_head(mesh_io->pvt->tx_pkts);
 		l_free(tx);
@@ -450,7 +442,7 @@ static void send_keep_alive(struct silvair_io *silvair_io, void *user_data)
 		return;
 
 	silvair_process_tx(silvair_io, NULL, 0, get_instant(),
-					io_write, PACKET_TYPE_KEEP_ALIVE);
+						PACKET_TYPE_KEEP_ALIVE);
 }
 
 static void keep_alive_error(struct l_timeout *timeout, void *user_data)
