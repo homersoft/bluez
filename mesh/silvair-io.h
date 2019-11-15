@@ -66,7 +66,6 @@ struct silvair_io *silvair_io_new(int fd,
 void silvair_io_kepp_alive_wdt_refresh(struct silvair_io *io);
 
 void silvair_process_rx(struct silvair_io *io,
-			struct slip *slip,
 			uint8_t *buf,
 			size_t size,
 			uint32_t instant,

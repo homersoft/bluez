@@ -212,7 +212,6 @@ static void process_evt_keep_alive(struct silvair_io *io,
 }
 
 static void silvair_process_packet(struct silvair_io *io,
-				struct slip *slip,
 				uint8_t *buf,
 				size_t size,
 				uint32_t instant,
@@ -221,7 +220,6 @@ static void silvair_process_packet(struct silvair_io *io,
 {
 	const struct silvair_pkt_hdr *pkt_hdr;
 	size_t len = size;
-	(void)slip;
 
 	if (len < sizeof(*pkt_hdr))
 		return;
@@ -269,10 +267,9 @@ static void silvair_process_slip(struct silvair_io *io,
 		switch (*i) {
 		case SLIP_END:
 			if (slip->offset)
-				silvair_process_packet(io, NULL, slip->buf,
+				silvair_process_packet(io, slip->buf,
 							slip->offset, instant,
-							cb,
-							user_data);
+							cb, user_data);
 			slip->offset = 0;
 			break;
 
@@ -311,7 +308,6 @@ static void silvair_process_slip(struct silvair_io *io,
 }
 
 void silvair_process_rx(struct silvair_io *io,
-				struct slip *slip,
 				uint8_t *buf,
 				size_t size,
 				uint32_t instant,
@@ -319,7 +315,7 @@ void silvair_process_rx(struct silvair_io *io,
 				void *user_data)
 {
 	if (io->slip.kernel_support)
-		silvair_process_packet(io, NULL, buf, size, instant,
+		silvair_process_packet(io, buf, size, instant,
 								cb, user_data);
 	else
 		silvair_process_slip(io, &io->slip, buf, size, instant,

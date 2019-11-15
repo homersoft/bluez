@@ -171,8 +171,7 @@ static bool io_read_callback(struct l_io *l_io, void *user_data)
 	}
 
 	instant = get_instant();
-	silvair_process_rx(silvair_io, &silvair_io->slip, buf, r,
-						instant, &rx_cbk, mesh_io);
+	silvair_process_rx(silvair_io, buf, r, instant, &rx_cbk, mesh_io);
 	return true;
 }
 
