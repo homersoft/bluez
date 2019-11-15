@@ -83,7 +83,6 @@ struct tx_pattern {
 };
 
 static void send_timeout(struct l_timeout *timeout, void *user_data);
-static void send_keep_alive(struct silvair_io *silvair_io, void *user_data);
 static void keep_alive_error(struct l_timeout *timeout, void *user_data);
 
 static void process_rx(struct silvair_io *io,
@@ -356,7 +355,9 @@ static bool uart_io_init(struct mesh_io *mesh_io, void *opts)
 	mesh_io->pvt->tx_timeout = l_timeout_create_ms(0, send_timeout,
 					mesh_io, NULL);
 
-	send_keep_alive(mesh_io->pvt->silvair_io, mesh_io);
+	/* Send keep alive request */
+	silvair_process_tx(mesh_io->pvt->silvair_io, NULL, 0,
+					get_instant(), PACKET_TYPE_KEEP_ALIVE);
 
 	return true;
 }
@@ -430,17 +431,6 @@ static void send_timeout(struct l_timeout *timeout, void *user_data)
 		return;
 
 	send_flush(mesh_io);
-}
-
-static void send_keep_alive(struct silvair_io *silvair_io, void *user_data)
-{
-	struct mesh_io *mesh_io = user_data;
-
-	if (!mesh_io || !silvair_io)
-		return;
-
-	silvair_process_tx(silvair_io, NULL, 0, get_instant(),
-						PACKET_TYPE_KEEP_ALIVE);
 }
 
 static void keep_alive_error(struct l_timeout *timeout, void *user_data)
