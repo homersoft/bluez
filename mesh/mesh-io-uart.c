@@ -33,10 +33,7 @@
 #include <sys/ioctl.h>
 #include <sys/time.h>
 #include <ell/ell.h>
-
 #include <stdio.h>
-
-#include "src/shared/io.h"
 
 #include "mesh/mesh-io.h"
 #include "mesh/mesh-io-api.h"
@@ -423,23 +420,8 @@ static void send_flush(struct mesh_io *mesh_io)
 		if (!tx || tx->instant > instant)
 			break;
 
-		if (mesh_io->pvt->iface_fd >= 0) {
-			if (!silvair_send_packet(silvair_io, tx->data, tx->len,
-							tx->instant,
-							io_write,
-							PACKET_TYPE_MESSAGE)) {
-				l_error("write failed: %s", strerror(errno));
-				return;
-			}
-		} else {
-			if (!silvair_send_slip(silvair_io, tx->data, tx->len,
-							tx->instant,
-							io_write,
-							PACKET_TYPE_MESSAGE)) {
-				l_error("write failed: %s", strerror(errno));
-				return;
-			}
-		}
+		silvair_process_tx(silvair_io, tx->data, tx->len,
+				tx->instant, io_write, PACKET_TYPE_MESSAGE);
 
 		tx = l_queue_pop_head(mesh_io->pvt->tx_pkts);
 		l_free(tx);
@@ -467,12 +449,8 @@ static void send_keep_alive(struct silvair_io *silvair_io, void *user_data)
 	if (!mesh_io || !silvair_io)
 		return;
 
-	if (mesh_io->pvt->iface_fd >= 0)
-		silvair_send_packet(silvair_io, NULL, 0, get_instant(),
-			io_write, PACKET_TYPE_KEEP_ALIVE);
-	else
-		silvair_send_slip(silvair_io, NULL, 0, get_instant(),
-			io_write, PACKET_TYPE_KEEP_ALIVE);
+	silvair_process_tx(silvair_io, NULL, 0, get_instant(),
+					io_write, PACKET_TYPE_KEEP_ALIVE);
 }
 
 static void keep_alive_error(struct l_timeout *timeout, void *user_data)

@@ -16,6 +16,7 @@
 #include "mesh/mesh-io-api.h"
 #include "mesh/silvair-io.h"
 #include <ell/ell.h>
+#include <errno.h>
 
 #define SLIP_END     0300
 #define SLIP_ESC     0333
@@ -211,7 +212,7 @@ static void process_evt_keep_alive(struct silvair_io *io,
 	cb->process_keep_alive_cb(io);
 }
 
-static void silvair_process_packet(struct silvair_io *io,
+static void process_packet(struct silvair_io *io,
 				uint8_t *buf,
 				size_t size,
 				uint32_t instant,
@@ -252,7 +253,7 @@ static void silvair_process_packet(struct silvair_io *io,
 	}
 }
 
-static void silvair_process_slip(struct silvair_io *io,
+static void process_slip(struct silvair_io *io,
 				struct slip *slip,
 				uint8_t *buf,
 				size_t size,
@@ -267,9 +268,8 @@ static void silvair_process_slip(struct silvair_io *io,
 		switch (*i) {
 		case SLIP_END:
 			if (slip->offset)
-				silvair_process_packet(io, slip->buf,
-							slip->offset, instant,
-							cb, user_data);
+				process_packet(io, slip->buf, slip->offset,
+							instant, cb, user_data);
 			slip->offset = 0;
 			break;
 
@@ -305,21 +305,6 @@ static void silvair_process_slip(struct silvair_io *io,
 			return;
 		}
 	}
-}
-
-void silvair_process_rx(struct silvair_io *io,
-				uint8_t *buf,
-				size_t size,
-				uint32_t instant,
-				const struct rx_process_cb *cb,
-				void *user_data)
-{
-	if (io->slip.kernel_support)
-		silvair_process_packet(io, buf, size, instant,
-								cb, user_data);
-	else
-		silvair_process_slip(io, &io->slip, buf, size, instant,
-								cb, user_data);
 }
 
 static bool slip_write(struct silvair_io *io,
@@ -414,7 +399,7 @@ static int build_packet(uint8_t *data,
 	return len;
 }
 
-static bool send_packet(struct silvair_io *io,
+static bool send_message(struct silvair_io *io,
 				uint8_t *buf,
 				size_t size,
 				uint32_t instant,
@@ -442,7 +427,7 @@ static bool send_keep_alive_request(struct silvair_io *io,
 	return write(io, data, len, instant, cb);
 }
 
-bool silvair_send_packet(struct silvair_io *io,
+static bool send_packet(struct silvair_io *io,
 				uint8_t *buf,
 				size_t size,
 				uint32_t instant,
@@ -451,22 +436,23 @@ bool silvair_send_packet(struct silvair_io *io,
 {
 	switch(type) {
 
-	case PACKET_TYPE_MESSAGE:
-		return send_packet(io, buf, size, instant, simple_write, cb);
+		case PACKET_TYPE_MESSAGE:
+			return send_message(io, buf, size, instant,
+							simple_write, cb);
 
-	case PACKET_TYPE_KEEP_ALIVE:
-		return send_keep_alive_request(io, NULL, 0, instant,
-			simple_write, cb);
+		case PACKET_TYPE_KEEP_ALIVE:
+			return send_keep_alive_request(io, NULL, 0, instant,
+							simple_write, cb);
 
-	default:
-		l_error("Unsupported type to be sent");
-		break;
+		default:
+			l_error("Unsupported type to be sent");
+			break;
 	}
 
 	return false;
 }
 
-bool silvair_send_slip(struct silvair_io *io,
+static bool send_slip(struct silvair_io *io,
 				uint8_t *buf,
 				size_t size,
 				uint32_t instant,
@@ -475,20 +461,58 @@ bool silvair_send_slip(struct silvair_io *io,
 {
 	switch(type) {
 
-	case PACKET_TYPE_MESSAGE:
-		return send_packet(io, buf, size, instant, slip_write, cb);
+		case PACKET_TYPE_MESSAGE:
+			return send_message(io, buf, size, instant,
+							slip_write, cb);
 
-	case PACKET_TYPE_KEEP_ALIVE:
-		return send_keep_alive_request(io, NULL, 0, instant,
-			slip_write, cb);
+		case PACKET_TYPE_KEEP_ALIVE:
+			return send_keep_alive_request(io, NULL, 0, instant,
+							slip_write, cb);
 
-	default:
-		l_error("Unsupported type to be sent");
-		break;
+		default:
+			l_error("Unsupported type to be sent");
+			break;
 	}
 
 	return false;
 }
+
+void silvair_process_rx(struct silvair_io *io,
+			uint8_t *buf,
+			size_t size,
+			uint32_t instant,
+			const struct rx_process_cb *cb,
+			void *user_data)
+{
+	if (io->slip.kernel_support)
+		process_packet(io, buf, size, instant, cb, user_data);
+	else
+		process_slip(io, &io->slip, buf, size, instant, cb, user_data);
+}
+
+void silvair_process_tx(struct silvair_io *io,
+			uint8_t *buf,
+			size_t size,
+			uint32_t instant,
+			send_data_cb cb,
+			enum packet_type type)
+{
+	if (io->slip.kernel_support) {
+		if (!send_packet(io, buf, size, instant,
+						cb, PACKET_TYPE_MESSAGE)) {
+			l_error("write failed: %s", strerror(errno));
+			return;
+		}
+	}
+	else {
+		if (!send_slip(io, buf, size, instant,
+						cb, PACKET_TYPE_MESSAGE)) {
+			l_error("write failed: %s", strerror(errno));
+			return;
+		}
+	}
+}
+
 
 struct silvair_io *silvair_io_new(int fd,
 				keep_alive_tmout_cb tmout_cb,
