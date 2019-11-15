@@ -5,18 +5,16 @@
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
-#include <string.h>
+
 #include <stdint.h>
 #include <stdbool.h>
-
-#include "ell/util.h"
-#include "ell/random.h"
+#include <errno.h>
+#include <ell/ell.h>
 
 #include "mesh/mesh-io.h"
 #include "mesh/mesh-io-api.h"
 #include "mesh/silvair-io.h"
-#include <ell/ell.h>
-#include <errno.h>
+
 
 #define SLIP_END     0300
 #define SLIP_ESC     0333
@@ -193,7 +191,7 @@ static bool io_write(struct silvair_io *io,
 static void process_evt_rx(struct silvair_io *io,
 				const struct silvair_pkt_hdr *pkt_hdr,
 				size_t len,
-				const struct rx_process_cb *cb,
+				process_packet_cb cb,
 				void *user_data)
 {
 	const struct silvair_rx_evt_hdr *rx_hdr;
@@ -214,7 +212,6 @@ static void process_evt_rx(struct silvair_io *io,
 		return;
 
 	rssi = rx_hdr->rssi;
-
 	rx_pld = (struct silvair_rx_evt_pld *)(rx_hdr + 1);
 
 	adv = rx_pld->adv_data;
@@ -231,10 +228,7 @@ static void process_evt_rx(struct silvair_io *io,
 			(const uint8_t *)rx_pld + pkt_hdr->pld_len)
 			break;
 
-		if (!cb->process_packet_cb)
-			break;
-
-		cb->process_packet_cb(io, rssi, adv + 1, field_len, user_data);
+		cb(io, rssi, adv + 1, field_len, user_data);
 		adv += field_len + 1;
 	}
 }
@@ -242,7 +236,7 @@ static void process_evt_rx(struct silvair_io *io,
 static void process_evt_keep_alive(struct silvair_io *io,
 				const struct silvair_pkt_hdr *pkt_hdr,
 				size_t len,
-				const struct rx_process_cb *cb)
+				process_packet_cb cb)
 {
 	const struct silvair_keep_alive_cmd_pld *keep_alive_pld;
 
@@ -252,18 +246,13 @@ static void process_evt_keep_alive(struct silvair_io *io,
 	keep_alive_pld = (struct silvair_keep_alive_cmd_pld *)(pkt_hdr + 1);
 
 	l_info("Version: %s, uptime %u", keep_alive_pld->silvair_version,
-					keep_alive_pld->uptime);
-
-	if (!cb->process_keep_alive_cb)
-		return;
-
-	cb->process_keep_alive_cb(io);
+							keep_alive_pld->uptime);
 }
 
 static void process_packet(struct silvair_io *io,
 				uint8_t *buf,
 				size_t size,
-				const struct rx_process_cb *cb,
+				process_packet_cb cb,
 				void *user_data)
 {
 	const struct silvair_pkt_hdr *pkt_hdr;
@@ -304,7 +293,7 @@ static void process_slip(struct silvair_io *io,
 				struct slip *slip,
 				uint8_t *buf,
 				size_t size,
-				const struct rx_process_cb *cb,
+				process_packet_cb cb,
 				void *user_data)
 {
 	if (!cb)
@@ -442,16 +431,37 @@ static bool io_send(struct silvair_io *io,
 	return false;
 }
 
-void silvair_process_rx(struct silvair_io *io,
-				uint8_t *buf,
-				size_t size,
-				const struct rx_process_cb *cb,
-				void *user_data)
+static void silvair_process_rx(struct silvair_io *io,
+			uint8_t *buf,
+			size_t size,
+			void *user_data)
 {
 	if (io->slip.kernel_support)
-		process_packet(io, buf, size, cb, user_data);
+		process_packet(io, buf, size, io->process_rx_cb, user_data);
 	else
-		process_slip(io, &io->slip, buf, size, cb, user_data);
+		process_slip(io, &io->slip, buf, size,
+					io->process_rx_cb, user_data);
+}
+
+static bool io_read_callback(struct l_io *l_io, void *user_data)
+{
+	struct silvair_io *io = user_data;
+	struct mesh_io *mesh_io = io->context;
+	uint8_t buf[512];
+	int r, fd;
+
+	if ((fd = l_io_get_fd(l_io)) < 0) {
+		l_error("fd error");
+		return false;
+	}
+
+	if ((r = read(fd, buf, sizeof(buf))) <= 0) {
+		l_info("read error");
+		return false;
+	}
+
+	silvair_process_rx(io, buf, r, mesh_io);
+	return true;
 }
 
 void silvair_process_tx(struct silvair_io *io,
@@ -468,16 +478,29 @@ void silvair_process_tx(struct silvair_io *io,
 struct silvair_io *silvair_io_new(int fd,
 				keep_alive_tmout_cb tmout_cb,
 				bool kernel_support,
+				process_packet_cb rx_cb,
 				void *context)
 {
 	struct silvair_io *io = l_new(struct silvair_io, 1);
-	io->context = context;
 
+	if (!rx_cb) {
+		l_error("initialization failed: process_rx_cb is NULL");
+		return NULL;
+	}
+
+	io->context = context;
 	io->slip.offset = 0;
 	io->slip.esc = false;
 
 	io->l_io = l_io_new(fd);
 	io->slip.kernel_support = kernel_support;
+
+	io->process_rx_cb = rx_cb;
+
+	if (!l_io_set_read_handler(io->l_io, io_read_callback, io, NULL)) {
+		l_error("l_io_set_read_handler failed");
+		return false;
+	}
 
 	if (tmout_cb)
 		io->keep_alive_watchdog =

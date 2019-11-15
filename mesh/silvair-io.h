@@ -21,6 +21,16 @@
 #include <unistd.h>
 #include <ell/ell.h>
 
+struct silvair_io;
+
+typedef void (*process_packet_cb)(struct silvair_io *io,
+				  int8_t rssi,
+				  const uint8_t *data,
+				  uint8_t len,
+				  void *user_data);
+
+typedef void (*keep_alive_tmout_cb)(struct l_timeout *timeout, void *user_data);
+
 struct slip {
 	uint8_t	buf[512];
 	size_t	offset;
@@ -32,6 +42,7 @@ struct silvair_io {
 	struct l_io		*l_io;
 	struct l_timeout	*keep_alive_watchdog;
 	struct slip		slip;
+	process_packet_cb	process_rx_cb;
 	void *context;
 };
 
@@ -40,31 +51,13 @@ enum packet_type {
 	PACKET_TYPE_KEEP_ALIVE,
 };
 
-struct rx_process_cb {
-
-	void (*process_packet_cb)(struct silvair_io *io,
-				int8_t rssi,
-				const uint8_t *data,
-				uint8_t len,
-				void *user_data);
-
-	void (*process_keep_alive_cb)(struct silvair_io *io);
-};
-
-typedef void (*keep_alive_tmout_cb)(struct l_timeout *timeout, void *user_data);
-
 struct silvair_io *silvair_io_new(int fd,
 				keep_alive_tmout_cb tmout_cb,
 				bool kernel_support,
+				process_packet_cb rx_cb,
 				void *context);
 
 void silvair_io_kepp_alive_wdt_refresh(struct silvair_io *io);
-
-void silvair_process_rx(struct silvair_io *io,
-			uint8_t *buf,
-			size_t size,
-			const struct rx_process_cb *cb,
-			void *user_data);
 
 void silvair_process_tx(struct silvair_io *io,
 			uint8_t *buf,

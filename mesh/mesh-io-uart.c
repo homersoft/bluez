@@ -22,10 +22,8 @@
 
 #include <errno.h>
 #include <fcntl.h>
-#include <unistd.h>
 #include <termios.h>
 #include <arpa/inet.h>
-#include <linux/tty.h>
 #include <linux/if.h>
 #include <linux/if_ether.h>
 #include <linux/if_packet.h>
@@ -33,7 +31,6 @@
 #include <sys/ioctl.h>
 #include <sys/time.h>
 #include <ell/ell.h>
-#include <stdio.h>
 
 #include "mesh/mesh-io.h"
 #include "mesh/mesh-io-api.h"
@@ -85,15 +82,6 @@ struct tx_pattern {
 static void send_timeout(struct l_timeout *timeout, void *user_data);
 static void keep_alive_error(struct l_timeout *timeout, void *user_data);
 
-static void process_rx(struct silvair_io *io,
-				int8_t rssi,
-				const uint8_t *data,
-				uint8_t len,
-				void *user_data);
-
-static const struct rx_process_cb rx_cbk = {
-	.process_packet_cb = process_rx,
-};
 
 static uint32_t get_instant(void)
 {
@@ -118,11 +106,8 @@ static void process_rx_callbacks(void *v_rx, void *v_reg)
 		rx_reg->cb(rx_reg->user_data, &rx->info, rx->data, rx->len);
 }
 
-static void process_rx(struct silvair_io *silvair_io,
-				int8_t rssi,
-				const uint8_t *data,
-				uint8_t len,
-				void *user_data)
+static void process_rx(struct silvair_io *silvair_io, int8_t rssi,
+			const uint8_t *data, uint8_t len, void *user_data)
 {
 	struct mesh_io *mesh_io = user_data;
 
@@ -142,29 +127,6 @@ static void process_rx(struct silvair_io *silvair_io,
 
 	silvair_io_kepp_alive_wdt_refresh(silvair_io);
 	l_queue_foreach(mesh_io->pvt->rx_regs, process_rx_callbacks, &rx);
-}
-
-static bool io_read_callback(struct l_io *l_io, void *user_data)
-{
-	struct silvair_io *silvair_io = user_data;
-	struct mesh_io *mesh_io = silvair_io->context;
-	uint8_t buf[512];
-	int r, fd;
-
-	if ((fd = l_io_get_fd(l_io)) < 0)
-	{
-		l_error("fd error");
-		return false;
-	}
-
-	if ((r = read(fd, buf, sizeof(buf))) <= 0)
-	{
-		l_info("read error");
-		return false;
-	}
-
-	silvair_process_rx(silvair_io, buf, r, &rx_cbk, mesh_io);
-	return true;
 }
 
 static bool uart_kernel_init(struct mesh_io *mesh_io)
@@ -230,6 +192,7 @@ static bool uart_kernel_init(struct mesh_io *mesh_io)
 	mesh_io->pvt->silvair_io = silvair_io_new(mesh_io->pvt->iface_fd,
 							keep_alive_error,
 							true,
+							process_rx,
 							mesh_io);
 	return true;
 }
@@ -239,6 +202,7 @@ static bool uart_user_init(struct mesh_io *mesh_io)
 	mesh_io->pvt->silvair_io = silvair_io_new(mesh_io->pvt->tty_fd,
 							keep_alive_error,
 							false,
+							process_rx,
 							mesh_io);
 	mesh_io->pvt->iface_fd = -1;
 
@@ -341,14 +305,6 @@ static bool uart_io_init(struct mesh_io *mesh_io, void *opts)
 	mesh_io->pvt->rx_regs = l_queue_new();
 	mesh_io->pvt->tx_pkts = l_queue_new();
 
-	if (!l_io_set_read_handler(mesh_io->pvt->silvair_io->l_io,
-					io_read_callback,
-					mesh_io->pvt->silvair_io, NULL))
-	{
-		l_error("l_io_set_read_handler failed");
-		return false;
-	}
-
 	mesh_io->pvt->tx_timeout = l_timeout_create_ms(0, send_timeout,
 					mesh_io, NULL);
 
@@ -437,8 +393,7 @@ static void keep_alive_error(struct l_timeout *timeout, void *user_data)
 	l_error("USB cable disconnected !");
 }
 
-static int compare_tx_pkt_instant(const void *a, const void *b,
-							void *user_data)
+static int compare_tx_pkt_instant(const void *a, const void *b, void *user_data)
 {
 	const struct tx_pkt *lhs = a;
 	const struct tx_pkt *rhs = b;
@@ -463,8 +418,9 @@ static void send_pkt(struct mesh_io *mesh_io,
 	send_flush(mesh_io);
 }
 
-static bool uart_io_send(struct mesh_io *mesh_io, struct mesh_io_send_info *info,
-					const uint8_t *data, uint16_t len)
+static bool uart_io_send(struct mesh_io *mesh_io,
+			struct mesh_io_send_info *info,
+			const uint8_t *data, uint16_t len)
 {
 	uint32_t instant;
 	uint16_t interval;
@@ -475,6 +431,7 @@ static bool uart_io_send(struct mesh_io *mesh_io, struct mesh_io_send_info *info
 		return false;
 
 	switch (info->type) {
+
 	case MESH_IO_TIMING_TYPE_GENERAL:
 		instant = get_instant();
 		interval = info->u.gen.interval;
@@ -491,6 +448,7 @@ static bool uart_io_send(struct mesh_io *mesh_io, struct mesh_io_send_info *info
 			send_pkt(mesh_io, data, len,
 					instant + delay + interval * i);
 		break;
+
 	case MESH_IO_TIMING_TYPE_POLL:
 		instant = get_instant();
 
@@ -525,12 +483,13 @@ static bool find_by_filter_id(const void *a, const void *b)
 }
 
 static bool uart_io_reg(struct mesh_io *mesh_io, uint8_t filter_id,
-				mesh_io_recv_func_t cb, void *user_data)
+			mesh_io_recv_func_t cb, void *user_data)
 {
 	struct mesh_io_private *pvt = mesh_io->pvt;
 	struct pvt_rx_reg *rx_reg;
 
 	l_info("%s %d", __func__, filter_id);
+
 	if (!cb || !filter_id || filter_id > sizeof(pvt->filters))
 		return false;
 
@@ -539,6 +498,7 @@ static bool uart_io_reg(struct mesh_io *mesh_io, uint8_t filter_id,
 
 	if (!rx_reg) {
 		rx_reg = l_new(struct pvt_rx_reg, 1);
+
 		if (!rx_reg)
 			return false;
 	}
@@ -566,12 +526,13 @@ static bool uart_io_dereg(struct mesh_io *mesh_io, uint8_t filter_id)
 }
 
 static bool uart_io_set(struct mesh_io *mesh_io,
-		uint8_t filter_id, const uint8_t *data, uint8_t len,
-		mesh_io_status_func_t callback, void *user_data)
+			uint8_t filter_id, const uint8_t *data, uint8_t len,
+			mesh_io_status_func_t callback, void *user_data)
 {
 	struct mesh_io_private *pvt = mesh_io->pvt;
 
 	l_info("%s id: %d, --> %2.2x", __func__, filter_id, data[0]);
+
 	if (!data || !len || !filter_id || filter_id > sizeof(pvt->filters))
 		return false;
 
@@ -590,8 +551,8 @@ static bool find_by_pattern(const void *a, const void *b)
 	return (!memcmp(tx->data, pattern->data, pattern->len));
 }
 
-static bool uart_io_cancel(struct mesh_io *mesh_io, const uint8_t *data,
-								uint8_t len)
+static bool uart_io_cancel(struct mesh_io *mesh_io,
+			const uint8_t *data, uint8_t len)
 {
 	struct mesh_io_private *pvt = mesh_io->pvt;
 	struct tx_pkt *tx;
@@ -605,8 +566,7 @@ static bool uart_io_cancel(struct mesh_io *mesh_io, const uint8_t *data,
 		return false;
 
 	do {
-		tx = l_queue_remove_if(pvt->tx_pkts, find_by_pattern,
-								&pattern);
+		tx = l_queue_remove_if(pvt->tx_pkts, find_by_pattern, &pattern);
 		l_free(tx);
 	} while (tx);
 
@@ -615,7 +575,6 @@ static bool uart_io_cancel(struct mesh_io *mesh_io, const uint8_t *data,
 	if (tx)
 		l_timeout_modify_ms(pvt->tx_timeout,
 						tx->instant - get_instant());
-
 	return true;
 }
 
