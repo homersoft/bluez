@@ -87,7 +87,6 @@ static void keep_alive_error(struct l_timeout *timeout, void *user_data);
 
 static void process_rx(struct silvair_io *io,
 				int8_t rssi,
-				uint32_t instant,
 				const uint8_t *data,
 				uint8_t len,
 				void *user_data);
@@ -121,7 +120,6 @@ static void process_rx_callbacks(void *v_rx, void *v_reg)
 
 static void process_rx(struct silvair_io *silvair_io,
 				int8_t rssi,
-				uint32_t instant,
 				const uint8_t *data,
 				uint8_t len,
 				void *user_data)
@@ -132,7 +130,7 @@ static void process_rx(struct silvair_io *silvair_io,
 		.pvt = mesh_io->pvt,
 		.data = data,
 		.len = len,
-		.info.instant = instant,
+		.info.instant = get_instant(),
 		.info.chan = 7,
 		.info.rssi = rssi,
 	};
@@ -151,7 +149,6 @@ static bool io_read_callback(struct l_io *l_io, void *user_data)
 	struct silvair_io *silvair_io = user_data;
 	struct mesh_io *mesh_io = silvair_io->context;
 	uint8_t buf[512];
-	uint32_t instant;
 	int r, fd;
 
 	if ((fd = l_io_get_fd(l_io)) < 0)
@@ -166,8 +163,7 @@ static bool io_read_callback(struct l_io *l_io, void *user_data)
 		return false;
 	}
 
-	instant = get_instant();
-	silvair_process_rx(silvair_io, buf, r, instant, &rx_cbk, mesh_io);
+	silvair_process_rx(silvair_io, buf, r, &rx_cbk, mesh_io);
 	return true;
 }
 
@@ -346,7 +342,8 @@ static bool uart_io_init(struct mesh_io *mesh_io, void *opts)
 	mesh_io->pvt->tx_pkts = l_queue_new();
 
 	if (!l_io_set_read_handler(mesh_io->pvt->silvair_io->l_io,
-					io_read_callback, mesh_io->pvt->silvair_io, NULL))
+					io_read_callback,
+					mesh_io->pvt->silvair_io, NULL))
 	{
 		l_error("l_io_set_read_handler failed");
 		return false;
@@ -357,7 +354,7 @@ static bool uart_io_init(struct mesh_io *mesh_io, void *opts)
 
 	/* Send keep alive request */
 	silvair_process_tx(mesh_io->pvt->silvair_io, NULL, 0,
-					get_instant(), PACKET_TYPE_KEEP_ALIVE);
+						PACKET_TYPE_KEEP_ALIVE);
 
 	return true;
 }
@@ -412,7 +409,7 @@ static void send_flush(struct mesh_io *mesh_io)
 			break;
 
 		silvair_process_tx(silvair_io, tx->data, tx->len,
-					tx->instant, PACKET_TYPE_MESSAGE);
+							PACKET_TYPE_MESSAGE);
 
 		tx = l_queue_pop_head(mesh_io->pvt->tx_pkts);
 		l_free(tx);
