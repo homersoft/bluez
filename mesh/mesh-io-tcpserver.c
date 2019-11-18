@@ -176,6 +176,8 @@ static void io_read_callback_destroy(void *user_data)
 	int fd = l_io_get_fd(silvair_io->l_io);
 
 	get_fd_info(fd, "Disconnecting the TCP client", IO_TYPE_CLIENT);
+
+	/* close will trigger the io_disconnect_callback() */
 	close(fd);
 }
 
@@ -428,14 +430,20 @@ static void send_timeout(struct l_timeout *timeout, void *user_data)
 static void keep_alive_error(struct l_timeout *timeout, void *user_data)
 {
 	struct silvair_io *silvair_io = user_data;
+	int fd;
+
 	(void)timeout;
 
 	if (!silvair_io)
 		return;
 
-	l_error("Client disconnected. FD:%d", l_io_get_fd(silvair_io->l_io));
+	fd = l_io_get_fd(silvair_io->l_io);
 
-	/* TODO: JWI - perform some action */
+	l_error("Keep alive error");
+	get_fd_info(fd, "Disconnecting the TCP client", IO_TYPE_CLIENT);
+
+	/* close will trigger the io_disconnect_callback() */
+	close(fd);
 }
 
 static int compare_tx_pkt_instant(const void *a, const void *b,
