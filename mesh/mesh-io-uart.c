@@ -129,6 +129,14 @@ static void process_rx(struct silvair_io *silvair_io, int8_t rssi,
 	l_queue_foreach(mesh_io->pvt->rx_regs, process_rx_callbacks, &rx);
 }
 
+static void io_disconnect_callback(void *user_data)
+{
+	struct silvair_io *silvair_io = user_data;
+	(void)silvair_io;
+
+	l_info("USB cable disconnected !");
+}
+
 static bool uart_kernel_init(struct mesh_io *mesh_io)
 {
 	struct ifreq req;
@@ -194,7 +202,7 @@ static bool uart_kernel_init(struct mesh_io *mesh_io)
 							true,
 							process_rx,
 							mesh_io,
-							NULL);
+							io_disconnect_callback);
 	return true;
 }
 
@@ -205,7 +213,7 @@ static bool uart_user_init(struct mesh_io *mesh_io)
 							false,
 							process_rx,
 							mesh_io,
-							NULL);
+							io_disconnect_callback);
 	mesh_io->pvt->iface_fd = -1;
 
 	l_info("Started mesh on tty %s", mesh_io->pvt->tty_name);
