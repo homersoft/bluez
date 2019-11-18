@@ -362,7 +362,8 @@ static bool tcpserver_io_destroy(struct mesh_io *mesh_io)
 
 	if (pvt->client_io != NULL)
 		l_queue_destroy(pvt->client_io,
-					(l_queue_destroy_func_t)l_io_destroy);
+				(l_queue_destroy_func_t)silvair_io_destroy);
+
 
 	l_queue_destroy(pvt->rx_regs, l_free);
 	l_queue_destroy(pvt->tx_pkts, l_free);

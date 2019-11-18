@@ -527,7 +527,14 @@ void silvair_io_kepp_alive_wdt_refresh(struct silvair_io *io)
 
 void silvair_io_destroy(struct silvair_io *io)
 {
-	l_io_destroy(io->l_io);
-	l_timeout_remove(io->keep_alive_watchdog);
+	if (!io)
+		return;
+
+	if (!io->l_io)
+		l_io_destroy(io->l_io);
+
+	if (!io->keep_alive_watchdog)
+		l_timeout_remove(io->keep_alive_watchdog);
+
 	io->context = NULL;
 }
