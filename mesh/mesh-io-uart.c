@@ -193,7 +193,8 @@ static bool uart_kernel_init(struct mesh_io *mesh_io)
 							keep_alive_error,
 							true,
 							process_rx,
-							mesh_io);
+							mesh_io,
+							NULL);
 	return true;
 }
 
@@ -203,7 +204,8 @@ static bool uart_user_init(struct mesh_io *mesh_io)
 							keep_alive_error,
 							false,
 							process_rx,
-							mesh_io);
+							mesh_io,
+							NULL);
 	mesh_io->pvt->iface_fd = -1;
 
 	l_info("Started mesh on tty %s", mesh_io->pvt->tty_name);

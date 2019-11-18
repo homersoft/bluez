@@ -170,6 +170,14 @@ static bool get_fd_info(int fd, char *log, enum io_type type)
 	return true;
 }
 
+static void io_disconnect_callback(void *user_data)
+{
+	struct silvair_io *silvair_io = user_data;
+	(void)silvair_io;
+
+	l_info("DISCONNECT CALLBACK");
+}
+
 static bool io_accept_callback(struct l_io *l_io, void *user_data)
 {
 	struct mesh_io *mesh_io = user_data;
@@ -212,7 +220,7 @@ static bool io_accept_callback(struct l_io *l_io, void *user_data)
 	get_fd_info(newfd, "New client accepted", IO_TYPE_CLIENT);
 
 	silvair_io = silvair_io_new(newfd, keep_alive_error,
-						false, process_rx, mesh_io);
+						false, process_rx, mesh_io, io_disconnect_callback);
 
 	if (!silvair_io) {
 		l_error("silvair_io_new error");
@@ -357,11 +365,19 @@ static bool tcpserver_io_caps(struct mesh_io *mesh_io, struct mesh_io_caps *caps
 	return true;
 }
 
-static void send_flush(struct mesh_io *mesh_io)
+static void send_flush_all_clients(void *data, void *user_data)
 {
-	struct tx_pkt *tx;
+	struct silvair_io *silvair_io = data;
+	struct tx_pkt *tx = user_data;
+
+	silvair_process_tx(silvair_io, tx->data, tx->len,
+							PACKET_TYPE_MESSAGE);
+}
+
+static void send_flush(struct mesh_io *mesh_io)
+{	struct tx_pkt *tx;
+	struct l_queue *client_queue = mesh_io->pvt->client_io;
 	uint32_t instant = get_instant();
-//	struct silvair_io *silvair_io = mesh_io->pvt->;
 
 	do {
 		tx = l_queue_peek_head(mesh_io->pvt->tx_pkts);
@@ -369,12 +385,9 @@ static void send_flush(struct mesh_io *mesh_io)
 		if (!tx || tx->instant > instant)
 			break;
 
-		silvair_process_tx(silvair_io, tx->data, tx->len,
-							PACKET_TYPE_MESSAGE);
-
+		l_queue_foreach(client_queue, send_flush_all_clients, tx);
 		tx = l_queue_pop_head(mesh_io->pvt->tx_pkts);
 		l_free(tx);
-
 	} while (tx);
 
 	if (tx)

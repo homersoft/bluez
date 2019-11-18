@@ -55,7 +55,8 @@ struct silvair_io *silvair_io_new(int fd,
 				keep_alive_tmout_cb tmout_cb,
 				bool kernel_support,
 				process_packet_cb rx_cb,
-				void *context);
+				void *context,
+				l_io_destroy_cb_t io_destroy_cb);
 
 void silvair_io_kepp_alive_wdt_refresh(struct silvair_io *io);
 

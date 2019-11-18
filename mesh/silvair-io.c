@@ -455,6 +455,7 @@ static bool io_read_callback(struct l_io *l_io, void *user_data)
 
 		/* Disconnect and remove client from the queue */
 		l_info("Client disconnected !");
+		return false;
 		//get_fd_info(fd, "Client disconnected", IO_TYPE_CLIENT);
 		//toDo remove clinet and provide more info
 	}
@@ -468,6 +469,7 @@ void silvair_process_tx(struct silvair_io *io,
 				size_t size,
 				enum packet_type type)
 {
+	l_info("PROCESS TX");
 	if (!io_send(io, buf, size, PACKET_TYPE_MESSAGE)) {
 		l_error("write failed: %s", strerror(errno));
 		return;
@@ -478,7 +480,8 @@ struct silvair_io *silvair_io_new(int fd,
 				keep_alive_tmout_cb tmout_cb,
 				bool kernel_support,
 				process_packet_cb rx_cb,
-				void *context)
+				void *context,
+				l_io_destroy_cb_t io_destroy_cb)
 {
 	struct silvair_io *io = l_new(struct silvair_io, 1);
 
@@ -496,7 +499,7 @@ struct silvair_io *silvair_io_new(int fd,
 
 	io->process_rx_cb = rx_cb;
 
-	if (!l_io_set_read_handler(io->l_io, io_read_callback, io, NULL)) {
+	if (!l_io_set_read_handler(io->l_io, io_read_callback, io, io_destroy_cb)) {
 		l_error("l_io_set_read_handler failed");
 		return false;
 	}
