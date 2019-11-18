@@ -16,13 +16,14 @@
 #include "mesh/silvair-io.h"
 
 
-#define SLIP_END     0300
-#define SLIP_ESC     0333
-#define SLIP_ESC_END 0334
-#define SLIP_ESC_ESC 0335
+#define SLIP_END	0300
+#define SLIP_ESC	0333
+#define SLIP_ESC_END	0334
+#define SLIP_ESC_ESC	0335
 
 static const uint32_t silvair_access_address		= 0x8e89bed6;
-static const uint16_t keep_alive_watchdog_perios_ms	= 10000;
+static const uint16_t keep_alive_watchdog_period_ms	= 1000;
+static const uint16_t disconnect_tmr_period_ms		= 10000;
 
 static const uint8_t silvair_channels[8] = {
 	0x00, 0x00, 0x00, 0x0e,
@@ -267,7 +268,12 @@ static void process_packet(struct silvair_io *io,
 		break;
 
 	case SILVAIR_CMD_KEEP_ALIVE:
+		if(io->disconnect_tmr) {
+			l_timeout_remove(io->disconnect_tmr);
+			io->disconnect_tmr = NULL;
+		}
 		process_evt_keep_alive(io, pkt_hdr, len);
+		silvair_io_keep_alive_wdt_refresh(io);
 		break;
 
 	case SILVAIR_EVT_RESET:
@@ -459,6 +465,21 @@ static bool io_read_callback(struct l_io *l_io, void *user_data)
 	return true;
 }
 
+static void keep_alive_tmout(struct l_timeout *timeout, void *user_data)
+{
+	/* No mesh messages occured in specified ammount of the time.
+	 * Check if the communication is still set up
+	 */
+	struct silvair_io *io = user_data;
+
+	l_info("Keep alive: checking for the communication...");
+
+	/* Send keep alive request */
+	silvair_process_tx(io, NULL, 0, PACKET_TYPE_KEEP_ALIVE);
+	io->disconnect_tmr = l_timeout_create_ms(disconnect_tmr_period_ms,
+						io->disconnect_cb, io, NULL);
+}
+
 void silvair_process_tx(struct silvair_io *io,
 				uint8_t *buf,
 				size_t size,
@@ -506,14 +527,17 @@ struct silvair_io *silvair_io_new(int fd,
 		return false;
 	}
 
-	if (tmout_cb)
+	if (tmout_cb) {
+		io->disconnect_cb = tmout_cb;
+
 		io->keep_alive_watchdog =
-			l_timeout_create_ms(keep_alive_watchdog_perios_ms,
-				tmout_cb, io, NULL);
+			l_timeout_create_ms(keep_alive_watchdog_period_ms,
+						keep_alive_tmout, io, NULL);
+	}
 	return io;
 }
 
-void silvair_io_kepp_alive_wdt_refresh(struct silvair_io *io)
+void silvair_io_keep_alive_wdt_refresh(struct silvair_io *io)
 {
 	if (!io)
 		return;
@@ -521,8 +545,13 @@ void silvair_io_kepp_alive_wdt_refresh(struct silvair_io *io)
 	if (!io->keep_alive_watchdog)
 		return;
 
+	if (io->disconnect_tmr) {
+		l_timeout_remove(io->disconnect_tmr);
+		io->disconnect_tmr = NULL;
+	}
+
 	l_timeout_modify_ms(io->keep_alive_watchdog,
-					keep_alive_watchdog_perios_ms);
+					keep_alive_watchdog_period_ms);
 }
 
 void silvair_io_destroy(struct silvair_io *io)
@@ -535,6 +564,9 @@ void silvair_io_destroy(struct silvair_io *io)
 
 	if (io->keep_alive_watchdog)
 		l_timeout_remove(io->keep_alive_watchdog);
+
+	if (io->disconnect_tmr)
+		l_timeout_remove(io->disconnect_tmr);
 
 	io->context = NULL;
 }
