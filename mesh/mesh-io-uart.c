@@ -129,11 +129,19 @@ static void process_rx(struct silvair_io *silvair_io, int8_t rssi,
 	l_queue_foreach(mesh_io->pvt->rx_regs, process_rx_callbacks, &rx);
 }
 
+static void io_read_callback_destroy(void *user_data)
+{
+	struct silvair_io *silvair_io = user_data;
+
+	l_info("Disconnecting the UART client");
+	close(l_io_get_fd(silvair_io->l_io));
+}
+
 static void io_disconnect_callback(void *user_data)
 {
 	struct silvair_io *silvair_io = user_data;
-	(void)silvair_io;
 
+	(void)silvair_io;
 	l_info("USB cable disconnected !");
 }
 
@@ -198,22 +206,24 @@ static bool uart_kernel_init(struct mesh_io *mesh_io)
 		mesh_io->pvt->iface_name);
 
 	mesh_io->pvt->silvair_io = silvair_io_new(mesh_io->pvt->iface_fd,
-							keep_alive_error,
-							true,
-							process_rx,
-							mesh_io,
-							io_disconnect_callback);
+						keep_alive_error,
+						true,
+						process_rx,
+						mesh_io,
+						io_read_callback_destroy,
+						io_disconnect_callback);
 	return true;
 }
 
 static bool uart_user_init(struct mesh_io *mesh_io)
 {
 	mesh_io->pvt->silvair_io = silvair_io_new(mesh_io->pvt->tty_fd,
-							keep_alive_error,
-							false,
-							process_rx,
-							mesh_io,
-							io_disconnect_callback);
+						keep_alive_error,
+						false,
+						process_rx,
+						mesh_io,
+						io_read_callback_destroy,
+						io_disconnect_callback);
 	mesh_io->pvt->iface_fd = -1;
 
 	l_info("Started mesh on tty %s", mesh_io->pvt->tty_name);

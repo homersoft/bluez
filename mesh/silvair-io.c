@@ -439,7 +439,6 @@ static bool io_read_callback(struct l_io *l_io, void *user_data)
 
 	if (fd < 0) {
 		l_error("l_io_get_fd error");
-		// toDo remove client
 		return false;
 	}
 
@@ -449,15 +448,11 @@ static bool io_read_callback(struct l_io *l_io, void *user_data)
 
 		if (r != 0) {
 			l_error("read error");
-			// toDo remove client
 			return false;
 		}
 
 		/* Disconnect and remove client from the queue */
-		l_info("Client disconnected !");
 		return false;
-		//get_fd_info(fd, "Client disconnected", IO_TYPE_CLIENT);
-		//toDo remove clinet and provide more info
 	}
 
 	silvair_process_rx(io, buf, r, mesh_io);
@@ -469,7 +464,6 @@ void silvair_process_tx(struct silvair_io *io,
 				size_t size,
 				enum packet_type type)
 {
-	l_info("PROCESS TX");
 	if (!io_send(io, buf, size, PACKET_TYPE_MESSAGE)) {
 		l_error("write failed: %s", strerror(errno));
 		return;
@@ -481,7 +475,8 @@ struct silvair_io *silvair_io_new(int fd,
 				bool kernel_support,
 				process_packet_cb rx_cb,
 				void *context,
-				l_io_destroy_cb_t io_destroy_cb)
+				l_io_destroy_cb_t io_read_failed_cb,
+				l_io_destroy_cb_t io_disconnect_cb)
 {
 	struct silvair_io *io = l_new(struct silvair_io, 1);
 
@@ -499,8 +494,15 @@ struct silvair_io *silvair_io_new(int fd,
 
 	io->process_rx_cb = rx_cb;
 
-	if (!l_io_set_read_handler(io->l_io, io_read_callback, io, io_destroy_cb)) {
+	if (!l_io_set_read_handler(io->l_io, io_read_callback, io,
+							io_read_failed_cb)) {
 		l_error("l_io_set_read_handler failed");
+		return false;
+	}
+
+	if (!l_io_set_disconnect_handler(io->l_io, NULL, io,
+							io_disconnect_cb)) {
+		l_error("l_io_set_disconnect_handler failed");
 		return false;
 	}
 
@@ -521,4 +523,11 @@ void silvair_io_kepp_alive_wdt_refresh(struct silvair_io *io)
 
 	l_timeout_modify_ms(io->keep_alive_watchdog,
 					keep_alive_watchdog_perios_ms);
+}
+
+void silvair_io_destroy(struct silvair_io *io)
+{
+	l_io_destroy(io->l_io);
+	l_timeout_remove(io->keep_alive_watchdog);
+	io->context = NULL;
 }

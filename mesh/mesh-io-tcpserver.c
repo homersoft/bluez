@@ -165,17 +165,31 @@ static bool get_fd_info(int fd, char *log, enum io_type type)
 			return false;
 	}
 
-	l_info("%s -> addr:%s port:%d fd:%d\n", log,
-	       inet_ntoa(addr.sin_addr), ntohs(addr.sin_port), fd);
+	l_info("%s -> addr:%s port:%d fd:%d", log,
+			inet_ntoa(addr.sin_addr), ntohs(addr.sin_port), fd);
 	return true;
+}
+
+static void io_read_callback_destroy(void *user_data)
+{
+	struct silvair_io *silvair_io = user_data;
+	int fd = l_io_get_fd(silvair_io->l_io);
+
+	get_fd_info(fd, "Disconnecting the TCP client", IO_TYPE_CLIENT);
+	close(fd);
 }
 
 static void io_disconnect_callback(void *user_data)
 {
 	struct silvair_io *silvair_io = user_data;
-	(void)silvair_io;
+	struct mesh_io *mesh_io = silvair_io->context;
 
-	l_info("DISCONNECT CALLBACK");
+	if (!l_queue_remove(mesh_io->pvt->client_io, silvair_io)) {
+		perror("l_queue_remove() error");
+	}
+
+	l_info("Client disconneted from TCP Server");
+	silvair_io_destroy(silvair_io);
 }
 
 static bool io_accept_callback(struct l_io *l_io, void *user_data)
@@ -219,19 +233,21 @@ static bool io_accept_callback(struct l_io *l_io, void *user_data)
 
 	get_fd_info(newfd, "New client accepted", IO_TYPE_CLIENT);
 
-	silvair_io = silvair_io_new(newfd, keep_alive_error,
-						false, process_rx, mesh_io, io_disconnect_callback);
+	silvair_io = silvair_io_new(newfd, keep_alive_error, false, process_rx,
+					mesh_io, io_read_callback_destroy,
+					io_disconnect_callback);
 
 	if (!silvair_io) {
 		l_error("silvair_io_new error");
 		return false;
 	}
 
+	l_io_set_close_on_destroy(silvair_io->l_io, true);
+
+	l_queue_push_tail(mesh_io->pvt->client_io, silvair_io);
+
 	/* Send keep alive request */
 	silvair_process_tx(silvair_io, NULL, 0, PACKET_TYPE_KEEP_ALIVE);
-
-	l_io_set_close_on_destroy(silvair_io->l_io, true);
-	l_queue_push_tail(mesh_io->pvt->client_io, silvair_io);
 
 	l_info("Connected %s:%hu",
 			inet_ntoa(clientaddr.sin_addr),
@@ -335,20 +351,24 @@ static bool tcpserver_io_init(struct mesh_io *mesh_io, void *opts)
 
 static bool tcpserver_io_destroy(struct mesh_io *mesh_io)
 {
-//	struct mesh_io_private *pvt = mesh_io->pvt;
-//
-//	if (!pvt)
-//		return true;
-//
-//	io_destroy(pvt->server_io);
-//	io_destroy(pvt->client_io);
-//
-//	l_timeout_remove(pvt->tx_timeout);
-//	l_timeout_remove(pvt->keep_alive_watchdog);
-//	l_queue_destroy(pvt->rx_regs, l_free);
-//	l_queue_destroy(pvt->tx_pkts, l_free);
-//	l_free(pvt);
-//	mesh_io->pvt = NULL;
+	struct mesh_io_private *pvt = mesh_io->pvt;
+
+	if (!pvt)
+		return true;
+
+	l_io_destroy(pvt->server_io);
+
+	if (pvt->client_io != NULL)
+		l_queue_destroy(pvt->client_io,
+					(l_queue_destroy_func_t)l_io_destroy);
+
+	l_queue_destroy(pvt->rx_regs, l_free);
+	l_queue_destroy(pvt->tx_pkts, l_free);
+
+	l_timeout_remove(pvt->tx_timeout);
+
+	l_free(pvt);
+	mesh_io->pvt = NULL;
 
 	return true;
 }
