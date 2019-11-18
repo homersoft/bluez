@@ -133,7 +133,7 @@ static void process_rx(struct silvair_io *silvair_io, int8_t rssi,
 		return;
 	}
 
-	silvair_io_kepp_alive_wdt_refresh(silvair_io);
+	silvair_io_keep_alive_wdt_refresh(silvair_io);
 	l_queue_foreach(mesh_io->pvt->rx_regs, process_rx_callbacks, &rx);
 }
 
@@ -360,14 +360,8 @@ static bool tcpserver_io_destroy(struct mesh_io *mesh_io)
 
 	l_io_destroy(pvt->server_io);
 
-	if (pvt->client_io != NULL)
-		l_queue_destroy(pvt->client_io,
-				(l_queue_destroy_func_t)silvair_io_destroy);
-
-
 	l_queue_destroy(pvt->rx_regs, l_free);
 	l_queue_destroy(pvt->tx_pkts, l_free);
-
 	l_timeout_remove(pvt->tx_timeout);
 
 	l_free(pvt);

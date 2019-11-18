@@ -125,7 +125,7 @@ static void process_rx(struct silvair_io *silvair_io, int8_t rssi,
 		return;
 	}
 
-	silvair_io_kepp_alive_wdt_refresh(silvair_io);
+	silvair_io_keep_alive_wdt_refresh(silvair_io);
 	l_queue_foreach(mesh_io->pvt->rx_regs, process_rx_callbacks, &rx);
 }
 
