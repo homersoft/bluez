@@ -169,9 +169,8 @@ static bool get_fd_info(int fd, char *log, enum io_type type)
 	return true;
 }
 
-static void io_read_callback_destroy(void *user_data)
+static void io_read_callback_destroy(struct silvair_io *silvair_io)
 {
-	struct silvair_io *silvair_io = user_data;
 	int fd = silvair_io_get_fd(silvair_io);
 
 	get_fd_info(fd, "Disconnecting the TCP client", IO_TYPE_CLIENT);
@@ -180,9 +179,8 @@ static void io_read_callback_destroy(void *user_data)
 	shutdown(fd, SHUT_RDWR);
 }
 
-static void io_disconnect_callback(void *user_data)
+static void io_disconnect_callback(struct silvair_io *silvair_io)
 {
-	struct silvair_io *silvair_io = user_data;
 	struct mesh_io *mesh_io = silvair_io->context;
 
 	if (!mesh_io->pvt->client_io)

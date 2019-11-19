@@ -124,7 +124,7 @@ static void process_rx(struct silvair_io *silvair_io, int8_t rssi,
 	l_queue_foreach(mesh_io->pvt->rx_regs, process_rx_callbacks, &rx);
 }
 
-static void io_read_callback_destroy(void *user_data)
+static void io_read_callback_destroy(struct silvair_io *silvair_io)
 {
 	l_error("USB cable disconnected !");
 	abort();

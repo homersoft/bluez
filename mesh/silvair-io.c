@@ -474,7 +474,7 @@ static void keep_alive_tmout(struct l_timeout *timeout, void *user_data)
 	/* Send keep alive request */
 	silvair_io_process_tx(io, NULL, 0, PACKET_TYPE_KEEP_ALIVE);
 	io->disconnect_tmr = l_timeout_create_ms(disconnect_tmr_period_ms,
-					io->keep_alived_isconnect_cb, io, NULL);
+					io->keep_alived_disconnect_cb, io, NULL);
 }
 
 void silvair_io_process_tx(struct silvair_io *io,
@@ -492,8 +492,16 @@ static void io_disconnect_callback(struct l_io *l_io, void *user_data)
 {
 	struct silvair_io *io = user_data;
 
-	if (io->disconnect_cb)
-		io->disconnect_cb(user_data);
+	if (io->_disconnect_cb)
+		io->_disconnect_cb(io);
+}
+
+static void io_read_destroy_callback(void *user_data)
+{
+	struct silvair_io *io = user_data;
+
+	if (io->_read_destroy_cb)
+		io->_read_destroy_cb(io);
 }
 
 struct silvair_io *silvair_io_new(int fd,
@@ -501,7 +509,7 @@ struct silvair_io *silvair_io_new(int fd,
 				bool kernel_support,
 				process_packet_cb rx_cb,
 				void *context,
-				l_io_destroy_cb_t read_failed_cb,
+				io_read_failed_cb read_fail_cb,
 				io_disconnect_cb disc_cb)
 {
 	struct silvair_io *io = l_new(struct silvair_io, 1);
@@ -519,14 +527,17 @@ struct silvair_io *silvair_io_new(int fd,
 	io->slip.kernel_support = kernel_support;
 
 	io->process_rx_cb = rx_cb;
+	io->_read_destroy_cb = read_fail_cb;
 
+	/* io read destroy callback will be called when io_read_callback
+	 * return false */
 	if (!l_io_set_read_handler(io->l_io, io_read_callback, io,
-							read_failed_cb)) {
+						io_read_destroy_callback)) {
 		l_error("l_io_set_read_handler failed");
 		return false;
 	}
 
-	io->disconnect_cb = disc_cb;
+	io->_disconnect_cb = disc_cb;
 	if (!l_io_set_disconnect_handler(io->l_io, io_disconnect_callback, io,
 								NULL)) {
 		l_error("l_io_set_disconnect_handler failed");
@@ -534,7 +545,7 @@ struct silvair_io *silvair_io_new(int fd,
 	}
 
 	if (tmout_cb) {
-		io->keep_alived_isconnect_cb = tmout_cb;
+		io->keep_alived_disconnect_cb = tmout_cb;
 
 		io->keep_alive_watchdog =
 			l_timeout_create_ms(keep_alive_watchdog_period_ms,
