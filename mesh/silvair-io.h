@@ -57,7 +57,7 @@ struct silvair_io *silvair_io_new(int fd,
 				process_packet_cb rx_cb,
 				void *context,
 				l_io_destroy_cb_t io_read_failed_cb,
-				l_io_destroy_cb_t io_disconnect_cb);
+				l_io_disconnect_cb_t io_disconnect_cb);
 
 void silvair_io_destroy(struct silvair_io *io);
 

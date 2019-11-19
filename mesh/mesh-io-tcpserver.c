@@ -82,8 +82,8 @@ struct tx_pattern {
 };
 
 enum io_type {
-    IO_TYPE_SERVER,
-    IO_TYPE_CLIENT
+	IO_TYPE_SERVER,
+	IO_TYPE_CLIENT
 };
 
 static void send_timeout(struct l_timeout *timeout, void *user_data);
@@ -177,14 +177,17 @@ static void io_read_callback_destroy(void *user_data)
 
 	get_fd_info(fd, "Disconnecting the TCP client", IO_TYPE_CLIENT);
 
-	/* close will trigger the io_disconnect_callback() */
-	close(fd);
+	/* shutdown will trigger the io_disconnect_callback() */
+	shutdown(fd, SHUT_RDWR);
 }
 
-static void io_disconnect_callback(void *user_data)
+static void io_disconnect_callback(struct l_io *l_io, void *user_data)
 {
 	struct silvair_io *silvair_io = user_data;
 	struct mesh_io *mesh_io = silvair_io->context;
+
+	if (!mesh_io->pvt->client_io)
+		return;
 
 	if (!l_queue_remove(mesh_io->pvt->client_io, silvair_io)) {
 		perror("l_queue_remove() error");
@@ -360,10 +363,13 @@ static bool tcpserver_io_destroy(struct mesh_io *mesh_io)
 
 	l_io_destroy(pvt->server_io);
 
-	if (pvt->client_io != NULL)
-		l_queue_destroy(pvt->client_io,
-				(l_queue_destroy_func_t)silvair_io_destroy);
+	if (pvt->client_io != NULL) {
+		struct l_queue *queue = pvt->client_io;
 
+		pvt->client_io = NULL;
+		l_queue_destroy(queue,
+				(l_queue_destroy_func_t) silvair_io_destroy);
+	}
 
 	l_queue_destroy(pvt->rx_regs, l_free);
 	l_queue_destroy(pvt->tx_pkts, l_free);
@@ -372,7 +378,6 @@ static bool tcpserver_io_destroy(struct mesh_io *mesh_io)
 
 	l_free(pvt);
 	mesh_io->pvt = NULL;
-
 	return true;
 }
 
@@ -431,20 +436,14 @@ static void send_timeout(struct l_timeout *timeout, void *user_data)
 static void keep_alive_error(struct l_timeout *timeout, void *user_data)
 {
 	struct silvair_io *silvair_io = user_data;
-	int fd;
-
-	(void)timeout;
 
 	if (!silvair_io)
 		return;
 
-	fd = l_io_get_fd(silvair_io->l_io);
-
 	l_error("Keep alive error");
-	get_fd_info(fd, "Disconnecting the TCP client", IO_TYPE_CLIENT);
 
-	/* close will trigger the io_disconnect_callback() */
-	close(fd);
+	/* shutdown will trigger the io_disconnect_callback() */
+	shutdown(l_io_get_fd(silvair_io->l_io), SHUT_RDWR);
 }
 
 static int compare_tx_pkt_instant(const void *a, const void *b,

@@ -476,7 +476,7 @@ struct silvair_io *silvair_io_new(int fd,
 				process_packet_cb rx_cb,
 				void *context,
 				l_io_destroy_cb_t io_read_failed_cb,
-				l_io_destroy_cb_t io_disconnect_cb)
+				l_io_disconnect_cb_t io_disconnect_cb)
 {
 	struct silvair_io *io = l_new(struct silvair_io, 1);
 
@@ -500,8 +500,8 @@ struct silvair_io *silvair_io_new(int fd,
 		return false;
 	}
 
-	if (!l_io_set_disconnect_handler(io->l_io, NULL, io,
-							io_disconnect_cb)) {
+	if (!l_io_set_disconnect_handler(io->l_io, io_disconnect_cb, io,
+								NULL)) {
 		l_error("l_io_set_disconnect_handler failed");
 		return false;
 	}
@@ -530,10 +530,10 @@ void silvair_io_destroy(struct silvair_io *io)
 	if (!io)
 		return;
 
-	if (!io->l_io)
+	if (io->l_io)
 		l_io_destroy(io->l_io);
 
-	if (!io->keep_alive_watchdog)
+	if (io->keep_alive_watchdog)
 		l_timeout_remove(io->keep_alive_watchdog);
 
 	io->context = NULL;

@@ -137,7 +137,7 @@ static void io_read_callback_destroy(void *user_data)
 	close(l_io_get_fd(silvair_io->l_io));
 }
 
-static void io_disconnect_callback(void *user_data)
+static void io_disconnect_callback(struct l_io *l_io, void *user_data)
 {
 	struct silvair_io *silvair_io = user_data;
 
