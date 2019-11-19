@@ -31,6 +31,7 @@
 #include <sys/ioctl.h>
 #include <sys/time.h>
 #include <ell/ell.h>
+#include <stdlib.h>
 
 #include "mesh/mesh-io.h"
 #include "mesh/mesh-io-api.h"
@@ -125,18 +126,8 @@ static void process_rx(struct silvair_io *silvair_io, int8_t rssi,
 
 static void io_read_callback_destroy(void *user_data)
 {
-	struct silvair_io *silvair_io = user_data;
-
-	l_info("Disconnecting the UART client");
-	close(l_io_get_fd(silvair_io->l_io));
-}
-
-static void io_disconnect_callback(struct l_io *l_io, void *user_data)
-{
-	struct silvair_io *silvair_io = user_data;
-
-	(void)silvair_io;
-	l_info("USB cable disconnected !");
+	l_error("USB cable disconnected !");
+	abort();
 }
 
 static bool uart_kernel_init(struct mesh_io *mesh_io)
@@ -205,7 +196,7 @@ static bool uart_kernel_init(struct mesh_io *mesh_io)
 						process_rx,
 						mesh_io,
 						io_read_callback_destroy,
-						io_disconnect_callback);
+						NULL);
 	return true;
 }
 
@@ -217,7 +208,7 @@ static bool uart_user_init(struct mesh_io *mesh_io)
 						process_rx,
 						mesh_io,
 						io_read_callback_destroy,
-						io_disconnect_callback);
+						NULL);
 	mesh_io->pvt->iface_fd = -1;
 
 	l_info("Started mesh on tty %s", mesh_io->pvt->tty_name);
@@ -322,10 +313,6 @@ static bool uart_io_init(struct mesh_io *mesh_io, void *opts)
 	mesh_io->pvt->tx_timeout = l_timeout_create_ms(0, send_timeout,
 					mesh_io, NULL);
 
-	/* Send keep alive request */
-	silvair_process_tx(mesh_io->pvt->silvair_io, NULL, 0,
-						PACKET_TYPE_KEEP_ALIVE);
-
 	return true;
 }
 
@@ -337,11 +324,8 @@ static bool uart_io_destroy(struct mesh_io *mesh_io)
 	if (!pvt)
 		return true;
 
-	if (silvair_io) {
-		l_io_destroy(silvair_io->l_io);
-		l_timeout_remove(silvair_io->keep_alive_watchdog);
-		l_free(silvair_io);
-	}
+	if (silvair_io)
+		silvair_io_destroy(silvair_io);
 
 	close(pvt->iface_fd);
 	close(pvt->tty_fd);
@@ -378,7 +362,7 @@ static void send_flush(struct mesh_io *mesh_io)
 		if (!tx || tx->instant > instant)
 			break;
 
-		silvair_process_tx(silvair_io, tx->data, tx->len,
+		silvair_io_process_tx(silvair_io, tx->data, tx->len,
 							PACKET_TYPE_MESSAGE);
 
 		tx = l_queue_pop_head(mesh_io->pvt->tx_pkts);
@@ -403,9 +387,8 @@ static void send_timeout(struct l_timeout *timeout, void *user_data)
 
 static void keep_alive_error(struct l_timeout *timeout, void *user_data)
 {
-	(void)timeout;
-	(void)user_data;
 	l_error("USB cable disconnected !");
+	abort();
 }
 
 static int compare_tx_pkt_instant(const void *a, const void *b, void *user_data)

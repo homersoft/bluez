@@ -149,7 +149,7 @@ static bool parse_io(const char *optarg, enum mesh_io_type *type, void **opts)
 	}
 
 	if (strstr(optarg, "silvair") == optarg) {
-		*type = MESH_IO_TYPE_SILVAIR;
+		*type = MESH_IO_TYPE_UART;
 
 		optarg += strlen("silvair");
 

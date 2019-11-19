@@ -132,10 +132,6 @@ struct silvair_keep_alive_cmd_pld {
 } __packed;
 
 
-static bool io_write(struct silvair_io *io,
-				uint8_t *buf,
-				size_t size);
-
 static bool simple_write(struct silvair_io *io,
 				uint8_t *buf,
 				size_t size)
@@ -273,7 +269,6 @@ static void process_packet(struct silvair_io *io,
 			io->disconnect_tmr = NULL;
 		}
 		process_evt_keep_alive(io, pkt_hdr, len);
-		silvair_io_keep_alive_wdt_refresh(io);
 		break;
 
 	case SILVAIR_EVT_RESET:
@@ -286,11 +281,12 @@ static void process_packet(struct silvair_io *io,
 }
 
 static void process_slip(struct silvair_io *io,
-				struct slip *slip,
 				uint8_t *buf,
 				size_t size,
 				void *user_data)
 {
+	struct slip *slip = &io->slip;
+
 	for (uint8_t *i = buf; i != buf + size; ++i) {
 		switch (*i) {
 		case SLIP_END:
@@ -431,7 +427,7 @@ static void silvair_process_rx(struct silvair_io *io,
 	if (io->slip.kernel_support)
 		process_packet(io, buf, size, user_data);
 	else
-		process_slip(io, &io->slip, buf, size, user_data);
+		process_slip(io, buf, size, user_data);
 }
 
 static bool io_read_callback(struct l_io *l_io, void *user_data)
@@ -472,15 +468,15 @@ static void keep_alive_tmout(struct l_timeout *timeout, void *user_data)
 	 */
 	struct silvair_io *io = user_data;
 
-	l_info("Keep alive: checking for the communication...");
+	l_info("Keep alive: checking for the communication fd %d...", l_io_get_fd(io->l_io));
 
 	/* Send keep alive request */
-	silvair_process_tx(io, NULL, 0, PACKET_TYPE_KEEP_ALIVE);
+	silvair_io_process_tx(io, NULL, 0, PACKET_TYPE_KEEP_ALIVE);
 	io->disconnect_tmr = l_timeout_create_ms(disconnect_tmr_period_ms,
-						io->disconnect_cb, io, NULL);
+					io->keep_alived_isconnect_cb, io, NULL);
 }
 
-void silvair_process_tx(struct silvair_io *io,
+void silvair_io_process_tx(struct silvair_io *io,
 				uint8_t *buf,
 				size_t size,
 				enum packet_type type)
@@ -491,13 +487,21 @@ void silvair_process_tx(struct silvair_io *io,
 	}
 }
 
+static void io_disconnect_callback(struct l_io *l_io, void *user_data)
+{
+	struct silvair_io *io = user_data;
+
+	if (io->disconnect_cb)
+		io->disconnect_cb(user_data);
+}
+
 struct silvair_io *silvair_io_new(int fd,
 				keep_alive_tmout_cb tmout_cb,
 				bool kernel_support,
 				process_packet_cb rx_cb,
 				void *context,
-				l_io_destroy_cb_t io_read_failed_cb,
-				l_io_disconnect_cb_t io_disconnect_cb)
+				l_io_destroy_cb_t read_failed_cb,
+				io_disconnect_cb disc_cb)
 {
 	struct silvair_io *io = l_new(struct silvair_io, 1);
 
@@ -516,24 +520,28 @@ struct silvair_io *silvair_io_new(int fd,
 	io->process_rx_cb = rx_cb;
 
 	if (!l_io_set_read_handler(io->l_io, io_read_callback, io,
-							io_read_failed_cb)) {
+							read_failed_cb)) {
 		l_error("l_io_set_read_handler failed");
 		return false;
 	}
 
-	if (!l_io_set_disconnect_handler(io->l_io, io_disconnect_cb, io,
+	io->disconnect_cb = disc_cb;
+	if (!l_io_set_disconnect_handler(io->l_io, io_disconnect_callback, io,
 								NULL)) {
 		l_error("l_io_set_disconnect_handler failed");
 		return false;
 	}
 
 	if (tmout_cb) {
-		io->disconnect_cb = tmout_cb;
+		io->keep_alived_isconnect_cb = tmout_cb;
 
 		io->keep_alive_watchdog =
 			l_timeout_create_ms(keep_alive_watchdog_period_ms,
 						keep_alive_tmout, io, NULL);
 	}
+
+	/* Send keep alive request */
+	silvair_io_process_tx(io, NULL, 0, PACKET_TYPE_KEEP_ALIVE);
 	return io;
 }
 
@@ -548,10 +556,16 @@ void silvair_io_keep_alive_wdt_refresh(struct silvair_io *io)
 	if (io->disconnect_tmr) {
 		l_timeout_remove(io->disconnect_tmr);
 		io->disconnect_tmr = NULL;
+		l_info("Connection OK");
 	}
 
 	l_timeout_modify_ms(io->keep_alive_watchdog,
 					keep_alive_watchdog_period_ms);
+}
+
+int silvair_io_get_fd(struct silvair_io *io)
+{
+	return l_io_get_fd(io->l_io);
 }
 
 void silvair_io_destroy(struct silvair_io *io)
@@ -567,6 +581,4 @@ void silvair_io_destroy(struct silvair_io *io)
 
 	if (io->disconnect_tmr)
 		l_timeout_remove(io->disconnect_tmr);
-
-	io->context = NULL;
 }

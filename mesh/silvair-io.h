@@ -30,6 +30,7 @@ typedef void (*process_packet_cb)(struct silvair_io *io,
 				  void *user_data);
 
 typedef void (*keep_alive_tmout_cb)(struct l_timeout *timeout, void *user_data);
+typedef void (*io_disconnect_cb)(void *user_data);
 
 struct slip {
 	uint8_t	buf[512];
@@ -42,9 +43,9 @@ struct silvair_io {
 	struct l_io		*l_io;
 
 	struct l_timeout	*keep_alive_watchdog;
-	keep_alive_tmout_cb	disconnect_cb;
+	keep_alive_tmout_cb	keep_alived_isconnect_cb;
 	struct l_timeout	*disconnect_tmr;
-
+	io_disconnect_cb	disconnect_cb;
 	struct slip		slip;
 	process_packet_cb	process_rx_cb;
 	void *context;
@@ -60,14 +61,16 @@ struct silvair_io *silvair_io_new(int fd,
 				bool kernel_support,
 				process_packet_cb rx_cb,
 				void *context,
-				l_io_destroy_cb_t io_read_failed_cb,
-				l_io_disconnect_cb_t io_disconnect_cb);
+				l_io_destroy_cb_t read_failed_cb,
+				io_disconnect_cb disc_cb);
+
+int silvair_io_get_fd(struct silvair_io *io);
 
 void silvair_io_destroy(struct silvair_io *io);
 
 void silvair_io_keep_alive_wdt_refresh(struct silvair_io *io);
 
-void silvair_process_tx(struct silvair_io *io,
+void silvair_io_process_tx(struct silvair_io *io,
 			uint8_t *buf,
 			size_t size,
 			enum packet_type type);

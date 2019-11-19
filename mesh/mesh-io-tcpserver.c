@@ -33,7 +33,7 @@
 #include <sys/ioctl.h>
 #include <sys/time.h>
 #include <ell/ell.h>
-
+#include <stdlib.h>
 #include <stdio.h>
 
 #include "src/shared/io.h"
@@ -172,7 +172,7 @@ static bool get_fd_info(int fd, char *log, enum io_type type)
 static void io_read_callback_destroy(void *user_data)
 {
 	struct silvair_io *silvair_io = user_data;
-	int fd = l_io_get_fd(silvair_io->l_io);
+	int fd = silvair_io_get_fd(silvair_io);
 
 	get_fd_info(fd, "Disconnecting the TCP client", IO_TYPE_CLIENT);
 
@@ -180,7 +180,7 @@ static void io_read_callback_destroy(void *user_data)
 	shutdown(fd, SHUT_RDWR);
 }
 
-static void io_disconnect_callback(struct l_io *l_io, void *user_data)
+static void io_disconnect_callback(void *user_data)
 {
 	struct silvair_io *silvair_io = user_data;
 	struct mesh_io *mesh_io = silvair_io->context;
@@ -190,6 +190,7 @@ static void io_disconnect_callback(struct l_io *l_io, void *user_data)
 
 	if (!l_queue_remove(mesh_io->pvt->client_io, silvair_io)) {
 		perror("l_queue_remove() error");
+		abort();
 	}
 
 	l_info("Client disconneted from TCP Server");
@@ -211,7 +212,7 @@ static bool io_accept_callback(struct l_io *l_io, void *user_data)
 	/* Listening socket descriptor */
 	int server_fd;
 
-	server_fd = l_io_get_fd(mesh_io->pvt->server_io);
+	server_fd = l_io_get_fd(l_io);
 
 	if (server_fd < 0) {
 		l_error("l_io_get_fd error");
@@ -249,9 +250,6 @@ static bool io_accept_callback(struct l_io *l_io, void *user_data)
 	l_io_set_close_on_destroy(silvair_io->l_io, true);
 
 	l_queue_push_tail(mesh_io->pvt->client_io, silvair_io);
-
-	/* Send keep alive request */
-	silvair_process_tx(silvair_io, NULL, 0, PACKET_TYPE_KEEP_ALIVE);
 
 	l_info("Connected %s:%hu",
 			inet_ntoa(clientaddr.sin_addr),
@@ -396,7 +394,7 @@ static void send_flush_all_clients(void *data, void *user_data)
 	struct silvair_io *silvair_io = data;
 	struct tx_pkt *tx = user_data;
 
-	silvair_process_tx(silvair_io, tx->data, tx->len,
+	silvair_io_process_tx(silvair_io, tx->data, tx->len,
 							PACKET_TYPE_MESSAGE);
 }
 
@@ -441,7 +439,7 @@ static void keep_alive_error(struct l_timeout *timeout, void *user_data)
 	l_error("Keep alive error");
 
 	/* shutdown will trigger the io_disconnect_callback() */
-	shutdown(l_io_get_fd(silvair_io->l_io), SHUT_RDWR);
+	shutdown(silvair_io_get_fd(silvair_io), SHUT_RDWR);
 }
 
 static int compare_tx_pkt_instant(const void *a, const void *b,
