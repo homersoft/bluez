@@ -110,20 +110,14 @@ static void process_rx(struct silvair_io *silvair_io, int8_t rssi,
 			const uint8_t *data, uint8_t len, void *user_data)
 {
 	struct mesh_io *mesh_io = user_data;
+	struct process_data rx;
 
-	struct process_data rx = {
-		.pvt = mesh_io->pvt,
-		.data = data,
-		.len = len,
-		.info.instant = get_instant(),
-		.info.chan = 7,
-		.info.rssi = rssi,
-	};
-
-	if (!mesh_io) {
-		l_error("mesh_io does not exist");
-		return;
-	}
+	rx.pvt = mesh_io->pvt,
+	rx.data = data,
+	rx.len = len,
+	rx.info.instant = get_instant(),
+	rx.info.chan = 7,
+	rx.info.rssi = rssi,
 
 	silvair_io_keep_alive_wdt_refresh(silvair_io);
 	l_queue_foreach(mesh_io->pvt->rx_regs, process_rx_callbacks, &rx);
