@@ -40,10 +40,7 @@ struct slip {
 
 struct silvair_io {
 	struct l_io		*l_io;
-
 	struct l_timeout	*keep_alive_watchdog;
-	keep_alive_tmout_cb	disconnect_cb;
-
 	struct slip		slip;
 	process_packet_cb	process_rx_cb;
 	void *context;
@@ -64,7 +61,7 @@ struct silvair_io *silvair_io_new(int fd,
 
 void silvair_io_destroy(struct silvair_io *io);
 
-void silvair_io_keep_alive_wdt_refresh(struct silvair_io *io);
+void silvair_io_kepp_alive_wdt_refresh(struct silvair_io *io);
 
 void silvair_process_tx(struct silvair_io *io,
 			uint8_t *buf,
