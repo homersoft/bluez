@@ -264,7 +264,7 @@ static void process_packet(struct silvair_io *io,
 		break;
 
 	case SILVAIR_CMD_KEEP_ALIVE:
-		if(io->disconnect_tmr) {
+		if (io->disconnect_tmr) {
 			l_timeout_remove(io->disconnect_tmr);
 			io->disconnect_tmr = NULL;
 		}
@@ -468,7 +468,8 @@ static void keep_alive_tmout(struct l_timeout *timeout, void *user_data)
 	 */
 	struct silvair_io *io = user_data;
 
-	l_info("Keep alive: checking for the communication fd %d...", l_io_get_fd(io->l_io));
+	l_info("Keep alive: checking for the communication fd %d...",
+							l_io_get_fd(io->l_io));
 
 	/* Send keep alive request */
 	silvair_io_process_tx(io, NULL, 0, PACKET_TYPE_KEEP_ALIVE);

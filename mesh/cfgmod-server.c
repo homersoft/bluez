@@ -1228,7 +1228,7 @@ static bool cfg_srv_pkt(uint16_t src, uint32_t dst, uint16_t unicast,
 		gettimeofday(&time_now, NULL);
 		time_now.tv_sec -= hb->sub_start;
 
-		if (time_now.tv_sec >= (long int) hb->sub_period)
+		if (time_now.tv_sec >= (long) hb->sub_period)
 			time_now.tv_sec = 0;
 		else
 			time_now.tv_sec = hb->sub_period - time_now.tv_sec;

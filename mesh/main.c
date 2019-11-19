@@ -84,8 +84,7 @@ static void do_debug(const char *str, void *user_data)
 static void request_name_callback(struct l_dbus *dbus, bool success,
 					bool queued, void *user_data)
 {
-	l_info("Request name %s",
-		success ? "success": "failed");
+	l_info("Request name %s", success ? "success" : "failed");
 
 	if (success)
 		dbus_init(dbus);

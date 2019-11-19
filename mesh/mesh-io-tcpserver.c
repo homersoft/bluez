@@ -53,8 +53,8 @@ struct mesh_io_private {
 	struct l_queue		*tx_pkts;
 
 	/* Simple filtering on AD type only */
-	uint8_t 		filters[3];
-	struct tx_pkt 		*tx;
+	uint8_t			filters[3];
+	struct tx_pkt		*tx;
 };
 
 struct pvt_rx_reg {
@@ -144,24 +144,24 @@ static bool get_fd_info(int fd, char *log, enum io_type type)
 
 	addrlen = sizeof(addr);
 
-	switch(type) {
-		case IO_TYPE_CLIENT:
-			if (getpeername(fd,(struct sockaddr *)&addr, &addrlen) < 0) {
-				l_error("getpeername() error");
-				return false;
-			}
-			break;
-
-		case IO_TYPE_SERVER:
-			if (getsockname(fd,(struct sockaddr *)&addr, &addrlen) < 0) {
-				l_error("getsockname() error");
-				return false;
-			}
-			break;
-
-		default:
-			l_error("get_df_info() Invalid type");
+	switch (type) {
+	case IO_TYPE_CLIENT:
+		if (getpeername(fd, (struct sockaddr *)&addr, &addrlen) < 0) {
+			l_error("getpeername() error");
 			return false;
+		}
+		break;
+
+	case IO_TYPE_SERVER:
+		if (getsockname(fd, (struct sockaddr *)&addr, &addrlen) < 0) {
+			l_error("getsockname() error");
+			return false;
+		}
+		break;
+
+	default:
+		l_error("get_df_info() Invalid type");
+		return false;
 	}
 
 	l_info("%s -> addr:%s port:%d fd:%d", log,
@@ -234,7 +234,7 @@ static bool io_accept_callback(struct l_io *l_io, void *user_data)
 			fcntl(newfd, F_GETFL, 0) | O_NONBLOCK) != 0) {
 		l_error("client fcntl error");
 		return false;
-	 }
+	}
 
 	get_fd_info(newfd, "New client accepted", IO_TYPE_CLIENT);
 
@@ -377,7 +377,8 @@ static bool tcpserver_io_destroy(struct mesh_io *mesh_io)
 	return true;
 }
 
-static bool tcpserver_io_caps(struct mesh_io *mesh_io, struct mesh_io_caps *caps)
+static bool tcpserver_io_caps(struct mesh_io *mesh_io,
+			struct mesh_io_caps *caps)
 {
 	struct mesh_io_private *pvt = mesh_io->pvt;
 
