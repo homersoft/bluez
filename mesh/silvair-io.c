@@ -464,7 +464,7 @@ void silvair_process_tx(struct silvair_io *io,
 				size_t size,
 				enum packet_type type)
 {
-	if (!io_send(io, buf, size, PACKET_TYPE_MESSAGE)) {
+	if (!io_send(io, buf, size, type)) {
 		l_error("write failed: %s", strerror(errno));
 		return;
 	}
