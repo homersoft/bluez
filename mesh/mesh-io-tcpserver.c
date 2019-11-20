@@ -51,6 +51,9 @@ const unsigned long TCP_KEEP_ALIVE_TMOUT_PERIOD = 10000;
 const unsigned long TCP_KEEP_ALIVE_WATCHDOG_PERIOD = 2 * TCP_KEEP_ALIVE_TMOUT_PERIOD;
 
 struct mesh_io_private {
+	void *user_data;
+	mesh_io_ready_func_t ready_callback;
+
 	struct sockaddr_in server_addr;
 	struct io *server_io;
 
@@ -239,7 +242,8 @@ static bool io_accept_callback(struct io *io, void *user_data)
 	return true;
 }
 
-static bool tcpserver_io_init(struct mesh_io *mesh_io, void *opts)
+static bool tcpserver_io_init(struct mesh_io *mesh_io, void *opts,
+				mesh_io_ready_func_t cb, void *user_data)
 {
 	int server_fd;
 	uint16_t port = 0;
@@ -292,6 +296,9 @@ static bool tcpserver_io_init(struct mesh_io *mesh_io, void *opts)
 	mesh_io->pvt->rx_regs = l_queue_new();
 	mesh_io->pvt->tx_pkts = l_queue_new();
 
+	io->pvt->ready_callback = cb;
+	io->pvt->user_data = user_data;
+
 	if (!io_set_read_handler(mesh_io->pvt->server_io, io_accept_callback,
 								mesh_io, NULL))
 		return false;
@@ -301,6 +308,7 @@ static bool tcpserver_io_init(struct mesh_io *mesh_io, void *opts)
 
 	l_info("Started mesh on tcp port %d", port);
 
+	l_idle_oneshot(silvair_io_init_done, io, NULL);
 	return true;
 }
 

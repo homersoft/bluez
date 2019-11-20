@@ -47,6 +47,9 @@ const uint8_t KEEP_ALIVE_TMOUT_PERIOD = 10;
 const uint8_t KEEP_ALIVE_WATCHDOG_PERIOD = 2 * KEEP_ALIVE_TMOUT_PERIOD;
 
 struct mesh_io_private {
+	void *user_data;
+	mesh_io_ready_func_t ready_callback;
+
 	char tty_name[PATH_MAX];
 	int tty_fd;
 
@@ -287,7 +290,15 @@ static bool silvair_tty_init(struct mesh_io *io, bool flow)
 	return true;
 }
 
-static bool silvair_io_init(struct mesh_io *io, void *opts)
+static void silvair_io_init_done(void *user_data)
+{
+	struct mesh_io *io = user_data;
+
+	io->pvt->ready_callback(io->pvt->user_data, true);
+}
+
+static bool silvair_io_init(struct mesh_io *io, void *opts,
+				mesh_io_ready_func_t cb, void *user_data)
 {
 	bool tty_kernel = false;
 	bool tty_flow = false;
@@ -353,6 +364,9 @@ static bool silvair_io_init(struct mesh_io *io, void *opts)
 	io->pvt->rx_regs = l_queue_new();
 	io->pvt->tx_pkts = l_queue_new();
 
+	io->pvt->ready_callback = cb;
+	io->pvt->user_data = user_data;
+
 	if (!io_set_read_handler(io->pvt->io, io_read_callback, io, NULL))
 		return false;
 
@@ -366,6 +380,7 @@ static bool silvair_io_init(struct mesh_io *io, void *opts)
 		l_timeout_create(KEEP_ALIVE_WATCHDOG_PERIOD, keep_alive_error,
 			io, NULL);
 
+	l_idle_oneshot(silvair_io_init_done, io, NULL);
 	return true;
 }
 
