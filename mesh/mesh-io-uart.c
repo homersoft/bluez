@@ -81,7 +81,6 @@ struct tx_pattern {
 };
 
 static void send_timeout(struct l_timeout *timeout, void *user_data);
-static void keep_alive_error(struct l_timeout *timeout, void *user_data);
 
 
 static uint32_t get_instant(void)
@@ -124,7 +123,7 @@ static void process_rx(struct silvair_io *silvair_io, int8_t rssi,
 	l_queue_foreach(mesh_io->pvt->rx_regs, process_rx_callbacks, &rx);
 }
 
-static void io_read_callback_destroy(struct silvair_io *silvair_io)
+static void io_disconnected(struct silvair_io *silvair_io)
 {
 	l_error("USB cable disconnected !");
 	abort();
@@ -191,24 +190,22 @@ static bool uart_kernel_init(struct mesh_io *mesh_io)
 		mesh_io->pvt->iface_name);
 
 	mesh_io->pvt->silvair_io = silvair_io_new(mesh_io->pvt->iface_fd,
-						keep_alive_error,
 						true,
 						process_rx,
 						mesh_io,
-						io_read_callback_destroy,
-						NULL);
+						io_disconnected,
+						io_disconnected);
 	return true;
 }
 
 static bool uart_user_init(struct mesh_io *mesh_io)
 {
 	mesh_io->pvt->silvair_io = silvair_io_new(mesh_io->pvt->tty_fd,
-						keep_alive_error,
 						false,
 						process_rx,
 						mesh_io,
-						io_read_callback_destroy,
-						NULL);
+						io_disconnected,
+						io_disconnected);
 	mesh_io->pvt->iface_fd = -1;
 
 	l_info("Started mesh on tty %s", mesh_io->pvt->tty_name);
@@ -383,12 +380,6 @@ static void send_timeout(struct l_timeout *timeout, void *user_data)
 		return;
 
 	send_flush(mesh_io);
-}
-
-static void keep_alive_error(struct l_timeout *timeout, void *user_data)
-{
-	l_error("USB cable disconnected !");
-	abort();
 }
 
 static int compare_tx_pkt_instant(const void *a, const void *b, void *user_data)

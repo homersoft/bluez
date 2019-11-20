@@ -87,7 +87,6 @@ enum io_type {
 };
 
 static void send_timeout(struct l_timeout *timeout, void *user_data);
-static void keep_alive_error(struct l_timeout *timeout, void *user_data);
 
 
 static uint32_t get_instant(void)
@@ -169,7 +168,7 @@ static bool get_fd_info(int fd, char *log, enum io_type type)
 	return true;
 }
 
-static void io_read_callback_destroy(struct silvair_io *silvair_io)
+static void io_read_failed(struct silvair_io *silvair_io)
 {
 	int fd = silvair_io_get_fd(silvair_io);
 
@@ -179,7 +178,7 @@ static void io_read_callback_destroy(struct silvair_io *silvair_io)
 	shutdown(fd, SHUT_RDWR);
 }
 
-static void io_disconnect_callback(struct silvair_io *silvair_io)
+static void io_disconnected(struct silvair_io *silvair_io)
 {
 	struct mesh_io *mesh_io = silvair_io->context;
 
@@ -236,9 +235,8 @@ static bool io_accept_callback(struct l_io *l_io, void *user_data)
 
 	get_fd_info(newfd, "New client accepted", IO_TYPE_CLIENT);
 
-	silvair_io = silvair_io_new(newfd, keep_alive_error, false, process_rx,
-					mesh_io, io_read_callback_destroy,
-					io_disconnect_callback);
+	silvair_io = silvair_io_new(newfd, false, process_rx, mesh_io,
+					io_read_failed, io_disconnected);
 
 	if (!silvair_io) {
 		l_error("silvair_io_new error");
@@ -426,19 +424,6 @@ static void send_timeout(struct l_timeout *timeout, void *user_data)
 		return;
 
 	send_flush(mesh_io);
-}
-
-static void keep_alive_error(struct l_timeout *timeout, void *user_data)
-{
-	struct silvair_io *silvair_io = user_data;
-
-	if (!silvair_io)
-		return;
-
-	l_error("Keep alive error");
-
-	/* shutdown will trigger the io_disconnect_callback() */
-	shutdown(silvair_io_get_fd(silvair_io), SHUT_RDWR);
 }
 
 static int compare_tx_pkt_instant(const void *a, const void *b,

@@ -441,7 +441,7 @@ static bool io_read_callback(struct l_io *l_io, void *user_data)
 
 	if (fd < 0) {
 		l_error("l_io_get_fd error");
-		return false;
+		goto error;
 	}
 
 	r = read(fd, buf, sizeof(buf));
@@ -450,15 +450,29 @@ static bool io_read_callback(struct l_io *l_io, void *user_data)
 
 		if (r != 0) {
 			l_error("read error");
-			return false;
+			goto error;
 		}
 
 		/* Disconnect and remove client from the queue */
-		return false;
+		goto error;
 	}
 
 	silvair_process_rx(io, buf, r, mesh_io);
 	return true;
+
+error:
+	if (io->read_fail_cb)
+		io->read_fail_cb(io);
+
+	return false;
+}
+
+static void keep_alive_fail(struct l_timeout *timeout, void *user_data)
+{
+	struct silvair_io *io = user_data;
+
+	if (io->read_fail_cb)
+		io->read_fail_cb(io);
 }
 
 static void keep_alive_tmout(struct l_timeout *timeout, void *user_data)
@@ -474,7 +488,7 @@ static void keep_alive_tmout(struct l_timeout *timeout, void *user_data)
 	/* Send keep alive request */
 	silvair_io_process_tx(io, NULL, 0, PACKET_TYPE_KEEP_ALIVE);
 	io->disconnect_tmr = l_timeout_create_ms(disconnect_tmr_period_ms,
-					io->keep_alived_disconnect_cb, io, NULL);
+					keep_alive_fail, io, NULL);
 }
 
 void silvair_io_process_tx(struct silvair_io *io,
@@ -492,25 +506,16 @@ static void io_disconnect_callback(struct l_io *l_io, void *user_data)
 {
 	struct silvair_io *io = user_data;
 
-	if (io->_disconnect_cb)
-		io->_disconnect_cb(io);
-}
-
-static void io_read_destroy_callback(void *user_data)
-{
-	struct silvair_io *io = user_data;
-
-	if (io->_read_destroy_cb)
-		io->_read_destroy_cb(io);
+	if (io->disconnect_cb)
+		io->disconnect_cb(io);
 }
 
 struct silvair_io *silvair_io_new(int fd,
-				keep_alive_tmout_cb tmout_cb,
 				bool kernel_support,
 				process_packet_cb rx_cb,
 				void *context,
-				io_read_failed_cb read_fail_cb,
-				io_disconnect_cb disc_cb)
+				io_cb read_fail_cb,
+				io_cb disconnect_cb)
 {
 	struct silvair_io *io = l_new(struct silvair_io, 1);
 
@@ -527,30 +532,26 @@ struct silvair_io *silvair_io_new(int fd,
 	io->slip.kernel_support = kernel_support;
 
 	io->process_rx_cb = rx_cb;
-	io->_read_destroy_cb = read_fail_cb;
+	io->read_fail_cb = read_fail_cb;
 
 	/* io read destroy callback will be called when io_read_callback
 	 * return false */
 	if (!l_io_set_read_handler(io->l_io, io_read_callback, io,
-						io_read_destroy_callback)) {
+								NULL)) {
 		l_error("l_io_set_read_handler failed");
 		return false;
 	}
 
-	io->_disconnect_cb = disc_cb;
+	io->disconnect_cb = disconnect_cb;
 	if (!l_io_set_disconnect_handler(io->l_io, io_disconnect_callback, io,
 								NULL)) {
 		l_error("l_io_set_disconnect_handler failed");
 		return false;
 	}
 
-	if (tmout_cb) {
-		io->keep_alived_disconnect_cb = tmout_cb;
-
-		io->keep_alive_watchdog =
-			l_timeout_create_ms(keep_alive_watchdog_period_ms,
-						keep_alive_tmout, io, NULL);
-	}
+	io->keep_alive_watchdog =
+		l_timeout_create_ms(keep_alive_watchdog_period_ms,
+					keep_alive_tmout, io, NULL);
 
 	/* Send keep alive request */
 	silvair_io_process_tx(io, NULL, 0, PACKET_TYPE_KEEP_ALIVE);
