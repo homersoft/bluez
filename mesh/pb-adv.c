@@ -31,6 +31,7 @@
 #include "mesh/prov.h"
 #include "mesh/provision.h"
 #include "mesh/pb-adv.h"
+#include "mesh/util.h"
 
 
 struct pb_adv_session {
@@ -256,11 +257,14 @@ static void pb_adv_packet(void *user_data, const uint8_t *pkt, uint16_t len)
 	uint8_t type;
 	bool first;
 
+
 	if (!session || pb_session != session)
 		return;
 
 	link_id = l_get_be32(pkt + 1);
 	type = l_get_u8(pkt + 6);
+	
+	print_packet("PB-ADV", pkt, len);
 
 	/* Validate new or existing Connection ID */
 	if (session->link_id) {
@@ -274,6 +278,7 @@ static void pb_adv_packet(void *user_data, const uint8_t *pkt, uint16_t len)
 	trans_num = l_get_u8(pkt + 5);
 	pkt += 7;
 	len -= 7;
+
 
 	switch (type) {
 	case PB_ADV_OPEN_CFM:
@@ -348,11 +353,16 @@ static void pb_adv_packet(void *user_data, const uint8_t *pkt, uint16_t len)
 		if (!session->opened)
 			return;
 
-		if (trans_num != session->local_trans_num)
+		if (trans_num != session->local_trans_num) {
+			l_warn("Bad transaction num: %d != %d", trans_num, session->local_trans_num);
 			return;
+		}
 
 		if (session->local_acked > trans_num)
+		{
+			l_warn("Bad transaction ack: %d > %d", session->local_acked, trans_num);
 			return;
+		}
 
 		mesh_send_cancel(filter, sizeof(filter));
 		session->local_acked = trans_num;
@@ -455,6 +465,7 @@ bool pb_adv_reg(bool initiator, mesh_prov_open_func_t open_cb,
 	pb_session->initiator = initiator;
 	memcpy(pb_session->uuid, uuid, 16);
 
+	l_debug("Register %p", pb_adv_packet);
 	mesh_reg_prov_rx(pb_adv_packet, pb_session);
 
 	if (initiator) {

@@ -90,15 +90,19 @@ struct mesh_io *mesh_io_new(enum mesh_io_type type, void *opts,
 		io_list = l_queue_new();
 
 	if (api->set) {
-		uint8_t pkt = MESH_AD_TYPE_NETWORK;
-		uint8_t prv = MESH_AD_TYPE_PROVISION;
-		uint8_t snb[2] = {MESH_AD_TYPE_BEACON, 0x01};
-		uint8_t prvb[2] = {MESH_AD_TYPE_BEACON, 0x00};
+		uint8_t beacon_net[] = {MESH_AD_TYPE_BEACON, 0x01};
+		uint8_t prov[] = {MESH_AD_TYPE_PROVISION};
+		uint8_t net[] = {MESH_AD_TYPE_NETWORK};
+		uint8_t beacon_prov[] = {MESH_AD_TYPE_BEACON, 0x00};
 
-		api->set(io, 1, snb, sizeof(snb), NULL, NULL);
-		api->set(io, 2, &prv, 1, NULL, NULL);
-		api->set(io, 3, &pkt, 1, NULL, NULL);
-		api->set(io, 4, prvb, sizeof(prvb), NULL, NULL);
+		api->set(io, MESH_IO_FILTER_BEACON,
+				beacon_net, sizeof(beacon_net), NULL, NULL);
+		api->set(io, MESH_IO_FILTER_PROV,
+				prov, sizeof(prov), NULL, NULL);
+		api->set(io, MESH_IO_FILTER_NET,
+				net, sizeof(net), NULL, NULL);
+		api->set(io, MESH_IO_FILTER_PROV_BEACON,
+				beacon_prov, sizeof(beacon_prov), NULL, NULL);
 	}
 
 	if (l_queue_push_head(io_list, io))

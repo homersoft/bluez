@@ -41,6 +41,7 @@
 
 #include "tools/mesh/agent.h"
 #include "tools/mesh/cfgcli.h"
+#include "tools/mesh/healthcli.h"
 #include "tools/mesh/keys.h"
 #include "tools/mesh/mesh-db.h"
 #include "tools/mesh/model.h"
@@ -49,8 +50,9 @@
 #define PROMPT_ON	COLOR_BLUE "[mesh-cfgclient]" COLOR_OFF "# "
 #define PROMPT_OFF	"Waiting to connect to bluetooth-meshd..."
 
-#define CFG_SRV_MODEL	0x0000
-#define CFG_CLI_MODEL	0x0001
+#define CFG_SRV_MODEL		0x0000
+#define CFG_CLI_MODEL		0x0001
+#define HEALTH_CLI_MODEL	0x0003
 
 #define UNPROV_SCAN_MAX_SECS	300
 
@@ -63,7 +65,7 @@
 struct meshcfg_el {
 	const char *path;
 	uint8_t index;
-	uint16_t mods[2];
+	uint16_t mods[3];
 };
 
 struct meshcfg_app {
@@ -108,11 +110,11 @@ static struct l_queue *node_proxies;
 static struct l_dbus_proxy *net_proxy;
 static struct meshcfg_node *local;
 static struct model_info *cfgcli;
+static struct model_info *healthcli;
 
 static struct l_queue *devices;
 
 static bool prov_in_progress;
-static const char *caps[2] = {"out-numeric", "in-numeric"};
 
 static bool have_config;
 
@@ -126,7 +128,11 @@ static struct meshcfg_app app = {
 	.ele = {
 		.path = "/mesh/cfgclient/ele0",
 		.index = 0,
-		.mods = {CFG_SRV_MODEL, CFG_CLI_MODEL}
+		.mods = {
+			CFG_SRV_MODEL,
+			CFG_CLI_MODEL,
+			HEALTH_CLI_MODEL
+		}
 	}
 };
 
@@ -334,6 +340,9 @@ static void client_init(void)
 {
 	cfgcli = cfgcli_init(send_key, (void *) app.ele.path);
 	cfgcli->ops.set_send_func(send_msg, (void *) app.ele.path);
+
+	healthcli = healthcli_init((void *) app.ele.path);
+	healthcli->ops.set_send_func(send_msg, (void *) app.ele.path);
 }
 
 static bool caps_getter(struct l_dbus *dbus,
@@ -341,12 +350,8 @@ static bool caps_getter(struct l_dbus *dbus,
 				struct l_dbus_message_builder *builder,
 				void *user_data)
 {
-	uint32_t i;
-
 	if (!l_dbus_message_builder_enter_array(builder, "s"))
 		return false;
-	for (i = 0; i < L_ARRAY_SIZE(caps); i++)
-		l_dbus_message_builder_append_basic(builder, 's', caps[i]);
 
 	l_dbus_message_builder_leave_array(builder);
 
@@ -1478,6 +1483,9 @@ static struct l_dbus_message *dev_msg_recv_call(struct l_dbus *dbus,
 	/* Pass to the configuration client */
 	if (cfgcli && cfgcli->ops.recv)
 		cfgcli->ops.recv(src, APP_IDX_DEV_REMOTE, data, n);
+
+	if (healthcli && healthcli->ops.recv)
+		healthcli->ops.recv(src, APP_IDX_DEV_REMOTE, data, n);
 
 	return l_dbus_message_new_method_return(msg);
 }
