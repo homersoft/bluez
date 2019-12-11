@@ -128,8 +128,7 @@ static void process_rx(struct silvair_io *silvair_io, int8_t rssi,
 
 static void io_error_callback(struct silvair_io *silvair_io)
 {
-	l_error("USB cable disconnected !");
-	abort();
+	l_main_quit();
 }
 
 static bool uart_kernel_init(struct mesh_io *mesh_io)
