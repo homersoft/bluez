@@ -388,6 +388,18 @@ Methods:
 			org.bluez.mesh.Error.DoesNotExist
 			org.bluez.mesh.Error.InvalidArguments
 
+	void UpdateSequenceNumber(uint32_t seq_num)
+
+		This method is used to update sequence number.
+
+		The seq_num is a 24-bit value. When the given seq_num is lower
+		than current sequence number, the value will not be updated and
+		current sequence number will be returned.
+
+		Possible errors:
+			org.bluez.mesh.Error.NotAuthorized
+			org.bluez.mesh.Error.InvalidArguments
+
 Properties:
 	dict Features [read-only]
 
