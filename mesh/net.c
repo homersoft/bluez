@@ -48,8 +48,6 @@
 
 #define iv_is_updating(net) ((net)->iv_upd_state == IV_UPD_UPDATING)
 
-#define IV_UPDATE_SEQ_TRIGGER 0x800000  /* Half of Seq-Nums expended */
-
 #define SEG_TO	2
 #define MSG_TO	60
 

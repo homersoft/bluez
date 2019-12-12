@@ -2099,12 +2099,18 @@ bool mesh_config_write_seq_number(struct mesh_config *cfg, uint32_t seq,
 		if (cached < seq + MIN_SEQ_CACHE_VALUE)
 			cached = seq + MIN_SEQ_CACHE_VALUE;
 
+		/* cached value over range protection since
+		 * max sequence number value is uint24_t max (0xFFFFFF)
+		 */
+		if (cached >= MAX_SEQUENCE_NUMBER)
+			cached = MAX_SEQUENCE_NUMBER - IV_UPDATE_SEQ_TRIGGER;
+
 		l_debug("Seq Cache: %d -> %d", seq, cached);
 
 		cfg->write_seq = seq;
 
 		if (!write_int(cfg->jnode, "sequenceNumber", cached))
-		    return false;
+			return false;
 
 		return mesh_config_save(cfg, false, NULL, NULL);
 	}
