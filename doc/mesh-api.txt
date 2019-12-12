@@ -388,6 +388,19 @@ Methods:
 			org.bluez.mesh.Error.DoesNotExist
 			org.bluez.mesh.Error.InvalidArguments
 
+	void UpdateSequenceNumber(uint32_t seq_nr)
+
+		This method is used to update sequence number.
+
+		The seq_nr is a 24-bit value. It should be in range 0 to
+		IV_UPDATE_SEQ_TRIGGER. When the given seq_nr is lower than current
+		sequence number, the value will not be updated and
+		current sequence number will be returned.
+
+		Possible errors:
+			org.bluez.mesh.Error.NotAuthorized
+			org.bluez.mesh.Error.InvalidArguments
+
 Properties:
 	dict Features [read-only]
 
@@ -440,6 +453,11 @@ Properties:
 	array{uint16} Addresses [read-only]
 
 		This property contains unicast addresses of node's elements.
+
+	uint32 SequenceNumber [read-only]
+
+		This property may be read at any time to determine the
+		sequence number.
 
 Mesh Provisioning Hierarchy
 ============================
