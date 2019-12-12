@@ -2056,6 +2056,47 @@ static struct l_dbus_message *publish_call(struct l_dbus *dbus,
 	return l_dbus_message_new_method_return(msg);
 }
 
+static struct l_dbus_message *update_seq_num_call(struct l_dbus *dbus,
+						struct l_dbus_message *msg,
+						void *user_data)
+{
+	struct mesh_node *node = user_data;
+	struct mesh_net *net = node_get_net(node);
+	uint32_t current_seq_num = mesh_net_get_seq_num(net);
+	const char *sender = l_dbus_message_get_sender(msg);
+	uint32_t requested_seq_num;
+	struct l_dbus_message *reply;
+	struct l_dbus_message_builder *builder;
+
+	if (strcmp(sender, node->owner))
+		return dbus_error(msg, MESH_ERROR_NOT_AUTHORIZED, NULL);
+
+	if (!l_dbus_message_get_arguments(msg, "u", &requested_seq_num))
+		return dbus_error(msg, MESH_ERROR_INVALID_ARGS, NULL);
+
+	l_debug("Requested sequence number: %u", requested_seq_num);
+
+	/* Do not allow to set sequence number above IV index update level */
+	if (requested_seq_num > SEQ_MASK)
+		return dbus_error(msg, MESH_ERROR_INVALID_ARGS, NULL);
+
+	reply = l_dbus_message_new_method_return(msg);
+	builder = l_dbus_message_builder_new(reply);
+
+	if (requested_seq_num > current_seq_num) {
+		mesh_net_set_seq_num(net, requested_seq_num);
+		l_dbus_message_builder_append_basic(builder, 'u',
+							&requested_seq_num);
+	} else
+		l_dbus_message_builder_append_basic(builder, 'u',
+							&current_seq_num);
+
+
+	l_dbus_message_builder_finalize(builder);
+	l_dbus_message_builder_destroy(builder);
+	return reply;
+}
+
 static bool features_getter(struct l_dbus *dbus, struct l_dbus_message *msg,
 					struct l_dbus_message_builder *builder,
 					void *user_data)
@@ -2140,9 +2181,9 @@ static bool seq_num_getter(struct l_dbus *dbus, struct l_dbus_message *msg,
 {
 	struct mesh_node *node = user_data;
 	struct mesh_net *net = node_get_net(node);
-	uint32_t seq_nr = mesh_net_get_seq_num(net);
+	uint32_t seq_num = mesh_net_get_seq_num(net);
 
-	l_dbus_message_builder_append_basic(builder, 'u', &seq_nr);
+	l_dbus_message_builder_append_basic(builder, 'u', &seq_num);
 
 	return true;
 }
@@ -2206,6 +2247,9 @@ static void setup_node_interface(struct l_dbus_interface *iface)
 	l_dbus_interface_method(iface, "Publish", 0, publish_call, "",
 					"oqa{sv}ay", "element_path", "model_id",
 							"options", "data");
+	l_dbus_interface_method(iface, "UpdateSequenceNumber", 0,
+					update_seq_num_call, "u", "u",
+					"seq_num", "seq_num");
 	l_dbus_interface_property(iface, "Features", 0, "a{sv}",
 							features_getter, NULL);
 	l_dbus_interface_property(iface, "Beacon", 0, "b", beacon_getter, NULL);
