@@ -2103,7 +2103,7 @@ bool mesh_config_write_seq_number(struct mesh_config *cfg, uint32_t seq,
 		 * max sequence number value is uint24_t max (0xFFFFFF)
 		 */
 		if (cached >= MAX_SEQUENCE_NUMBER)
-			cached = MAX_SEQUENCE_NUMBER - IV_UPDATE_SEQ_TRIGGER;
+			cached = IV_UPDATE_SEQ_TRIGGER - 1;
 
 		l_debug("Seq Cache: %d -> %d", seq, cached);
 
