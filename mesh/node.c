@@ -2329,7 +2329,8 @@ static void setup_node_interface(struct l_dbus_interface *iface)
 						"", "oqqay", "element_path",
 						"vendor", "model_id", "data");
 	l_dbus_interface_method(iface, "UpdateSequenceNumber", 0,
-					update_seq_nr_call, "", "u", "seq_nr");
+					update_seq_nr_call, "u", "u",
+					"seq_nr", "seq_nr");
 	l_dbus_interface_property(iface, "Features", 0, "a{sv}", features_getter,
 									NULL);
 	l_dbus_interface_property(iface, "Beacon", 0, "b", beacon_getter, NULL);
