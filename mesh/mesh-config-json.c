@@ -232,9 +232,15 @@ static bool jarray_has_string(json_object *jarray, char *str, size_t len)
 	return false;
 }
 
-static void jarray_string_del(json_object *jarray, char *str, size_t len)
+static json_object *jarray_string_del(json_object *jarray, char *str,
+								size_t len)
 {
 	int i, sz = json_object_array_length(jarray);
+	json_object *jarray_new;
+
+	jarray_new = json_object_new_array();
+	if (!jarray_new)
+		return NULL;
 
 	for (i = 0; i < sz; ++i) {
 		json_object *jentry;
@@ -242,13 +248,14 @@ static void jarray_string_del(json_object *jarray, char *str, size_t len)
 
 		jentry = json_object_array_get_idx(jarray, i);
 		str_entry = (char *)json_object_get_string(jentry);
+		if (str_entry && !strncmp(str, str_entry, len))
+			continue;
 
-		if (str_entry && !strncmp(str, str_entry, len)) {
-			json_object_array_del_idx(jarray, i, 1);
-			return;
-		}
-
+		json_object_get(jentry);
+		json_object_array_add(jarray_new, jentry);
 	}
+
+	return jarray_new;
 }
 
 static json_object *get_key_object(json_object *jarray, uint16_t idx)
@@ -297,9 +304,14 @@ static bool get_key_index(json_object *jobj, const char *keyword,
 	return true;
 }
 
-static void jarray_key_del(json_object *jarray, int16_t idx)
+static json_object *jarray_key_del(json_object *jarray, int16_t idx)
 {
+	json_object *jarray_new;
 	int i, sz = json_object_array_length(jarray);
+
+	jarray_new = json_object_new_array();
+	if (!jarray_new)
+		return NULL;
 
 	for (i = 0; i < sz; ++i) {
 		json_object *jentry;
@@ -307,11 +319,14 @@ static void jarray_key_del(json_object *jarray, int16_t idx)
 
 		jentry = json_object_array_get_idx(jarray, i);
 
-		if (get_key_index(jentry, "index", &nidx) && nidx == idx) {
-			json_object_array_del_idx(jarray, i, 1);
-			return;
-		}
+		if (get_key_index(jentry, "index", &nidx) && nidx == idx)
+			continue;
+
+		json_object_get(jentry);
+		json_object_array_add(jarray_new, jentry);
 	}
+
+	return jarray_new;
 }
 
 static bool read_unicast_address(json_object *jobj, uint16_t *unicast)
@@ -645,20 +660,39 @@ bool mesh_config_net_key_update(struct mesh_config *cfg, uint16_t idx,
 
 bool mesh_config_net_key_del(struct mesh_config *cfg, uint16_t idx)
 {
-	json_object *jnode, *jarray;
+	json_object *jnode, *jarray, *jarray_new;
 
 	if (!cfg)
 		return false;
 
 	jnode = cfg->jnode;
 
+	/* TODO: Decide if we treat this as an error: no network keys??? */
 	if (!json_object_object_get_ex(jnode, "netKeys", &jarray))
 		return true;
 
-	jarray_key_del(jarray, idx);
+	/* Check if matching entry exists */
+	if (!get_key_object(jarray, idx))
+		return true;
 
-	if (!json_object_array_length(jarray))
+	if (json_object_array_length(jarray) == 1) {
 		json_object_object_del(jnode, "netKeys");
+		/* TODO: Do we raise an error here? */
+		l_warn("Removing the last network key! Zero keys left.");
+		return save_config(jnode, cfg->node_dir_path);
+	}
+
+	/*
+	 * There is no easy way to delete a value from json array.
+	 * Create a new copy without specified element and
+	 * then remove old array.
+	 */
+	jarray_new = jarray_key_del(jarray, idx);
+	if (!jarray_new)
+		return false;
+
+	json_object_object_del(jnode, "netKeys");
+	json_object_object_add(jnode, "netKeys", jarray_new);
 
 	return save_config(jnode, cfg->node_dir_path);
 }
@@ -776,7 +810,7 @@ bool mesh_config_app_key_update(struct mesh_config *cfg, uint16_t app_idx,
 bool mesh_config_app_key_del(struct mesh_config *cfg, uint16_t net_idx,
 								uint16_t idx)
 {
-	json_object *jnode, *jarray;
+	json_object *jnode, *jarray, *jarray_new;
 
 	if (!cfg)
 		return false;
@@ -786,10 +820,26 @@ bool mesh_config_app_key_del(struct mesh_config *cfg, uint16_t net_idx,
 	if (!json_object_object_get_ex(jnode, "appKeys", &jarray))
 		return true;
 
-	jarray_key_del(jarray, idx);
+	/* Check if matching entry exists */
+	if (!get_key_object(jarray, idx))
+		return true;
 
-	if (!json_object_array_length(jarray))
+	if (json_object_array_length(jarray) == 1) {
 		json_object_object_del(jnode, "appKeys");
+		return true;
+	}
+
+	/*
+	 * There is no easy way to delete a value from json array.
+	 * Create a new copy without specified element and
+	 * then remove old array.
+	 */
+	jarray_new = jarray_key_del(jarray, idx);
+	if (!jarray_new)
+		return false;
+
+	json_object_object_del(jnode, "appKeys");
+	json_object_object_add(jnode, "appKeys", jarray_new);
 
 	return save_config(jnode, cfg->node_dir_path);
 }
@@ -843,7 +893,7 @@ bool mesh_config_model_binding_del(struct mesh_config *cfg, uint16_t ele_addr,
 						bool vendor, uint32_t mod_id,
 							uint16_t app_idx)
 {
-	json_object *jnode, *jmodel, *jarray;
+	json_object *jnode, *jmodel, *jarray, *jarray_new;
 	int ele_idx;
 	char buf[5];
 
@@ -865,10 +915,25 @@ bool mesh_config_model_binding_del(struct mesh_config *cfg, uint16_t ele_addr,
 
 	snprintf(buf, 5, "%4.4x", app_idx);
 
-	jarray_string_del(jarray, buf, 4);
+	if (!jarray_has_string(jarray, buf, 4))
+		return true;
 
-	if (!json_object_array_length(jarray))
+	if (json_object_array_length(jarray) == 1) {
 		json_object_object_del(jmodel, "bind");
+		return true;
+	}
+
+	/*
+	 * There is no easy way to delete a value from json array.
+	 * Create a new copy without specified element and
+	 * then remove old array.
+	 */
+	jarray_new = jarray_string_del(jarray, buf, 4);
+	if (!jarray_new)
+		return false;
+
+	json_object_object_del(jmodel, "bind");
+	json_object_object_add(jmodel, "bind", jarray_new);
 
 	return save_config(jnode, cfg->node_dir_path);
 }
@@ -1929,7 +1994,7 @@ bool mesh_config_model_sub_del(struct mesh_config *cfg, uint16_t ele_addr,
 						uint32_t mod_id, bool vendor,
 						struct mesh_config_sub *sub)
 {
-	json_object *jnode, *jmodel, *jarray;
+	json_object *jnode, *jmodel, *jarray, *jarray_new;
 	char buf[33];
 	int len, ele_idx;
 
@@ -1957,10 +2022,25 @@ bool mesh_config_model_sub_del(struct mesh_config *cfg, uint16_t ele_addr,
 		len = 32;
 	}
 
-	jarray_string_del(jarray, buf, len);
+	if (!jarray_has_string(jarray, buf, len))
+		return true;
 
-	if (!json_object_array_length(jarray))
+	if (json_object_array_length(jarray) == 1) {
 		json_object_object_del(jmodel, "subscribe");
+		return true;
+	}
+
+	/*
+	 * There is no easy way to delete a value from a json array.
+	 * Create a new copy without specified element and
+	 * then remove old array.
+	 */
+	jarray_new = jarray_string_del(jarray, buf, len);
+	if (!jarray_new)
+		return false;
+
+	json_object_object_del(jmodel, "subscribe");
+	json_object_object_add(jmodel, "subscribe", jarray_new);
 
 	return save_config(jnode, cfg->node_dir_path);
 }
