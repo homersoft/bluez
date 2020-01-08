@@ -419,9 +419,14 @@ bool mesh_db_node_net_key_add(uint16_t unicast, uint16_t idx)
 	return add_node_key(jnode, "netKeys", idx);
 }
 
-static void jarray_key_del(json_object *jarray, int16_t idx)
+static json_object *jarray_key_del(json_object *jarray, int16_t idx)
 {
+	json_object *jarray_new;
 	int i, sz = json_object_array_length(jarray);
+
+	jarray_new = json_object_new_array();
+	if (!jarray_new)
+		return NULL;
 
 	for (i = 0; i < sz; ++i) {
 		json_object *jentry, *jval;
@@ -431,29 +436,48 @@ static void jarray_key_del(json_object *jarray, int16_t idx)
 		jentry = json_object_array_get_idx(jarray, i);
 
 		if (!json_object_object_get_ex(jentry, "index", &jval))
-			continue;
+			goto fail;
 
 		str = json_object_get_string(jval);
 
 		if (sscanf(str, "%04hx", &val) != 1)
+			goto fail;
+
+		if (val == idx)
 			continue;
 
-		if (val == idx) {
-			json_object_array_del_idx(jarray, i, 1);
-			return;
-		}
-
+		json_object_get(jentry);
+		json_object_array_add(jarray_new, jentry);
 	}
+
+	return jarray_new;
+fail:
+	json_object_put(jarray_new);
+	return NULL;
 }
 
 static bool delete_key(json_object *jobj, const char *desc, uint16_t idx)
 {
-	json_object *jarray;
+	json_object *jarray, *jarray_new;
 
 	if (!json_object_object_get_ex(jobj, desc, &jarray))
 		return true;
 
-	jarray_key_del(jarray, idx);
+	/* Check if matching entry exists */
+	if (!get_key_object(jarray, idx))
+		return true;
+
+	/*
+	 * There is no easy way to delete a value from a json array.
+	 * Create a new copy without specified element and
+	 * then remove old array.
+	 */
+	jarray_new = jarray_key_del(jarray, idx);
+	if (!jarray_new)
+		return false;
+
+	json_object_object_del(jobj, desc);
+	json_object_object_add(jobj, desc, jarray_new);
 
 	return mesh_config_save((struct mesh_config *) cfg, true,
 								NULL, NULL);
