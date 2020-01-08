@@ -615,6 +615,24 @@ bool node_default_ttl_set(struct mesh_node *node, uint8_t ttl)
 	return res;
 }
 
+void node_set_iv_index(struct mesh_node *node, uint32_t iv_index,
+								bool iv_update)
+{
+	struct l_dbus *bus = dbus_get_bus();
+
+	if (node->obj_path)
+	{
+		l_dbus_property_changed(bus, node->obj_path,
+						MESH_NODE_INTERFACE, "IvIndex");
+
+		l_dbus_property_changed(bus, node->obj_path,
+					MESH_NODE_INTERFACE, "IvUpdate");
+
+		l_dbus_property_changed(bus, node->obj_path,
+					MESH_NODE_INTERFACE, "IvState");
+	}
+}
+
 bool node_set_sequence_number(struct mesh_node *node, uint32_t seq)
 {
 	if (!node)
