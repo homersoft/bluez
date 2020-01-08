@@ -2388,7 +2388,7 @@ static void iv_upd_to(struct l_timeout *upd_timeout, void *user_data)
 		if (net->iv_update)
 			mesh_net_set_seq_num(net, 0);
 
-		net->iv_update = false;
+		mesh_net_set_iv_index(net, net->iv_index, false);
 		mesh_config_write_iv_index(node_config_get(net->node),
 							net->iv_index, false);
 		l_queue_foreach(net->subnets, refresh_beacon, net);
@@ -2407,7 +2407,7 @@ static void iv_upd_to(struct l_timeout *upd_timeout, void *user_data)
 		if (net->iv_update)
 			mesh_net_set_seq_num(net, 0);
 
-		net->iv_update = false;
+		mesh_net_set_iv_index(net, net->iv_index, false);
 
 		if (net->seq_num > IV_UPDATE_SEQ_TRIGGER)
 			mesh_net_iv_index_update(net);
@@ -2563,8 +2563,7 @@ static void update_iv_ivu_state(struct mesh_net *net, uint32_t iv_index,
 		rpl_init(net->node, iv_index);
 	}
 
-	net->iv_index = iv_index;
-	net->iv_update = ivu;
+	mesh_net_set_iv_index(net, iv_index, ivu);
 }
 
 static void process_beacon(void *net_ptr, void *user_data)
@@ -2794,8 +2793,7 @@ bool mesh_net_iv_index_update(struct mesh_net *net)
 		return false;
 
 	net->iv_upd_state = IV_UPD_UPDATING;
-	net->iv_index++;
-	net->iv_update = true;
+	mesh_net_set_iv_index(net, net->iv_index + 1, true);
 	l_queue_foreach(net->subnets, refresh_beacon, net);
 	queue_friend_update(net);
 	net->iv_update_timeout = l_timeout_create(
@@ -3323,6 +3321,8 @@ void mesh_net_set_iv_index(struct mesh_net *net, uint32_t index, bool update)
 {
 	net->iv_index = index;
 	net->iv_update = update;
+
+	node_set_iv_index(net->node, net->iv_index, net->iv_update);
 }
 
 uint16_t mesh_net_get_primary_idx(struct mesh_net *net)
