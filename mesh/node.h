@@ -51,6 +51,8 @@ void node_set_num_elements(struct mesh_node *node, uint8_t num_ele);
 uint8_t node_get_num_elements(struct mesh_node *node);
 uint8_t node_default_ttl_get(struct mesh_node *node);
 bool node_default_ttl_set(struct mesh_node *node, uint8_t ttl);
+void node_set_iv_index(struct mesh_node *node, uint32_t iv_index,
+								bool iv_update);
 bool node_set_sequence_number(struct mesh_node *node, uint32_t seq);
 uint32_t node_get_sequence_number(struct mesh_node *node);
 int node_get_element_idx(struct mesh_node *node, uint16_t ele_addr);
