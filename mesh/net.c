@@ -509,6 +509,9 @@ uint32_t mesh_net_next_seq_num(struct mesh_net *net)
 {
 	uint32_t seq = net->seq_num++;
 
+	if (net->seq_num > SEQ_MASK)
+		net->seq_num = SEQ_MASK;
+
 	node_set_sequence_number(net->node, net->seq_num);
 	return seq;
 }

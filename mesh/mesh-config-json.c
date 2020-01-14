@@ -40,6 +40,7 @@
 #include "mesh/mesh-defs.h"
 #include "mesh/util.h"
 #include "mesh/mesh-config.h"
+#include "mesh/net.h"
 
 /* To prevent local node JSON cache thrashing, minimum update times */
 #define MIN_SEQ_CACHE_TRIGGER	32
@@ -2099,14 +2100,8 @@ bool mesh_config_write_seq_number(struct mesh_config *cfg, uint32_t seq,
 		if (cached < seq + MIN_SEQ_CACHE_VALUE)
 			cached = seq + MIN_SEQ_CACHE_VALUE;
 
-		/* cached value over range protection since
-		 * max sequence number value is uint24_t max (0xFFFFFF)
-		 */
-		if (cached >= MAX_SEQUENCE_NUMBER)
-			cached = IV_UPDATE_SEQ_TRIGGER - 1;
-
-		if (cached < seq)
-			cached = seq;
+		if (cached >= SEQ_MASK)
+			cached = SEQ_MASK;
 
 		l_debug("Seq Cache: %d -> %d", seq, cached);
 
