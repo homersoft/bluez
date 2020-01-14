@@ -2136,7 +2136,7 @@ static struct l_dbus_message *update_seq_num_call(struct l_dbus *dbus,
 	l_debug("Requested sequence number: %u", requested_seq_num);
 
 	/* Do not allow to set sequence number above IV index update level */
-	if (requested_seq_num >= IV_UPDATE_SEQ_TRIGGER)
+	if (requested_seq_nr > SEQ_MASK)
 		return dbus_error(msg, MESH_ERROR_INVALID_ARGS, NULL);
 
 	reply = l_dbus_message_new_method_return(msg);

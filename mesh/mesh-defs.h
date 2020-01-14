@@ -110,7 +110,6 @@
 #define APP_IDX_DEV_LOCAL	0x7fff
 
 #define DEFAULT_SEQUENCE_NUMBER 0x000000
-#define MAX_SEQUENCE_NUMBER	0xffffff
 
 /* Half of Seq-Nums expended */
 #define IV_UPDATE_SEQ_TRIGGER	0x800000
