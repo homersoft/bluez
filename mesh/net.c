@@ -61,17 +61,6 @@ enum _relay_advice {
 	RELAY_ALWAYS		/* Relay enabled, msg to a group */
 };
 
-enum _iv_upd_state {
-	/* Allows acceptance of any iv_index secure net beacon */
-	IV_UPD_INIT,
-	/* Normal, can transition, accept current or old */
-	IV_UPD_NORMAL,
-	/* Updating proc running, we use old, accept old or new */
-	IV_UPD_UPDATING,
-	/* Normal, can *not* transition, accept current or old iv_index */
-	IV_UPD_NORMAL_HOLD,
-};
-
 struct net_key {
 	struct mesh_key_set key_set;
 	unsigned int beacon_id;
@@ -105,7 +94,7 @@ struct mesh_net {
 	bool proxy_enable;
 	bool friend_seq;
 	struct l_timeout *iv_update_timeout;
-	enum _iv_upd_state iv_upd_state;
+	enum iv_upd_state iv_upd_state;
 
 	bool iv_update;
 	uint32_t instant; /* Controller Instant of recent Rx */
@@ -898,6 +887,14 @@ uint32_t mesh_net_get_iv_index(struct mesh_net *net)
 		return 0xffffffff;
 
 	return net->iv_index - net->iv_update;
+}
+
+enum iv_upd_state mesh_net_get_iv_upd_state(struct mesh_net *net)
+{
+	if (!net)
+		return IV_UPD_INIT;
+
+	return net->iv_upd_state;
 }
 
 /* TODO: net key index? */
