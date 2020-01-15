@@ -615,6 +615,24 @@ bool node_default_ttl_set(struct mesh_node *node, uint8_t ttl)
 	return res;
 }
 
+void node_set_iv_index(struct mesh_node *node, uint32_t iv_index,
+								bool iv_update)
+{
+	struct l_dbus *bus = dbus_get_bus();
+
+	if (node->obj_path)
+	{
+		l_dbus_property_changed(bus, node->obj_path,
+						MESH_NODE_INTERFACE, "IvIndex");
+
+		l_dbus_property_changed(bus, node->obj_path,
+					MESH_NODE_INTERFACE, "IvUpdate");
+
+		l_dbus_property_changed(bus, node->obj_path,
+					MESH_NODE_INTERFACE, "IvState");
+	}
+}
+
 bool node_set_sequence_number(struct mesh_node *node, uint32_t seq)
 {
 	if (!node)
@@ -2175,6 +2193,37 @@ static bool ivindex_getter(struct l_dbus *dbus, struct l_dbus_message *msg,
 	return true;
 }
 
+static bool ivstate_getter(struct l_dbus *dbus, struct l_dbus_message *msg,
+					struct l_dbus_message_builder *builder,
+					void *user_data)
+{
+	struct mesh_node *node = user_data;
+	struct mesh_net *net = node_get_net(node);
+	const char *ivupdate = "";
+
+	switch (mesh_net_get_iv_upd_state(net)) {
+	case IV_UPD_INIT:
+		ivupdate = "init";
+		break;
+
+	case IV_UPD_NORMAL:
+		ivupdate = "normal";
+		break;
+
+	case IV_UPD_UPDATING:
+		ivupdate = "updating";
+		break;
+
+	case IV_UPD_NORMAL_HOLD:
+		ivupdate = "hold";
+		break;
+	}
+
+	l_dbus_message_builder_append_basic(builder, 's', ivupdate);
+
+	return true;
+}
+
 static bool seq_num_getter(struct l_dbus *dbus, struct l_dbus_message *msg,
 				struct l_dbus_message_builder *builder,
 				void *user_data)
@@ -2257,6 +2306,8 @@ static void setup_node_interface(struct l_dbus_interface *iface)
 									NULL);
 	l_dbus_interface_property(iface, "IvIndex", 0, "u", ivindex_getter,
 									NULL);
+	l_dbus_interface_property(iface, "IvState", 0, "s",
+							ivstate_getter, NULL);
 	l_dbus_interface_property(iface, "SequenceNumber", 0, "u",
 							seq_num_getter, NULL);
 	l_dbus_interface_property(iface, "SecondsSinceLastHeard", 0, "u",
