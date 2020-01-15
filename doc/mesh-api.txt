@@ -446,6 +446,17 @@ Properties:
 		that the current network is on. This information is only useful
 		for provisioning.
 
+	string IvState [read-only]
+
+		This property may be read at any time to determine the IV
+		Update state that the node is on.
+
+		Possible values:
+			"init"
+			"normal"
+			"updating"
+			"hold"
+
 	uint32 SecondsSinceLastHeard [read-only]
 
 		This property may be read at any time to determine the number of
