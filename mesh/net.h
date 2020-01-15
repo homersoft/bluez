@@ -219,6 +219,17 @@ struct mesh_friend_msg {
 	} u;
 };
 
+enum iv_upd_state {
+	/* Allows acceptance of any iv_index secure net beacon */
+	IV_UPD_INIT,
+	/* Normal, can transition, accept current or old */
+	IV_UPD_NORMAL,
+	/* Updating proc running, we use old, accept old or new */
+	IV_UPD_UPDATING,
+	/* Normal, can *not* transition, accept current or old iv_index */
+	IV_UPD_NORMAL_HOLD,
+};
+
 typedef void (*mesh_status_func_t)(void *user_data, bool result);
 
 struct mesh_net *mesh_net_new(struct mesh_node *node);
@@ -250,6 +261,7 @@ int mesh_net_update_key(struct mesh_net *net, uint16_t net_idx,
 bool mesh_net_set_key(struct mesh_net *net, uint16_t idx, const uint8_t *key,
 					const uint8_t *new_key, uint8_t phase);
 uint32_t mesh_net_get_iv_index(struct mesh_net *net);
+enum iv_upd_state mesh_net_get_iv_upd_state(struct mesh_net *net);
 void mesh_net_get_snb_state(struct mesh_net *net,
 					uint8_t *flags, uint32_t *iv_index);
 bool mesh_net_get_key(struct mesh_net *net, bool new_key, uint16_t idx,
