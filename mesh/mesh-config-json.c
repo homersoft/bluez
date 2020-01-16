@@ -381,7 +381,7 @@ static bool read_seq_number(json_object *jobj, uint32_t *seq_number)
 	if (!val && errno == EINVAL)
 		return false;
 
-	if (val < 0 || val > 0xffffff)
+	if (val < 0 || val > SEQ_MASK + 1)
 		return false;
 
 	*seq_number = (uint32_t) val;
@@ -2100,8 +2100,12 @@ bool mesh_config_write_seq_number(struct mesh_config *cfg, uint32_t seq,
 		if (cached < seq + MIN_SEQ_CACHE_VALUE)
 			cached = seq + MIN_SEQ_CACHE_VALUE;
 
-		if (cached >= SEQ_MASK)
-			cached = SEQ_MASK;
+		/* when the cached exceeds the max allowed seq nr value,
+		 * update it with out of range value in order not to send
+		 * again the message with max seq nr after application crash
+		 */
+		if (cached > SEQ_MASK)
+			cached = SEQ_MASK + 1;
 
 		l_debug("Seq Cache: %d -> %d", seq, cached);
 
