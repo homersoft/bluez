@@ -47,6 +47,9 @@
 
 #define MIN_COMP_SIZE 14
 
+/* COMP_ID_SIZE consists of length of the CID, PID and VID */
+#define COMP_ID_SIZE 6
+
 #define MESH_NODE_PATH_PREFIX "/node"
 
 /* Default values for a new locally created node */
@@ -1389,15 +1392,49 @@ static bool check_req_node(struct managed_obj_request *req)
 		uint16_t attach_len = node_generate_comp(req->attach,
 					attach_comp, sizeof(attach_comp));
 
+		uint8_t keyring_dev_key[16];
+
 		/* Ignore feature bits in Composition Compare */
 		node_comp[8] = 0;
 		attach_comp[8] = 0;
 
+		/* Ignore CID, PID, VID in Composition Compare */
 		if (node_len != attach_len ||
-				memcmp(node_comp, attach_comp, node_len)) {
+					memcmp(node_comp + COMP_ID_SIZE,
+						attach_comp + COMP_ID_SIZE,
+						node_len - COMP_ID_SIZE)) {
 			l_debug("Failed to verify app's composition data");
 			return false;
 		}
+
+		/* Compare CID, VID and PID */
+		if (!memcmp(node_comp, attach_comp, COMP_ID_SIZE))
+			return true;
+
+		/* Verify the device key */
+		keyring_get_remote_dev_key(req->attach, req->attach->primary,
+							keyring_dev_key);
+
+		if (memcmp(keyring_dev_key,
+					node_get_device_key(req->attach), 16))
+			return false;
+
+		if (!mesh_config_write_comp_id(req->attach->cfg,
+							req->node->comp.cid,
+							req->node->comp.pid,
+							req->node->comp.vid)) {
+			l_debug("Failed to update comp id data");
+			return false;
+		}
+
+		if (!mesh_config_save(req->attach->cfg, true, NULL, NULL)) {
+			l_debug("Failed to store comp id");
+			return false;
+		}
+
+		memcpy(&req->attach->comp, &req->node->comp,
+					sizeof(struct node_composition) -
+						sizeof(req->node->comp.crpl));
 	}
 
 	return true;
