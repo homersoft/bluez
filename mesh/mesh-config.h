@@ -135,6 +135,8 @@ bool mesh_config_write_unicast(struct mesh_config *cfg, uint16_t unicast);
 bool mesh_config_write_relay_mode(struct mesh_config *cfg, uint8_t mode,
 					uint8_t count, uint16_t interval);
 bool mesh_config_write_ttl(struct mesh_config *cfg, uint8_t ttl);
+bool mesh_config_write_comp_id(struct mesh_config *cfg, uint16_t cid,
+						uint16_t pid, uint16_t vid);
 bool mesh_config_write_mode(struct mesh_config *cfg, const char *keyword,
 								int value);
 bool mesh_config_model_binding_add(struct mesh_config *cfg, uint16_t ele_addr,

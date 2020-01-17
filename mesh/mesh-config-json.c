@@ -1521,6 +1521,24 @@ static bool write_mode(json_object *jobj, const char *keyword, int value)
 	return true;
 }
 
+static bool write_comp_id(json_object *jobj, uint16_t cid, uint16_t pid,
+								uint16_t vid)
+{
+	if (!jobj)
+		return false;
+
+	if (!write_uint16_hex(jobj, "cid", cid))
+		return false;
+
+	if (!write_uint16_hex(jobj, "pid", pid))
+		return false;
+
+	if (!write_uint16_hex(jobj, "vid", vid))
+		return false;
+
+	return true;
+}
+
 bool mesh_config_write_mode(struct mesh_config *cfg, const char *keyword,
 								int value)
 {
@@ -1660,16 +1678,10 @@ static struct mesh_config *create_config(const char *cfg_path,
 
 	jnode = json_object_new_object();
 
-	/* CID, PID, VID, crpl */
-	if (!write_uint16_hex(jnode, "cid", node->cid))
+	if (!write_comp_id(jnode, node->cid, node->pid, node->vid))
 		return NULL;
 
-	if (!write_uint16_hex(jnode, "pid", node->pid))
-		return NULL;
-
-	if (!write_uint16_hex(jnode, "vid", node->vid))
-		return NULL;
-
+	/* CRPL */
 	if (!write_uint16_hex(jnode, "crpl", node->crpl))
 		return NULL;
 
@@ -2130,6 +2142,18 @@ bool mesh_config_write_ttl(struct mesh_config *cfg, uint8_t ttl)
 		return false;
 
 	return save_config(cfg->jnode, cfg->node_dir_path);
+}
+
+bool mesh_config_write_comp_id(struct mesh_config *cfg, uint16_t cid,
+						uint16_t pid, uint16_t vid)
+{
+	if (!cfg)
+		return false;
+
+	if (!write_comp_id(cfg->jnode, cid, pid, vid))
+		return false;
+
+	return true;
 }
 
 static bool load_node(const char *fname, const uint8_t uuid[16],
