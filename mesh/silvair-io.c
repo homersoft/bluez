@@ -15,6 +15,9 @@
 #include "mesh/mesh-io-api.h"
 #include "mesh/silvair-io.h"
 
+#define FRAME_BUFFER_SIZE 512
+#define SLIP_FRAME_BUFFER_SIZE ((2*FRAME_BUFFER_SIZE) + 2)
+#define OUT_RINGBUF_SIZE 4096
 
 #define SLIP_END	0300
 #define SLIP_ESC	0333
@@ -75,7 +78,7 @@ struct silvair_pkt_hdr {
 	uint8_t			pld_len;
 	uint8_t			version;
 	uint16_t		counter;
-	enum silvair_pkt_type	type :8;
+	enum silvair_pkt_type	type:8;
 } __packed;
 
 struct silvair_rx_evt_hdr {
@@ -88,12 +91,12 @@ struct silvair_rx_evt_hdr {
 } __packed;
 
 struct silvair_adv_hdr {
-	uint8_t	type	: 4;
-	uint8_t	__rfu1	: 2;
-	uint8_t	tx_add	: 1;
-	uint8_t	rx_add	: 1;
-	uint8_t	size	: 6;
-	uint8_t	__rfu2	: 2;
+	uint8_t	type:4;
+	uint8_t	__rfu1:2;
+	uint8_t	tx_add:1;
+	uint8_t	rx_add:1;
+	uint8_t	size:6;
+	uint8_t	__rfu2:2;
 } __packed;
 
 struct silvair_rx_evt_pld {
@@ -107,8 +110,8 @@ struct silvair_rx_evt_pld {
 struct silvair_tx_cmd_hdr {
 	uint8_t			hdr_len;
 	uint8_t			channels[8];
-	enum silvair_phy	phy : 8;
-	enum silvair_pwr	pwr : 8;
+	enum silvair_phy	phy:8;
+	enum silvair_pwr	pwr:8;
 	uint16_t		counter;
 } __packed;
 
@@ -131,14 +134,27 @@ struct silvair_keep_alive_cmd_pld {
 	uint8_t		last_fault[128];
 } __packed;
 
+static bool buffer_write(struct l_io *l_io, void *user_data)
+{
+	struct silvair_io *io = user_data;
+
+	(void)l_ringbuf_write(io->out_ringbuf, l_io_get_fd(l_io));
+
+	return l_ringbuf_len(io->out_ringbuf);
+}
 
 static bool simple_write(struct silvair_io *io,
 				uint8_t *buf,
 				size_t size)
 {
-	int w = write(l_io_get_fd(io->l_io), buf, size);
+	if (l_ringbuf_avail(io->out_ringbuf) < size) {
+		l_warn("Write failed. Not enough space in the buffer.");
+		return false;
+	}
 
-	return (w > 0 && (size_t)w == size);
+	(void)l_ringbuf_append(io->out_ringbuf, buf, size);
+
+	return l_io_set_write_handler(io->l_io, buffer_write, io, NULL);
 }
 
 static bool slip_write(struct silvair_io *io,
@@ -149,32 +165,44 @@ static bool slip_write(struct silvair_io *io,
 	static uint8_t esc_end[2] = { SLIP_ESC, SLIP_ESC_END };
 	static uint8_t esc_esc[2] = { SLIP_ESC, SLIP_ESC_ESC };
 
-	if (!simple_write(io, &end, 1))
-		return false;
+	uint8_t slip_buf[SLIP_FRAME_BUFFER_SIZE] = { 0 };
+	size_t idx = 0;
+
+	slip_buf[idx++] = end;
 
 	for (uint8_t *i = buf; i != buf + size; ++i) {
 		switch (*i) {
-
 		case SLIP_END:
-			if (!simple_write(io, esc_end, 2))
+			if (idx + sizeof(esc_end) >= sizeof(slip_buf))
 				return false;
+
+			memcpy(slip_buf + idx, esc_end, sizeof(esc_end));
+			idx += sizeof(esc_end);
 			break;
 
 		case SLIP_ESC:
-			if (!simple_write(io, esc_esc, 2))
+			if (idx + sizeof(esc_esc) >= sizeof(slip_buf))
 				return false;
+
+			memcpy(slip_buf + idx, esc_esc, sizeof(esc_esc));
+			idx += sizeof(esc_esc);
 			break;
 
 		default:
-			if (simple_write(io, i, 1) != 1)
+			if (idx + sizeof(*i) >= sizeof(slip_buf))
 				return false;
+
+			slip_buf[idx++] = *i;
+			break;
 		}
 	}
 
-	if (!simple_write(io, &end, 1))
+	if (idx + sizeof(end) >= sizeof(slip_buf))
 		return false;
 
-	return true;
+	slip_buf[idx++] = end;
+
+	return simple_write(io, slip_buf, idx);
 }
 
 static bool io_write(struct silvair_io *io,
@@ -394,7 +422,7 @@ static bool send_message(struct silvair_io *io,
 				size_t size)
 {
 	int len = 0;
-	uint8_t data[512] = { 0 };
+	uint8_t data[FRAME_BUFFER_SIZE] = { 0 };
 
 	len = build_packet(&data[0], buf, size, SILVAIR_CMD_TX);
 	return io_write(io, data, len);
@@ -405,7 +433,7 @@ static bool send_keep_alive_request(struct silvair_io *io,
 				size_t size)
 {
 	int len = 0;
-	uint8_t data[512] = { 0 };
+	uint8_t data[FRAME_BUFFER_SIZE] = { 0 };
 
 	len = build_packet(&data[0], buf, size, SILVAIR_CMD_KEEP_ALIVE);
 	return io_write(io, data, len);
@@ -550,6 +578,8 @@ struct silvair_io *silvair_io_new(int fd,
 	io->l_io = l_io_new(fd);
 	io->slip.kernel_support = kernel_support;
 
+	io->out_ringbuf = l_ringbuf_new(OUT_RINGBUF_SIZE);
+
 	io->process_rx_cb = rx_cb;
 	io->error_cb = error_cb;
 
@@ -608,6 +638,9 @@ void silvair_io_destroy(struct silvair_io *io)
 
 	if (io->l_io)
 		l_io_destroy(io->l_io);
+
+	if (io->out_ringbuf)
+		l_ringbuf_free(io->out_ringbuf);
 
 	if (io->keep_alive_watchdog)
 		l_timeout_remove(io->keep_alive_watchdog);
