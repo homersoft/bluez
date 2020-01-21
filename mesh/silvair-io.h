@@ -43,6 +43,7 @@ struct slip {
 
 struct silvair_io {
 	struct l_io		*l_io;
+	struct l_ringbuf	*out_ringbuf;
 
 	struct l_timeout	*keep_alive_watchdog;
 	struct l_timeout	*disconnect_watchdog;
