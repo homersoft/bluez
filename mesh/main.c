@@ -73,7 +73,7 @@ static void usage(void)
 	       "\t\tavailable one\n"
 	       "\tsilvair:<tty>\n"
 	       "\t\tUse Silvair Radio SLIP protocol on <tty>\n"
-	       "\ttcpserver:<port>\n"
+	       "\ttcpserver:<port>,<uuid>,<dev-key>,<net-key>\n"
 	       "\t\tUse Silvair Radio SLIP protocol over TCP/IP\n");
 }
 
