@@ -20,6 +20,8 @@
 #include <stdbool.h>
 #include <unistd.h>
 
+#include <openssl/ssl.h>
+
 struct silvair_io;
 struct l_io;
 struct l_timeout;
@@ -54,6 +56,10 @@ struct silvair_io {
 	struct slip		slip;
 	process_packet_cb	process_rx_cb;
 	void *context;
+
+	SSL                     *tls_conn;
+	bool                    tls_read_wants_write;
+	bool                    tls_write_wants_read;
 };
 
 struct silvair_io *silvair_io_new(int fd,
@@ -61,7 +67,8 @@ struct silvair_io *silvair_io_new(int fd,
 				process_packet_cb rx_cb,
 				io_error_cb read_failed_cb,
 				io_disconnect_cb disc_cb,
-				void *context);
+				void *context,
+				SSL *tls_conn);
 
 int silvair_io_get_fd(struct silvair_io *io);
 

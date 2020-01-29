@@ -36,13 +36,24 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include <openssl/bio.h>
+
 #include "src/shared/io.h"
 
+#include "mesh/crypto.h"
 #include "mesh/mesh-io.h"
 #include "mesh/mesh-io-api.h"
 #include "mesh/mesh-io-tcpserver.h"
 #include "mesh/silvair-io.h"
 
+
+#define UUID_LEN		(16)
+#define DEV_KEY_LEN		(16)
+#define NET_KEY_LEN		(16)
+
+static const char *tls_ciphers = "ECDHE-PSK-CHACHA20-POLY1305";
 
 struct mesh_io_private {
 
@@ -57,9 +68,17 @@ struct mesh_io_private {
 	struct l_queue		*tx_pkts;
 
 	/* Simple filtering on AD type only */
-	uint8_t			filters[4];
+	uint8_t				filters[4];
 	struct tx_pkt		*tx;
+
+	/* TLS context */
+	SSL_CTX				*tls_ctx;
+
+	uint8_t				*uuid;
+	uint8_t				*dev_key;
+	uint8_t				*net_key;
 };
+
 
 struct pvt_rx_reg {
 	uint8_t filter_id;
@@ -176,8 +195,7 @@ static void io_error_callback(struct silvair_io *silvair_io)
 {
 	int fd = silvair_io_get_fd(silvair_io);
 
-	if (fd > 0)
-	{
+	if (fd > 0) {
 		get_fd_info(fd, "Disconnecting the TCP client", IO_TYPE_CLIENT);
 
 		/* shutdown will trigger the io_disconnect_callback() */
@@ -216,6 +234,9 @@ static bool io_accept_callback(struct l_io *l_io, void *user_data)
 	/* Listening socket descriptor */
 	int server_fd;
 
+	SSL *tls_conn = NULL;
+	BIO *sbio = NULL;
+
 	server_fd = l_io_get_fd(l_io);
 
 	if (server_fd < 0) {
@@ -234,21 +255,38 @@ static bool io_accept_callback(struct l_io *l_io, void *user_data)
 		return false;
 	}
 
+
 	if (fcntl(newfd, F_SETFL,
 			fcntl(newfd, F_GETFL, 0) | O_NONBLOCK) != 0) {
 		l_error("client fcntl error");
 		return false;
 	}
 
+	// TLS Connection
+	tls_conn = SSL_new(mesh_io->pvt->tls_ctx);
+	if (!tls_conn) {
+		l_error("Failed to create SSL object.");
+		goto error;
+	}
+
+	sbio = BIO_new_socket(newfd, BIO_NOCLOSE);
+	if (!sbio) {
+		l_error("Failed to create BIO object.");
+		goto error;
+	}
+
+	SSL_set_ex_data(tls_conn, 0, mesh_io->pvt);
+	SSL_set_bio(tls_conn, sbio, sbio);
+	SSL_set_accept_state(tls_conn);
+
 	get_fd_info(newfd, "New client accepted", IO_TYPE_CLIENT);
 
-	silvair_io = silvair_io_new(newfd, false, process_rx,
-					io_error_callback,
-					io_disconnect_callback, mesh_io);
+	silvair_io = silvair_io_new(newfd, false, process_rx, io_error_callback,
+		io_disconnect_callback, mesh_io, tls_conn);
 
 	if (!silvair_io) {
 		l_error("silvair_io_new error");
-		return false;
+		goto error;
 	}
 
 	l_io_set_close_on_destroy(silvair_io->l_io, true);
@@ -260,6 +298,13 @@ static bool io_accept_callback(struct l_io *l_io, void *user_data)
 			ntohs(clientaddr.sin_port));
 
 	return true;
+
+error:
+	free(silvair_io);
+	BIO_free(sbio);
+	SSL_free(tls_conn);
+
+	return false;
 }
 
 static void tcpserver_io_init_done(void *user_data)
@@ -267,6 +312,109 @@ static void tcpserver_io_init_done(void *user_data)
 	struct mesh_io *mesh_io = user_data;
 
 	mesh_io->pvt->ready_callback(mesh_io->pvt->user_data, true);
+}
+
+static unsigned int tls_psk_server_cb(SSL *ssl, const char *identity,
+	unsigned char *psk, unsigned int max_psk_len)
+{
+	const char k1_info[] = { 'i', 'd', 'p', 's', 'k' };
+	unsigned int psk_len = 0;
+
+	struct mesh_io_private *pvt;
+	uint8_t net_id[8];
+	char s1_info[24];
+	uint8_t id[16];
+	char *id_str;
+
+	pvt = SSL_get_ex_data(ssl, 0);
+
+	if (!pvt)
+		return 0;
+
+	// net_id = k3(net_key)
+	if (!mesh_crypto_k3(pvt->net_key, net_id))
+		return 0;
+
+	// s1_info = (uuid|net_id)
+	memcpy(s1_info, pvt->uuid, UUID_LEN);
+	memcpy(s1_info + UUID_LEN, net_id, sizeof(net_id));
+
+	// id = s1(s1_info)
+	if (!mesh_crypto_s1(s1_info, sizeof(s1_info), id))
+		return 0;
+
+	id_str = l_util_hexstring_upper(id, sizeof(id));
+
+	// compare str format 'identity' and 'id_str'
+	if (!strcmp(identity, id_str))
+		goto done;
+
+	// psk = k1(dev_key, id, "idpsk")
+	if (!mesh_crypto_k1(pvt->dev_key, id, k1_info, sizeof(k1_info), psk))
+		goto done;
+
+	// psk is constant length
+	psk_len = 16;
+
+done:
+	l_free(id_str);
+	return psk_len;
+}
+
+static bool tls_ctx_init(struct mesh_io_private *pvt)
+{
+	int off = SSL_OP_NO_TLSv1_3;
+
+	ERR_load_crypto_strings();
+
+	SSL_library_init();
+
+	pvt->tls_ctx = SSL_CTX_new(TLS_server_method());
+	if (!pvt->tls_ctx) {
+		l_error("Failed to alloc TLS context object.");
+		return false;
+	}
+
+	SSL_CTX_set_quiet_shutdown(pvt->tls_ctx, 0);
+	SSL_CTX_set_options(pvt->tls_ctx, off);
+	SSL_CTX_set_psk_server_callback(pvt->tls_ctx, tls_psk_server_cb);
+
+	if (!SSL_CTX_set_cipher_list(pvt->tls_ctx, tls_ciphers)) {
+		l_error("Failed to set cipher list: '%s'", tls_ciphers);
+		return false;
+	}
+
+	l_info("TLS initialization: done");
+	return true;
+}
+
+static bool process_tls_args(char *argv[],
+				size_t argc, struct mesh_io_private *pvt)
+{
+	size_t len;
+
+	pvt->uuid = l_util_from_hexstring(argv[1], &len);
+
+	if (!pvt->uuid || len != UUID_LEN) {
+		l_error("Invalid UUID length");
+		return false;
+	}
+
+	pvt->dev_key = l_util_from_hexstring(argv[2], &len);
+
+	if (!pvt->dev_key || len != DEV_KEY_LEN) {
+		l_error("Invalid 'dev-key' length");
+		return false;
+	}
+
+	pvt->net_key = l_util_from_hexstring(argv[3], &len);
+
+	if (!pvt->net_key || len != NET_KEY_LEN) {
+		l_error("Invalid 'net-key' length");
+		return false;
+	}
+
+	return true;
 }
 
 static bool tcpserver_io_init(struct mesh_io *mesh_io, void *opts,
@@ -282,26 +430,49 @@ static bool tcpserver_io_init(struct mesh_io *mesh_io, void *opts,
 	char *opt = opts;
 	char *delim;
 
+	char *argv[4] = { 0 };
+	size_t argc = 0;
+
+	if (!mesh_io)
+		return false;
+
+	mesh_io->pvt = l_new(struct mesh_io_private, 1);
+
 	do {
-		delim = strchr(opt, ':');
+		delim = strchr(opt, ',');
 
 		if (delim)
 			*delim = '\0';
 
-		if (sscanf(opt, "%hu", &port) != 1)
+		argv[argc++] = opt;
+
+		if (delim)
+			opt = delim + 1;
+
+	} while (delim && (argc < L_ARRAY_SIZE(argv)));
+
+	if (argc > 0) {
+		if (sscanf(argv[0], "%hu", &port) != 1)
 			return false;
 
-		opt = delim + 1;
-
-	} while (delim);
-
-	if (!mesh_io || mesh_io->pvt)
+		if (!port)
+			return false;
+	} else {
+		l_error("Invalid number of arguments.");
 		return false;
+	}
 
-	if (!port)
+	// Required TLS arguments: <UUID>,<dev_key>,<net_key>
+	if (argc == 4) {
+		if (!process_tls_args(argv, argc, mesh_io->pvt))
+			return false;
+
+		if (!tls_ctx_init(mesh_io->pvt))
+			return false;
+	} else {
+		l_error("Invalid number of arguments.");
 		return false;
-
-	mesh_io->pvt = l_new(struct mesh_io_private, 1);
+	}
 
 	/* Get the listener */
 	server_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -388,6 +559,10 @@ static bool tcpserver_io_destroy(struct mesh_io *mesh_io)
 	l_queue_destroy(pvt->tx_pkts, l_free);
 	l_timeout_remove(pvt->tx_timeout);
 
+	l_free(pvt->uuid);
+	l_free(pvt->dev_key);
+	l_free(pvt->net_key);
+
 	l_free(pvt);
 	mesh_io->pvt = NULL;
 	return true;
@@ -471,8 +646,7 @@ static void send_pkt(struct mesh_io *mesh_io,
 }
 
 static bool tcpserver_io_send(struct mesh_io *mesh_io,
-					struct mesh_io_send_info *info,
-					const uint8_t *data, uint16_t len)
+	struct mesh_io_send_info *info, const uint8_t *data, uint16_t len)
 {
 	uint32_t instant;
 	uint16_t interval;

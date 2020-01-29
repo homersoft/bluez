@@ -24,6 +24,8 @@
 #define SLIP_ESC_END	0334
 #define SLIP_ESC_ESC	0335
 
+static bool io_read_callback(struct l_io *l_io, void *user_data);
+
 static const uint32_t silvair_access_address		= 0x8e89bed6;
 static const uint16_t keep_alive_watchdog_period_ms	= 1000;
 static const uint16_t disconnect_watchdog_period_ms	= 10000;
@@ -134,13 +136,74 @@ struct silvair_keep_alive_cmd_pld {
 	uint8_t		last_fault[128];
 } __packed;
 
-static bool buffer_write(struct l_io *l_io, void *user_data)
+
+static void io_error_callback(void *user_data)
 {
 	struct silvair_io *io = user_data;
 
-	(void)l_ringbuf_write(io->out_ringbuf, l_io_get_fd(l_io));
+	if (io->error_cb)
+		io->error_cb(io);
+}
+
+static int io_write_tls(struct silvair_io *io, uint8_t *buf, size_t buf_len)
+{
+	int err;
+	int ret;
+
+	if (io->tls_read_wants_write) {
+		io->tls_read_wants_write = false;
+
+		l_io_set_read_handler(io->l_io, io_read_callback, io, NULL);
+	}
+
+	ret = SSL_write(io->tls_conn, buf, buf_len);
+	err = SSL_get_error(io->tls_conn, ret);
+
+	if (err == SSL_ERROR_WANT_READ) {
+		io->tls_write_wants_read = true;
+
+		l_io_set_write_handler(io->l_io, NULL, NULL, NULL);
+		l_io_set_read_handler(io->l_io, io_read_callback, io, NULL);
+	}
+
+	return ret;
+}
+
+static bool io_write_callback(struct l_io *l_io, void *user_data)
+{
+	struct silvair_io *io = user_data;
+
+	if (io->tls_conn) {
+		int ret;
+		void *buf;
+		size_t buf_len;
+
+		buf = l_ringbuf_peek(io->out_ringbuf, 0, &buf_len);
+
+		ret = io_write_tls(io, buf, buf_len);
+
+		switch (SSL_get_error(io->tls_conn, ret)) {
+		case SSL_ERROR_WANT_READ:
+		case SSL_ERROR_WANT_WRITE:
+			return true;
+
+		case SSL_ERROR_NONE:
+			break;
+
+		default:
+			goto error;
+		}
+
+		l_ringbuf_drain(io->out_ringbuf, ret);
+	} else {
+		(void)l_ringbuf_write(io->out_ringbuf, l_io_get_fd(l_io));
+	}
 
 	return l_ringbuf_len(io->out_ringbuf);
+
+error:
+	io_error_callback(io);
+	return false;
 }
 
 static bool simple_write(struct silvair_io *io,
@@ -154,12 +217,10 @@ static bool simple_write(struct silvair_io *io,
 
 	(void)l_ringbuf_append(io->out_ringbuf, buf, size);
 
-	return l_io_set_write_handler(io->l_io, buffer_write, io, NULL);
+	return l_io_set_write_handler(io->l_io, io_write_callback, io, NULL);
 }
 
-static bool slip_write(struct silvair_io *io,
-				uint8_t *buf,
-				size_t size)
+static bool slip_write(struct silvair_io *io, uint8_t *buf, size_t size)
 {
 	static uint8_t end = SLIP_END;
 	static uint8_t esc_end[2] = { SLIP_ESC, SLIP_ESC_END };
@@ -450,12 +511,28 @@ static void silvair_process_rx(struct silvair_io *io,
 		process_slip(io, buf, size, user_data);
 }
 
-static void io_error_callback(void *user_data)
+static int io_read_tls(struct silvair_io *io, uint8_t *buf, size_t buf_len)
 {
-	struct silvair_io *io = user_data;
+	int err;
+	int ret;
 
-	if (io->error_cb)
-		io->error_cb(io);
+	if (io->tls_write_wants_read) {
+		io->tls_write_wants_read = false;
+
+		l_io_set_write_handler(io->l_io, io_write_callback, io, NULL);
+	}
+
+	ret = SSL_read(io->tls_conn, buf, buf_len);
+	err = SSL_get_error(io->tls_conn, ret);
+
+	if (err == SSL_ERROR_WANT_WRITE) {
+		io->tls_read_wants_write = true;
+
+		l_io_set_read_handler(io->l_io, NULL, NULL, NULL);
+		l_io_set_write_handler(io->l_io, io_write_callback, io, NULL);
+	}
+
+	return ret;
 }
 
 static bool io_read_callback(struct l_io *l_io, void *user_data)
@@ -472,17 +549,33 @@ static bool io_read_callback(struct l_io *l_io, void *user_data)
 		goto error;
 	}
 
-	r = read(fd, buf, sizeof(buf));
+	if (io->tls_conn) {
+		r = io_read_tls(io, buf, sizeof(buf));
 
-	if (r <= 0) {
+		switch (SSL_get_error(io->tls_conn, r)) {
+		case SSL_ERROR_WANT_READ:
+		case SSL_ERROR_WANT_WRITE:
+			return true;
 
-		if (r != 0) {
-			l_error("read error");
+		case SSL_ERROR_NONE:
+			break;
+
+		default:
 			goto error;
 		}
+	} else {
+		r = read(fd, buf, sizeof(buf));
 
-		/* Disconnect and remove client from the queue */
-		goto error;
+		if (r <= 0) {
+
+			if (r != 0) {
+				l_error("read error");
+				goto error;
+			}
+
+			/* Disconnect and remove client from the queue */
+			goto error;
+		}
 	}
 
 	silvair_process_rx(io, buf, r, mesh_io);
@@ -562,7 +655,7 @@ struct silvair_io *silvair_io_new(int fd,
 				process_packet_cb rx_cb,
 				io_error_cb error_cb,
 				io_disconnect_cb disc_cb,
-				void *context)
+				void *context, SSL *tls_conn)
 {
 	struct silvair_io *io = l_new(struct silvair_io, 1);
 
@@ -582,6 +675,7 @@ struct silvair_io *silvair_io_new(int fd,
 
 	io->process_rx_cb = rx_cb;
 	io->error_cb = error_cb;
+	io->tls_conn = tls_conn;
 
 	/* io read destroy callback will be called when io_read_callback */
 	 /* return false */
@@ -647,4 +741,7 @@ void silvair_io_destroy(struct silvair_io *io)
 
 	if (io->disconnect_watchdog)
 		l_timeout_remove(io->disconnect_watchdog);
+
+	if (io->tls_conn)
+		SSL_free(io->tls_conn);
 }
