@@ -1,0 +1,137 @@
+BlueZ D-Bus Mesh Adapter API description
+********************************
+
+Mesh Network Hierarchy
+======================
+Service		org.bluez.mesh
+Interface	org.bluez.mesh.AdapterManager1
+Object path	/org/bluez/mesh/adapter
+
+Methods:
+	uint64 token Add(string io_type, dict config)
+
+	    This is method that an application has to call to
+	    add a new mesh adapter with an IO type.
+
+	    The config parameter is a dictionary with configuration
+	    options specific for the chosen IO type. In case of "tcpserver",
+	    mesh adapter with given UUID and NetworkKey can added only once.
+	    When adapter with UUID and NetworkKey is already exists then
+	    AlreadyExists error will be raised. When one of required
+	    configuration options is missing then InvalidArguments
+	    error will be raised.
+
+        string io_type
+
+            This parameter choose which IO type will be used
+            to communicate with an adapter.
+
+            The defined values are: "tcpserver", "silvair"
+
+        dict config
+
+            Options available for the "tcpserver" IO:
+
+                int Port
+
+                    Port for listening for incoming connections.
+                    This field is mandatory.
+
+                array{byte}[16] UUID
+
+                    uGateway UUID in 16-byte array format.
+                    This field is mandatory.
+
+                array{byte}[16] DeviceKey
+
+                    uGateway Device Key in 16-byte array format.
+                    This field is mandatory.
+
+                array{byte}[16] NetworkKey
+
+                    uGateway Network Key in 16-byte array format.
+                    Device must be already provisioned.
+                    This field is mandatory.
+
+            Options available for the "silvair" IO:
+
+                string SerialPort
+
+                    Serial port to which Silvair Radio is attached.
+
+                int Baudrate
+
+                    Serial port baudrate value.
+
+                string Mode
+
+                    Serial port mode: 8N1.
+
+		PossibleErrors:
+		    org.bluez.mesh.Error.InvalidArguments,
+		    org.bluez.mesh.Error.AlreadyExists,
+
+	void Remove(uint64 token)
+
+        This removes the configuration information about the mesh adapter
+        identified by the 64-bit token parameter. The token parameter
+        has been obtained as a result of successful Add() method call.
+        When configuration for adapter with passed toked does not exist
+        NotFound error will be raised.
+
+	    PossibleErrors:
+	        org.bluez.mesh.Error.NotFound,
+	        org.bluez.mesh.Error.Failed
+
+	void Configure(uint64 token, dict config)
+
+	    This configures mesh adapter identified by the 64-bit token
+	    parameter. The token parameter has been obtained as a result of
+	    successful Add() method call. The config parameter should
+	    contains options related to selected IO type, in case of
+	    passed parameter that is not supported by the IO type, then
+	    InvalidArguments error will be raised. If configuration with
+	    passed token doesn't exist then NotFound error will be raised.
+
+	    PossibleErrors:
+	        org.bluez.mesh.Error.NotFound,
+	        org.bluez.mesh.Error.InvalidArguments
+
+
+Mesh Network Hierarchy
+======================
+Service		org.bluez.mesh
+Interface	org.bluez.mesh.Adapter1
+Object path	/org/bluez/mesh/adapter/{io_type}/<id>
+                where <id> can be Adapter UUID or
+                Serial port name (depends on IO type).
+
+Methods:
+	void Remove(uint64 token)
+
+        This removes the configuration information about the mesh adapter
+        identified by the 64-bit token parameter. The token parameter
+        has been obtained as a result of successful Add() method call.
+
+		PossibleErrors:
+		    org.bluez.mesh.Error.NotFound,
+		    org.bluez.mesh.Error.Failed
+
+Properties:
+    bool Connected [read-only]
+
+        This property indicates if the mesh adapter is connected.
+
+    string LastError [read-only]
+
+        This property indicates last error.
+
+        The defined values are: "none", "handshake-error"
+
+    uint64 SentCount [read-only]
+
+        This property indicates count of sent messages.
+
+    uint64 ReceivedCount [read-only]
+
+        This property indicates count of received messages.
