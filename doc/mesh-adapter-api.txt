@@ -1,11 +1,101 @@
 BlueZ D-Bus Mesh Adapter API description
 ********************************
 
+Overview
+========
+
+This document describes IO types and API for mesh adapters management.
+It allows for adding / configure new mesh adapter and store it configuration
+in the persistent storage. It is possible to add more than one mesh adapter.
+
+
+Configuration options
+=====================
+IO type: "tcpserver"
+
+    Description:
+
+        This IO uses TCP and TLS-PSK protocols to data exchange.
+
+        Security parameters are calculated based on UUID, Device Key and
+        Network Key.
+
+        Formula to calculate TLS-PSK identity and pre-shared key:
+
+            NetworkId = k4(Network Key)
+            Identity = k1(UUID | NetworkId)
+            PSK = s1(Identity, Device Key, "idpsk")
+
+    Options:
+
+        string Address [optional]
+
+            Address on which daemon listening for incoming connections.
+            Default: 0.0.0.0 (ANY)
+
+        int Port [optional]
+
+            Port for listening for incoming connections.
+            Default: 65267
+
+        array{byte}[16] UUID [identifier]
+
+            UUID in 16-byte array format.
+
+        array{byte}[16] DeviceKey
+
+            Device Key in 16-byte array format.
+
+        array{byte}[16] NetworkKey
+
+            Network Key in 16-byte array format.
+
+IO type: "silvair"
+
+    Description:
+
+        This IO uses Serial Port and Silvair radio protocol to data exchange.
+
+    Options:
+
+         string SerialPort [identifier]
+
+             Serial port to which Silvair Radio is attached.
+
+         int Baudrate [optional]
+
+            Serial port baudrate value. Default 115200.
+
+         int DataBits [optional]
+
+             Data bits count. Default: 8
+
+             The defined values are: 5, 6, 7 or 8
+
+         string Parity [optional]
+
+             Parity setting. Default: "none"
+
+             The defined values are: "even", "odd", "none"
+
+         int StopBits [optional]
+
+             Stop bits count. Default: 1
+
+             The defined values are: 1 or 2
+
+         string FlowControl [optional]
+
+             Flow control setting. Default: "none"
+
+             The defined values are: "none", "hardware" or "software"
+
+
 Mesh Network Hierarchy
 ======================
 Service		org.bluez.mesh
 Interface	org.bluez.mesh.AdapterManager1
-Object path	/org/bluez/mesh/adapter
+Object path	/org/bluez/mesh
 
 Methods:
 	uint64 token Add(string io_type, dict config)
@@ -14,12 +104,12 @@ Methods:
 	    add a new mesh adapter with an IO type.
 
 	    The config parameter is a dictionary with configuration
-	    options specific for the chosen IO type. In case of "tcpserver",
-	    mesh adapter with given UUID and NetworkKey can added only once.
-	    When adapter with UUID and NetworkKey is already exists then
-	    AlreadyExists error will be raised. When one of required
-	    configuration options is missing then InvalidArguments
-	    error will be raised.
+	    options specific for the chosen IO type. It is possible to only one
+	    adapter with unique identifier. When Adapter with unique identifier
+	    already exists then AlreadyExists error will be raised. When one of
+	    required configuration options is missing then InvalidArguments error
+	    will be raised. When write to persistent storage will fail then Failed
+	    error will be raised
 
         string io_type
 
@@ -30,46 +120,12 @@ Methods:
 
         dict config
 
-            Options available for the "tcpserver" IO:
+            This parameter should contain settings tuple for chosen IO type.
 
-                int Port
-
-                    Port for listening for incoming connections.
-                    This field is mandatory.
-
-                array{byte}[16] UUID
-
-                    uGateway UUID in 16-byte array format.
-                    This field is mandatory.
-
-                array{byte}[16] DeviceKey
-
-                    uGateway Device Key in 16-byte array format.
-                    This field is mandatory.
-
-                array{byte}[16] NetworkKey
-
-                    uGateway Network Key in 16-byte array format.
-                    Device must be already provisioned.
-                    This field is mandatory.
-
-            Options available for the "silvair" IO:
-
-                string SerialPort
-
-                    Serial port to which Silvair Radio is attached.
-
-                int Baudrate
-
-                    Serial port baudrate value.
-
-                string Mode
-
-                    Serial port mode: 8N1.
-
-		PossibleErrors:
-		    org.bluez.mesh.Error.InvalidArguments,
-		    org.bluez.mesh.Error.AlreadyExists,
+        PossibleErrors:
+            org.bluez.mesh.Error.InvalidArguments,
+            org.bluez.mesh.Error.AlreadyExists,
+            org.bluez.mesh.Error.Failed
 
 	void Remove(uint64 token)
 
@@ -77,7 +133,8 @@ Methods:
         identified by the 64-bit token parameter. The token parameter
         has been obtained as a result of successful Add() method call.
         When configuration for adapter with passed toked does not exist
-        NotFound error will be raised.
+        NotFound error will be raised. When remove from persistent storage
+        will faile then Failed error will be raised.
 
 	    PossibleErrors:
 	        org.bluez.mesh.Error.NotFound,
@@ -102,20 +159,9 @@ Mesh Network Hierarchy
 ======================
 Service		org.bluez.mesh
 Interface	org.bluez.mesh.Adapter1
-Object path	/org/bluez/mesh/adapter/{io_type}/<id>
+Object path	/org/bluez/mesh/{io_type}/<id>
                 where <id> can be Adapter UUID or
                 Serial port name (depends on IO type).
-
-Methods:
-	void Remove(uint64 token)
-
-        This removes the configuration information about the mesh adapter
-        identified by the 64-bit token parameter. The token parameter
-        has been obtained as a result of successful Add() method call.
-
-		PossibleErrors:
-		    org.bluez.mesh.Error.NotFound,
-		    org.bluez.mesh.Error.Failed
 
 Properties:
     bool Connected [read-only]
@@ -128,10 +174,30 @@ Properties:
 
         The defined values are: "none", "handshake-error"
 
-    uint64 SentCount [read-only]
+    uint64 TransmittedMsgCount [read-only]
 
-        This property indicates count of sent messages.
+        This property indicates count of transmitted messages.
 
-    uint64 ReceivedCount [read-only]
+    uint64 ReceivedMsgCount [read-only]
 
         This property indicates count of received messages.
+
+    uint64 LastTransmittedMsgTimestamp [read-only]
+
+        This property indicates timestamp of last transmitted message.
+
+    uint64 LastReceivedMsgTimestamp [read-only]
+
+        This property indicates timestamp of last received message.
+
+    uint64 DroppedTransmittedMsgCount [read-only]
+
+        This property indicates count of dropped transmitted messages.
+
+    uint64 DroppedReceivedMsgCount [read-only]
+
+        This property indicates count of dropped received messages.
+
+    string AdditionalInformation [read-only] [optional]
+
+        This property contains additional information about mesh adapter.
