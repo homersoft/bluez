@@ -42,16 +42,18 @@
 
 #include "src/shared/io.h"
 
-#include "mesh/crypto.h"
+#include "mesh/mesh.h"
+#include "mesh/dbus.h"
 #include "mesh/mesh-io.h"
 #include "mesh/mesh-io-api.h"
 #include "mesh/mesh-io-tcpserver.h"
+#include "mesh/tcpserver-acl.h"
 #include "mesh/silvair-io.h"
+#include "mesh/conn-stat.h"
+#include "mesh/util.h"
 
+#define IDENTITY_LEN (16)
 
-#define UUID_LEN		(16)
-#define DEV_KEY_LEN		(16)
-#define NET_KEY_LEN		(16)
 
 static const char *tls_ciphers = "ECDHE-PSK-CHACHA20-POLY1305";
 
@@ -60,24 +62,29 @@ struct mesh_io_private {
 	void *user_data;
 
 	struct l_io		*server_io;
-	struct l_queue		*client_io;
+	struct l_queue		*conns;
 
 	struct l_timeout	*tx_timeout;
 	struct l_queue		*rx_regs;
 	struct l_queue		*tx_pkts;
 
 	/* Simple filtering on AD type only */
-	uint8_t				filters[4];
+	uint8_t			filters[4];
 	struct tx_pkt		*tx;
 
 	/* TLS context */
-	SSL_CTX				*tls_ctx;
+	SSL_CTX			*tls_ctx;
 
-	uint8_t				*uuid;
-	uint8_t				*dev_key;
-	uint8_t				*net_key;
+	const char		*dbus_path;
+	struct l_dbus		*dbus;
+	struct tcpserver_acl	*acl;
 };
 
+struct tcpserver_conn {
+	uint8_t			identity[IDENTITY_LEN];
+	struct silvair_io	*io;
+	struct conn_stat	*conn_stat;
+};
 
 struct pvt_rx_reg {
 	mesh_io_recv_func_t cb;
@@ -110,7 +117,31 @@ enum io_type {
 };
 
 static void send_timeout(struct l_timeout *timeout, void *user_data);
+static void create_conn_stat(void *data, void *user_data);
 
+static struct tcpserver_conn *tcpserver_conn_new(uint8_t *identity)
+{
+	struct tcpserver_conn *tcpserver_conn = l_new(struct tcpserver_conn, 1);
+
+	memcpy(tcpserver_conn->identity, identity,
+	       sizeof(tcpserver_conn->identity));
+
+	tcpserver_conn->conn_stat	= NULL;
+	tcpserver_conn->io		= NULL;
+
+	return tcpserver_conn;
+}
+
+static void tcpserver_conn_destroy(struct tcpserver_conn *conn)
+{
+	if (conn->conn_stat)
+		conn_stat_destroy(conn->conn_stat);
+
+	if (conn->io)
+		silvair_io_close(conn->io);
+
+	l_free(conn);
+}
 
 static uint32_t get_instant(void)
 {
@@ -124,6 +155,14 @@ static uint32_t get_instant(void)
 	return instant;
 }
 
+static bool match_tcpserver_conn_by_silvair_io(const void *a, const void *b)
+{
+	const struct tcpserver_conn *conn = a;
+	const struct silvair_io *io = b;
+
+	return conn->io == io;
+}
+
 static void process_rx_callbacks(void *v_rx, void *v_reg)
 {
 	struct pvt_rx_reg *rx_reg = v_rx;
@@ -134,10 +173,11 @@ static void process_rx_callbacks(void *v_rx, void *v_reg)
 }
 
 static void process_rx(struct silvair_io *silvair_io, int8_t rssi,
-			const uint8_t *data, uint8_t len, void *user_data)
+		       const uint8_t *data, uint8_t len, void *user_data)
 {
-	struct mesh_io *mesh_io = user_data;
-	struct process_data rx;
+	struct mesh_io		*mesh_io = user_data;
+	struct tcpserver_conn	*conn;
+	struct process_data	rx;
 
 	if (!mesh_io) {
 		l_error("mesh_io does not exist");
@@ -152,6 +192,13 @@ static void process_rx(struct silvair_io *silvair_io, int8_t rssi,
 	rx.info.rssi = rssi,
 
 	silvair_io_keep_alive_wdt_refresh(silvair_io);
+
+	conn = l_queue_find(mesh_io->pvt->conns,
+			    match_tcpserver_conn_by_silvair_io, silvair_io);
+
+	if (conn && conn->conn_stat)
+		conn_stat_message_received(conn->conn_stat);
+
 	l_queue_foreach(mesh_io->pvt->rx_regs, process_rx_callbacks, &rx);
 }
 
@@ -184,7 +231,7 @@ static bool get_fd_info(int fd, char *log, enum io_type type)
 	}
 
 	l_info("%s -> addr:%s port:%d fd:%d", log,
-			inet_ntoa(addr.sin_addr), ntohs(addr.sin_port), fd);
+	       inet_ntoa(addr.sin_addr), ntohs(addr.sin_port), fd);
 	return true;
 }
 
@@ -203,16 +250,20 @@ static void io_error_callback(struct silvair_io *silvair_io)
 static void io_disconnect_callback(struct silvair_io *silvair_io)
 {
 	struct mesh_io *mesh_io = silvair_io->context;
+	struct tcpserver_conn *conn;
 
-	if (!mesh_io->pvt->client_io)
+	if (!mesh_io->pvt->conns)
 		return;
 
-	if (!l_queue_remove(mesh_io->pvt->client_io, silvair_io)) {
-		perror("l_queue_remove() error");
-		abort();
-	}
+	conn = l_queue_find(mesh_io->pvt->conns,
+			    match_tcpserver_conn_by_silvair_io, silvair_io);
+	if (conn)
+		conn->io = NULL;
 
-	l_info("Client disconneted from TCP Server");
+	if (conn && conn->conn_stat)
+		conn_stat_connected_set(conn->conn_stat, false);
+
+	l_info("Client disconnected from TCP Server");
 	silvair_io_destroy(silvair_io);
 }
 
@@ -245,7 +296,7 @@ static bool io_accept_callback(struct l_io *l_io, void *user_data)
 	client_addrlen = sizeof(clientaddr);
 
 	newfd = accept(server_fd, (struct sockaddr *)&clientaddr,
-							&client_addrlen);
+		       &client_addrlen);
 
 	if (newfd < 0) {
 		l_error("server accept error");
@@ -254,7 +305,7 @@ static bool io_accept_callback(struct l_io *l_io, void *user_data)
 
 
 	if (fcntl(newfd, F_SETFL,
-			fcntl(newfd, F_GETFL, 0) | O_NONBLOCK) != 0) {
+		  fcntl(newfd, F_GETFL, 0) | O_NONBLOCK) != 0) {
 		l_error("client fcntl error");
 		return false;
 	}
@@ -271,28 +322,25 @@ static bool io_accept_callback(struct l_io *l_io, void *user_data)
 		l_error("Failed to create BIO object.");
 		goto error;
 	}
-
-	SSL_set_ex_data(tls_conn, 0, mesh_io->pvt);
-	SSL_set_bio(tls_conn, sbio, sbio);
-	SSL_set_accept_state(tls_conn);
-
 	get_fd_info(newfd, "New client accepted", IO_TYPE_CLIENT);
 
 	silvair_io = silvair_io_new(newfd, false, process_rx, io_error_callback,
-		io_disconnect_callback, mesh_io, tls_conn);
+				    io_disconnect_callback, mesh_io, tls_conn);
 
 	if (!silvair_io) {
 		l_error("silvair_io_new error");
 		goto error;
 	}
 
+	SSL_set_ex_data(tls_conn, 0, mesh_io);
+	SSL_set_ex_data(tls_conn, 1, silvair_io);
+	SSL_set_bio(tls_conn, sbio, sbio);
+	SSL_set_accept_state(tls_conn);
+
 	l_io_set_close_on_destroy(silvair_io->l_io, true);
 
-	l_queue_push_tail(mesh_io->pvt->client_io, silvair_io);
-
-	l_info("Connected %s:%hu",
-			inet_ntoa(clientaddr.sin_addr),
-			ntohs(clientaddr.sin_port));
+	l_info("Connected %s:%hu", inet_ntoa(clientaddr.sin_addr),
+					       ntohs(clientaddr.sin_port));
 
 	return true;
 
@@ -304,51 +352,47 @@ error:
 	return false;
 }
 
-static unsigned int tls_psk_server_cb(SSL *ssl, const char *identity,
-	unsigned char *psk, unsigned int max_psk_len)
+static bool match_tcpserver_conn_by_identity(const void *a, const void *b)
 {
-	const char k1_info[] = { 'i', 'd', 'p', 's', 'k' };
-	unsigned int psk_len = 0;
+	const struct tcpserver_conn	*conn = a;
+	const uint8_t			*identity = b;
 
-	struct mesh_io_private *pvt;
-	uint8_t net_id[8];
-	char s1_info[24];
-	uint8_t id[16];
-	char *id_str;
+	return !memcmp(conn->identity, identity, sizeof(conn->identity));
+}
 
-	pvt = SSL_get_ex_data(ssl, 0);
+static unsigned int tls_psk_server_cb(SSL *ssl,
+				      const char *identity,
+				      unsigned char *psk,
+				      unsigned int max_psk_len)
+{
+	uint8_t			identity_buf[IDENTITY_LEN];
+	struct mesh_io		*mesh_io;
+	struct silvair_io	*silvair_io;
+	struct tcpserver_conn	*conn;
 
-	if (!pvt)
+	if (!str2hex(identity, strlen(identity),
+		     identity_buf, sizeof(identity_buf))) {
+		l_error("Could not convert identity str to hex.");
 		return 0;
+	}
 
-	// net_id = k3(net_key)
-	if (!mesh_crypto_k3(pvt->net_key, net_id))
+	mesh_io		= SSL_get_ex_data(ssl, 0);
+	silvair_io	= SSL_get_ex_data(ssl, 1);
+
+	conn = l_queue_find(mesh_io->pvt->conns,
+			    match_tcpserver_conn_by_identity, identity_buf);
+	if (!conn) {
+		l_warn("Could not find PSK for identity: '%s'", identity);
 		return 0;
+	}
 
-	// s1_info = (uuid|net_id)
-	memcpy(s1_info, pvt->uuid, UUID_LEN);
-	memcpy(s1_info + UUID_LEN, net_id, sizeof(net_id));
+	conn->io = silvair_io;
 
-	// id = s1(s1_info)
-	if (!mesh_crypto_s1(s1_info, sizeof(s1_info), id))
-		return 0;
+	if (conn->conn_stat)
+		conn_stat_connected_set(conn->conn_stat, true);
 
-	id_str = l_util_hexstring_upper(id, sizeof(id));
-
-	// compare str format 'identity' and 'id_str'
-	if (!strcmp(identity, id_str))
-		goto done;
-
-	// psk = k1(dev_key, id, "idpsk")
-	if (!mesh_crypto_k1(pvt->dev_key, id, k1_info, sizeof(k1_info), psk))
-		goto done;
-
-	// psk is constant length
-	psk_len = 16;
-
-done:
-	l_free(id_str);
-	return psk_len;
+	return tcpserver_acl_psk_get(
+		mesh_io->pvt->acl, identity, psk, max_psk_len);
 }
 
 static bool tls_ctx_init(struct mesh_io_private *pvt)
@@ -379,31 +423,30 @@ static bool tls_ctx_init(struct mesh_io_private *pvt)
 	return true;
 }
 
-static bool process_tls_args(char *argv[],
-				size_t argc, struct mesh_io_private *pvt)
+static bool acl_entry_changed(struct tcpserver_acl *acl,
+			      uint8_t *identity, void *user_data, bool removed)
 {
-	size_t len;
+	struct mesh_io		*mesh_io = user_data;
+	struct tcpserver_conn	*conn;
 
-	pvt->uuid = l_util_from_hexstring(argv[1], &len);
+	if (removed) {
+		conn = l_queue_find(mesh_io->pvt->conns,
+				    match_tcpserver_conn_by_identity, identity);
+		if (!conn)
+			return false;
 
-	if (!pvt->uuid || len != UUID_LEN) {
-		l_error("Invalid UUID length");
-		return false;
+		tcpserver_conn_destroy(conn);
+
+		return l_queue_remove(mesh_io->pvt->conns, conn);
 	}
 
-	pvt->dev_key = l_util_from_hexstring(argv[2], &len);
+	conn = tcpserver_conn_new(identity);
 
-	if (!pvt->dev_key || len != DEV_KEY_LEN) {
-		l_error("Invalid 'dev-key' length");
+	if (!l_queue_push_tail(mesh_io->pvt->conns, conn))
 		return false;
-	}
 
-	pvt->net_key = l_util_from_hexstring(argv[3], &len);
-
-	if (!pvt->net_key || len != NET_KEY_LEN) {
-		l_error("Invalid 'net-key' length");
-		return false;
-	}
+	if (mesh_io->pvt->dbus)
+		create_conn_stat(conn, mesh_io);
 
 	return true;
 }
@@ -458,17 +501,8 @@ static bool tcpserver_io_init(struct mesh_io *mesh_io, void *opts, void *user_da
 		return false;
 	}
 
-	// Required TLS arguments: <UUID>,<dev_key>,<net_key>
-	if (argc == 4) {
-		if (!process_tls_args(argv, argc, mesh_io->pvt))
-			return false;
-
-		if (!tls_ctx_init(mesh_io->pvt))
-			return false;
-	} else {
-		l_error("Invalid number of arguments.");
+	if (!tls_ctx_init(mesh_io->pvt))
 		return false;
-	}
 
 	/* Get the listener */
 	server_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -479,14 +513,14 @@ static bool tcpserver_io_init(struct mesh_io *mesh_io, void *opts, void *user_da
 	}
 
 	if (fcntl(server_fd, F_SETFL,
-		fcntl(server_fd, F_GETFL, 0) | O_NONBLOCK) != 0) {
+		  fcntl(server_fd, F_GETFL, 0) | O_NONBLOCK) != 0) {
 
 		l_error("fcntl() error");
 		return false;
 	}
 
 	if (setsockopt(server_fd, SOL_SOCKET,
-				SO_REUSEADDR, &(int){ 1 }, sizeof(int)) < 0) {
+		       SO_REUSEADDR, &(int){ 1 }, sizeof(int)) < 0) {
 
 		l_error("setsockopt() error");
 		return false;
@@ -498,7 +532,7 @@ static bool tcpserver_io_init(struct mesh_io *mesh_io, void *opts, void *user_da
 	serveraddr.sin_family = AF_INET;
 
 	if (bind(server_fd, (struct sockaddr *)&serveraddr,
-						sizeof(serveraddr)) < 0) {
+		 sizeof(serveraddr)) < 0) {
 
 		l_error("Failed to start mesh io (bind): %s", strerror(errno));
 		return false;
@@ -508,27 +542,33 @@ static bool tcpserver_io_init(struct mesh_io *mesh_io, void *opts, void *user_da
 
 	if (listen(server_fd, 1) < 0) {
 		l_error("Failed to start mesh io (listen): %s",
-							strerror(errno));
+			strerror(errno));
 		return false;
 	}
 
 	mesh_io->pvt->server_io = l_io_new(server_fd);
-	mesh_io->pvt->client_io = l_queue_new();
+	mesh_io->pvt->conns	= l_queue_new();
 	mesh_io->pvt->rx_regs = l_queue_new();
 	mesh_io->pvt->tx_pkts = l_queue_new();
 
 	mesh_io->pvt->user_data = user_data;
 
 	if (!l_io_set_read_handler(mesh_io->pvt->server_io,
-					io_accept_callback, mesh_io, NULL)) {
+				   io_accept_callback, mesh_io, NULL)) {
 		l_error("l_io_set_read_handler error");
 		return false;
 	}
 
 	mesh_io->pvt->tx_timeout = l_timeout_create_ms(0, send_timeout,
-								mesh_io, NULL);
+						       mesh_io, NULL);
+
+	mesh_io->pvt->dbus_path = l_strdup_printf("%s/tcpserver_%hu",
+						  BLUEZ_MESH_PATH, port);
 
 	l_info("Started mesh on tcp port %d", port);
+
+	mesh_io->pvt->acl = tcpserver_acl_new(mesh_get_storage_dir(),
+			mesh_io->pvt->dbus_path, acl_entry_changed, mesh_io);
 
 	l_idle_oneshot(tcpserver_io_init_done, mesh_io, NULL);
 
@@ -544,21 +584,19 @@ static bool tcpserver_io_destroy(struct mesh_io *mesh_io)
 
 	l_io_destroy(pvt->server_io);
 
-	if (pvt->client_io != NULL) {
-		struct l_queue *queue = pvt->client_io;
+	if (pvt->conns) {
+		struct l_queue *queue = pvt->conns;
 
-		pvt->client_io = NULL;
+		pvt->conns = NULL;
 		l_queue_destroy(queue,
-				(l_queue_destroy_func_t) silvair_io_destroy);
+				(l_queue_destroy_func_t)tcpserver_conn_destroy);
 	}
 
 	l_queue_destroy(pvt->rx_regs, l_free);
 	l_queue_destroy(pvt->tx_pkts, l_free);
 	l_timeout_remove(pvt->tx_timeout);
 
-	l_free(pvt->uuid);
-	l_free(pvt->dev_key);
-	l_free(pvt->net_key);
+	tcpserver_acl_destroy(pvt->acl);
 
 	l_free(pvt);
 	mesh_io->pvt = NULL;
@@ -566,7 +604,7 @@ static bool tcpserver_io_destroy(struct mesh_io *mesh_io)
 }
 
 static bool tcpserver_io_caps(struct mesh_io *mesh_io,
-			struct mesh_io_caps *caps)
+			      struct mesh_io_caps *caps)
 {
 	struct mesh_io_private *pvt = mesh_io->pvt;
 
@@ -580,15 +618,21 @@ static bool tcpserver_io_caps(struct mesh_io *mesh_io,
 
 static void send_flush_all_clients(void *data, void *user_data)
 {
-	struct silvair_io *silvair_io = data;
-	struct tx_pkt *tx = user_data;
+	struct tcpserver_conn	*conn = data;
+	struct tx_pkt		*tx = user_data;
 
-	silvair_io_send_message(silvair_io, tx->data, tx->len);
+	if (!conn->io)
+		return;
+
+	silvair_io_send_message(conn->io, tx->data, tx->len);
+
+	if (conn->conn_stat)
+		conn_stat_message_sent(conn->conn_stat);
 }
 
 static void send_flush(struct mesh_io *mesh_io)
 {	struct tx_pkt *tx;
-	struct l_queue *client_queue = mesh_io->pvt->client_io;
+	struct l_queue *client_queue = mesh_io->pvt->conns;
 	uint32_t instant = get_instant();
 
 	do {
@@ -604,7 +648,7 @@ static void send_flush(struct mesh_io *mesh_io)
 
 	if (tx)
 		l_timeout_modify_ms(mesh_io->pvt->tx_timeout,
-							tx->instant - instant);
+				    tx->instant - instant);
 }
 
 static void send_timeout(struct l_timeout *timeout, void *user_data)
@@ -618,7 +662,7 @@ static void send_timeout(struct l_timeout *timeout, void *user_data)
 }
 
 static int compare_tx_pkt_instant(const void *a, const void *b,
-							void *user_data)
+				  void *user_data)
 {
 	const struct tx_pkt *lhs = a;
 	const struct tx_pkt *rhs = b;
@@ -630,7 +674,7 @@ static int compare_tx_pkt_instant(const void *a, const void *b,
 }
 
 static void send_pkt(struct mesh_io *mesh_io,
-			const uint8_t *data, uint16_t len, uint32_t instant)
+		     const uint8_t *data, uint16_t len, uint32_t instant)
 {
 	struct tx_pkt *tx = l_new(struct tx_pkt, 1);
 
@@ -643,7 +687,8 @@ static void send_pkt(struct mesh_io *mesh_io,
 }
 
 static bool tcpserver_io_send(struct mesh_io *mesh_io,
-	struct mesh_io_send_info *info, const uint8_t *data, uint16_t len)
+			      struct mesh_io_send_info *info,
+			      const uint8_t *data, uint16_t len)
 {
 	uint32_t instant;
 	uint16_t interval;
@@ -673,7 +718,7 @@ static bool tcpserver_io_send(struct mesh_io *mesh_io,
 
 		for (i = 0; i < info->u.gen.cnt; ++i)
 			send_pkt(mesh_io, data, len,
-					instant + delay + interval * i);
+				 instant + delay + interval * i);
 		break;
 
 	case MESH_IO_TIMING_TYPE_POLL:
@@ -759,7 +804,7 @@ static bool find_by_pattern(const void *a, const void *b)
 }
 
 static bool tcpserver_io_cancel(struct mesh_io *mesh_io,
-			const uint8_t *data, uint8_t len)
+				const uint8_t *data, uint8_t len)
 {
 	struct mesh_io_private *pvt = mesh_io->pvt;
 	struct tx_pkt *tx;
@@ -773,7 +818,7 @@ static bool tcpserver_io_cancel(struct mesh_io *mesh_io,
 
 	do {
 		tx = l_queue_remove_if(pvt->tx_pkts, find_by_pattern,
-							&pattern);
+				       &pattern);
 		l_free(tx);
 	} while (tx);
 
@@ -781,10 +826,40 @@ static bool tcpserver_io_cancel(struct mesh_io *mesh_io,
 
 	if (tx)
 		l_timeout_modify_ms(pvt->tx_timeout,
-						tx->instant - get_instant());
+				    tx->instant - get_instant());
 
 	return true;
 }
+
+static void create_conn_stat(void *data, void *user_data)
+{
+	char name[2 * IDENTITY_LEN + 1];
+
+	struct tcpserver_conn	*conn = data;
+	struct mesh_io		*mesh_io = user_data;
+
+	if (!hex2str(conn->identity, IDENTITY_LEN, name, sizeof(name)))
+		return;
+
+	conn->conn_stat = conn_stat_new(mesh_io->pvt->dbus,
+					mesh_io->pvt->dbus_path, name);
+}
+
+static bool tcpserver_io_dbus_init(struct mesh_io *mesh_io, struct l_dbus *dbus)
+{
+	if (!tcpserver_acl_dbus_init(mesh_io->pvt->acl, dbus))
+		return false;
+
+	if (!conn_stat_dbus_init(dbus))
+		return false;
+
+	mesh_io->pvt->dbus = dbus;
+
+	l_queue_foreach(mesh_io->pvt->conns, create_conn_stat, mesh_io);
+
+	return true;
+}
+
 
 const struct mesh_io_api mesh_io_tcpserver = {
 	.init = tcpserver_io_init,
@@ -794,4 +869,5 @@ const struct mesh_io_api mesh_io_tcpserver = {
 	.reg = tcpserver_io_reg,
 	.dereg = tcpserver_io_dereg,
 	.cancel = tcpserver_io_cancel,
+	.dbus_init = tcpserver_io_dbus_init,
 };
