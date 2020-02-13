@@ -16,26 +16,34 @@
  *  Lesser General Public License for more details.
  *
  */
-#include <stddef.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 #include <ell/dbus.h>
 
-struct tcpserver_acl;
+
+struct conn_stat {
+	char		*dbus_path;
+	struct l_dbus	*dbus;
+
+	bool		connected;
+	const char	*last_error;
+	uint64_t	tx_msgs_cnt;
+	uint64_t	rx_msgs_cnt;
+	uint64_t	last_tx_msg_timestamp;
+	uint64_t	last_rx_msg_timestamp;
+};
 
 
-typedef bool (*on_acl_entry_changed)(struct tcpserver_acl *acl,
-			     uint8_t *identity, void *user_data, bool removed);
+struct conn_stat *conn_stat_new(struct l_dbus *dbus,
+			const char *adapter_dbus_path, const char *name);
 
+void conn_stat_destroy(struct conn_stat *conn_stat);
 
-struct tcpserver_acl *tcpserver_acl_new(const char *config_dir,
-			const char *dbus_path,
-			on_acl_entry_changed on_acl_entry_changed_callback,
-			void *user_data);
+bool conn_stat_dbus_init(struct l_dbus *bus);
 
-void tcpserver_acl_destroy(struct tcpserver_acl *acl);
+void conn_stat_connected_set(struct conn_stat *conn_stat, bool connected);
 
-bool tcpserver_acl_dbus_init(struct tcpserver_acl *acl, struct l_dbus *bus);
+void conn_stat_message_sent(struct conn_stat *conn_stat);
 
-size_t tcpserver_acl_psk_get(struct tcpserver_acl *acl,
-		const char *identity, uint8_t *psk, unsigned int max_psk_len);
+void conn_stat_message_received(struct conn_stat *conn_stat);
