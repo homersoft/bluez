@@ -20,6 +20,8 @@ mesh_sources = mesh/mesh.h mesh/mesh.c \
 				mesh/mesh-io-generic.c \
 				mesh/mesh-io-uart.h \
 				mesh/mesh-io-uart.c \
+				mesh/conn-stat.c \
+				mesh/conn-stat.h \
 				mesh/tcpserver-acl.c \
 				mesh/tcpserver-acl.h \
 				mesh/mesh-io-tcpserver.h \

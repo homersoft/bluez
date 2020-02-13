@@ -42,12 +42,14 @@
 
 #include "src/shared/io.h"
 
+#include "mesh/mesh.h"
 #include "mesh/dbus.h"
 #include "mesh/mesh-io.h"
 #include "mesh/mesh-io-api.h"
 #include "mesh/mesh-io-tcpserver.h"
 #include "mesh/tcpserver-acl.h"
 #include "mesh/silvair-io.h"
+#include "mesh/conn-stat.h"
 #include "mesh/util.h"
 
 #define IDENTITY_LEN (16)
@@ -82,6 +84,7 @@ struct mesh_io_private {
 struct tcpserver_conn {
 	uint8_t			identity[IDENTITY_LEN];
 	struct silvair_io	*io;
+	struct conn_stat	*conn_stat;
 };
 
 struct pvt_rx_reg {
@@ -114,6 +117,7 @@ enum io_type {
 };
 
 static void send_timeout(struct l_timeout *timeout, void *user_data);
+static void create_conn_stat(void *data, void *user_data);
 
 static struct tcpserver_conn *tcpserver_conn_new(uint8_t *identity)
 {
@@ -122,6 +126,7 @@ static struct tcpserver_conn *tcpserver_conn_new(uint8_t *identity)
 	memcpy(tcpserver_conn->identity, identity,
 	       sizeof(tcpserver_conn->identity));
 
+	tcpserver_conn->conn_stat	= NULL;
 	tcpserver_conn->io		= NULL;
 
 	return tcpserver_conn;
@@ -129,6 +134,9 @@ static struct tcpserver_conn *tcpserver_conn_new(uint8_t *identity)
 
 static void tcpserver_conn_destroy(struct tcpserver_conn *conn)
 {
+	if (conn->conn_stat)
+		conn_stat_destroy(conn->conn_stat);
+
 	if (conn->io)
 		silvair_io_close(conn->io);
 
@@ -171,6 +179,7 @@ static void process_rx(struct silvair_io *silvair_io, int8_t rssi,
 		       const uint8_t *data, uint8_t len, void *user_data)
 {
 	struct mesh_io		*mesh_io = user_data;
+	struct tcpserver_conn	*conn;
 	struct process_data	rx;
 
 	if (!mesh_io) {
@@ -185,7 +194,13 @@ static void process_rx(struct silvair_io *silvair_io, int8_t rssi,
 	rx.info.chan = 7,
 	rx.info.rssi = rssi,
 
-		silvair_io_keep_alive_wdt_refresh(silvair_io);
+	silvair_io_keep_alive_wdt_refresh(silvair_io);
+
+	conn = l_queue_find(mesh_io->pvt->conns,
+			    match_tcpserver_conn_by_silvair_io, silvair_io);
+
+	if (conn && conn->conn_stat)
+		conn_stat_message_received(conn->conn_stat);
 
 	l_queue_foreach(mesh_io->pvt->rx_regs, process_rx_callbacks, &rx);
 }
@@ -247,6 +262,9 @@ static void io_disconnect_callback(struct silvair_io *silvair_io)
 			    match_tcpserver_conn_by_silvair_io, silvair_io);
 	if (conn)
 		conn->io = NULL;
+
+	if (conn && conn->conn_stat)
+		conn_stat_connected_set(conn->conn_stat, false);
 
 	l_info("Client disconnected from TCP Server");
 	silvair_io_destroy(silvair_io);
@@ -324,9 +342,8 @@ static bool io_accept_callback(struct l_io *l_io, void *user_data)
 
 	l_io_set_close_on_destroy(silvair_io->l_io, true);
 
-	l_info("Connected %s:%hu",
-	       inet_ntoa(clientaddr.sin_addr),
-	       ntohs(clientaddr.sin_port));
+	l_info("Connected %s:%hu", inet_ntoa(clientaddr.sin_addr),
+					       ntohs(clientaddr.sin_port));
 
 	return true;
 
@@ -381,6 +398,9 @@ static unsigned int tls_psk_server_cb(SSL *ssl,
 
 	conn->io = silvair_io;
 
+	if (conn->conn_stat)
+		conn_stat_connected_set(conn->conn_stat, true);
+
 	return tcpserver_acl_psk_get(
 		mesh_io->pvt->acl, identity, psk, max_psk_len);
 }
@@ -433,6 +453,9 @@ static bool acl_entry_changed(struct tcpserver_acl *acl,
 
 	if (!l_queue_push_tail(mesh_io->pvt->conns, conn))
 		return false;
+
+	if (mesh_io->pvt->dbus)
+		create_conn_stat(conn, mesh_io);
 
 	return true;
 }
@@ -547,8 +570,8 @@ static bool tcpserver_io_init(struct mesh_io *mesh_io, void *opts,
 	mesh_io->pvt->dbus_path = l_strdup_printf("%s/tcpserver_%hu",
 						  BLUEZ_MESH_PATH, port);
 
-	mesh_io->pvt->acl = tcpserver_acl_new(NULL, mesh_io->pvt->dbus_path,
-					      acl_entry_changed, mesh_io);
+	mesh_io->pvt->acl = tcpserver_acl_new(mesh_get_storage_dir(),
+			mesh_io->pvt->dbus_path, acl_entry_changed, mesh_io);
 
 	l_info("Started mesh on tcp port %hu", port);
 	l_idle_oneshot(tcpserver_io_init_done, mesh_io, NULL);
@@ -605,6 +628,9 @@ static void send_flush_all_clients(void *data, void *user_data)
 		return;
 
 	silvair_io_send_message(conn->io, tx->data, tx->len);
+
+	if (conn->conn_stat)
+		conn_stat_message_sent(conn->conn_stat);
 }
 
 static void send_flush(struct mesh_io *mesh_io)
@@ -827,12 +853,31 @@ static bool tcpserver_io_cancel(struct mesh_io *mesh_io,
 	return true;
 }
 
+static void create_conn_stat(void *data, void *user_data)
+{
+	char name[2 * IDENTITY_LEN + 1];
+
+	struct tcpserver_conn	*conn = data;
+	struct mesh_io		*mesh_io = user_data;
+
+	if (!hex2str(conn->identity, IDENTITY_LEN, name, sizeof(name)))
+		return;
+
+	conn->conn_stat = conn_stat_new(mesh_io->pvt->dbus,
+					mesh_io->pvt->dbus_path, name);
+}
+
 static bool tcpserver_io_dbus_init(struct mesh_io *mesh_io, struct l_dbus *dbus)
 {
 	if (!tcpserver_acl_dbus_init(mesh_io->pvt->acl, dbus))
 		return false;
 
+	if (!conn_stat_dbus_init(dbus))
+		return false;
+
 	mesh_io->pvt->dbus = dbus;
+
+	l_queue_foreach(mesh_io->pvt->conns, create_conn_stat, mesh_io);
 
 	return true;
 }

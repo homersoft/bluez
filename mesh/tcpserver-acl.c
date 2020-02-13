@@ -39,12 +39,11 @@
 #define PSK_LEN (16)
 
 
-static const char *default_config_path = MESH_STORAGEDIR "/tcpserver_acl.conf";
 static const char *TCPSERVER_ACL_IFACE = "org.bluez.mesh.AccessControlList1";
 
 
 struct tcpserver_acl {
-	const char		*config_path;
+	char			*config_path;
 	const char		*dbus_path;
 	struct l_queue		*entries;
 	void			*user_data;
@@ -475,7 +474,7 @@ static void setup_acl_iface(struct l_dbus_interface *iface)
 				"", "t", "token");
 }
 
-struct tcpserver_acl *tcpserver_acl_new(const char *config_path,
+struct tcpserver_acl *tcpserver_acl_new(const char *config_dir,
 			const char *dbus_path,
 			on_acl_entry_changed on_acl_entry_changed_callback,
 			void *user_data)
@@ -483,7 +482,8 @@ struct tcpserver_acl *tcpserver_acl_new(const char *config_path,
 	struct tcpserver_acl *acl;
 
 	acl			= l_new(struct tcpserver_acl, 1);
-	acl->config_path	= config_path ?: default_config_path;
+	acl->config_path	= l_strdup_printf("%s/tcpserver_acl.conf",
+						config_dir ?: MESH_STORAGEDIR);
 	acl->dbus_path		= dbus_path;
 	acl->entries		= l_queue_new();
 	acl->user_data		= user_data;
@@ -499,6 +499,11 @@ void tcpserver_acl_destroy(struct tcpserver_acl *acl)
 {
 	if (acl->entries)
 		l_queue_destroy(acl->entries, l_free);
+
+	if (acl->config_path)
+		l_free(acl->config_path);
+
+	l_free(acl);
 }
 
 bool tcpserver_acl_dbus_init(struct tcpserver_acl *acl, struct l_dbus *bus)
