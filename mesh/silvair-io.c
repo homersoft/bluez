@@ -434,6 +434,14 @@ static int build_packet(uint8_t *data,
 	pkt_hdr->type = type;
 
 	if (pkt_hdr->type == SILVAIR_CMD_TX) {
+		// ADV_NONCONN_IND = <AdvA> | <AdvData>
+		// <AdvA> - 6 bytes of address
+		// <AdvData> = <Len> | <Type> | <Value>
+		// <Len> = len(<Type> + len(<Value)
+		// len(<AdvData>) = <Len> + len(<Len>)
+		// "+ 1" below means length of <Len> field
+		size_t adv_data_len = size + 1;
+
 		struct silvair_tx_cmd_hdr *tx_hdr;
 		struct silvair_tx_cmd_pld *tx_pld;
 		uint8_t *adv_data;
@@ -443,8 +451,7 @@ static int build_packet(uint8_t *data,
 		adv_data = tx_pld->adv_data;
 
 		pkt_hdr->pld_len = sizeof(*tx_hdr) + sizeof(*tx_pld) +
-						size + 1;
-
+								adv_data_len;
 
 		tx_hdr->hdr_len = sizeof(*tx_hdr);
 		memcpy(tx_hdr->channels, silvair_channels,
@@ -455,7 +462,7 @@ static int build_packet(uint8_t *data,
 		tx_pld->access_address = silvair_access_address;
 		tx_pld->header.type = SILVAIR_ADV_TYPE_ADV_NONCONN_IND;
 
-		tx_pld->header.size = 7;
+		tx_pld->header.size = sizeof(tx_pld->address) + adv_data_len;
 		tx_hdr->counter = 0;
 
 		l_getrandom(tx_pld->address, sizeof(tx_pld->address));
