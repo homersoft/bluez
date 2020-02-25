@@ -442,9 +442,7 @@ static int build_packet(uint8_t *data,
 		tx_pld = (struct silvair_tx_cmd_pld *)(tx_hdr + 1);
 		adv_data = tx_pld->adv_data;
 
-		pkt_hdr->pld_len = sizeof(*tx_hdr) + sizeof(*tx_pld) +
-						size + 1;
-
+		pkt_hdr->pld_len = sizeof(*tx_hdr) + sizeof(*tx_pld) + size;
 
 		tx_hdr->hdr_len = sizeof(*tx_hdr);
 		memcpy(tx_hdr->channels, silvair_channels,
@@ -455,7 +453,7 @@ static int build_packet(uint8_t *data,
 		tx_pld->access_address = silvair_access_address;
 		tx_pld->header.type = SILVAIR_ADV_TYPE_ADV_NONCONN_IND;
 
-		tx_pld->header.size = 7;
+		tx_pld->header.size = sizeof(tx_pld->address) + size;
 		tx_hdr->counter = 0;
 
 		l_getrandom(tx_pld->address, sizeof(tx_pld->address));
