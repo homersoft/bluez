@@ -938,7 +938,7 @@ bool mesh_dbus_init(struct l_dbus *dbus)
 
 	l_info("Added Network Interface on %s", BLUEZ_MESH_PATH);
 
-	return true;
+	return mesh_io_dbus_init(mesh.io, dbus);
 }
 
 const char *mesh_get_storage_dir(void)
