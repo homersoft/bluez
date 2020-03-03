@@ -33,6 +33,7 @@ typedef bool (*mesh_io_deregister_t)(struct mesh_io *io, const uint8_t *filter,
 								uint8_t len);
 typedef bool (*mesh_io_tx_cancel_t)(struct mesh_io *io, const uint8_t *pattern,
 								uint8_t len);
+typedef bool (*mesh_io_dbus_init_t)(struct mesh_io *io, struct l_dbus *dbus);
 
 struct mesh_io_api {
 	mesh_io_init_t		init;
@@ -42,6 +43,7 @@ struct mesh_io_api {
 	mesh_io_register_t	reg;
 	mesh_io_deregister_t	dereg;
 	mesh_io_tx_cancel_t	cancel;
+	mesh_io_dbus_init_t	dbus_init;
 };
 
 struct mesh_io {
