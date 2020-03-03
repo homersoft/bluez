@@ -25,6 +25,7 @@
 
 #include "lib/bluetooth.h"
 
+#include "mesh/dbus.h"
 #include "mesh/mesh-defs.h"
 #include "mesh/mesh-io.h"
 #include "mesh/mesh-io-api.h"
@@ -193,4 +194,15 @@ bool mesh_io_send_cancel(struct mesh_io *io, const uint8_t *pattern,
 		return io->api->cancel(io, pattern, len);
 
 	return false;
+}
+
+bool mesh_io_dbus_init(struct mesh_io *io, struct l_dbus *dbus)
+{
+	if (!io || !io->api)
+		return false;
+
+	if (io->api->dbus_init)
+		return io->api->dbus_init(io, dbus);
+
+	return true;
 }

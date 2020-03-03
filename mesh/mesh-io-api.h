@@ -34,6 +34,7 @@ typedef bool (*mesh_io_filter_set_t)(struct mesh_io *io,
 			mesh_io_status_func_t callback, void *user_data);
 typedef bool (*mesh_io_tx_cancel_t)(struct mesh_io *io, const uint8_t *pattern,
 								uint8_t len);
+typedef bool (*mesh_io_dbus_init_t)(struct mesh_io *io, struct l_dbus *dbus);
 
 struct mesh_io_api {
 	mesh_io_init_t		init;
@@ -44,6 +45,7 @@ struct mesh_io_api {
 	mesh_io_deregister_t	dereg;
 	mesh_io_filter_set_t	set;
 	mesh_io_tx_cancel_t	cancel;
+	mesh_io_dbus_init_t	dbus_init;
 };
 
 struct mesh_io {

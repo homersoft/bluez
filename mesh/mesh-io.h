@@ -18,6 +18,7 @@
  */
 
 struct mesh_io;
+struct l_dbus;
 
 #define MESH_IO_FILTER_BEACON		1
 #define MESH_IO_FILTER_PROV		2
@@ -105,3 +106,5 @@ bool mesh_io_send(struct mesh_io *io, struct mesh_io_send_info *info,
 					const uint8_t *data, uint16_t len);
 bool mesh_io_send_cancel(struct mesh_io *io, const uint8_t *pattern,
 								uint8_t len);
+
+bool mesh_io_dbus_init(struct mesh_io *io, struct l_dbus *dbus);
