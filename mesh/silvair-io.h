@@ -77,3 +77,5 @@ void silvair_io_destroy(struct silvair_io *io);
 void silvair_io_keep_alive_wdt_refresh(struct silvair_io *io);
 
 void silvair_io_send_message(struct silvair_io *io, uint8_t *buf, size_t size);
+
+void silvair_io_close(struct silvair_io *io);
