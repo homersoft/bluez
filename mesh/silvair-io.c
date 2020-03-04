@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <errno.h>
+#include <sys/socket.h>
 #include <ell/ell.h>
 
 #include "mesh/mesh-io.h"
@@ -602,6 +603,7 @@ static void io_disconnect_callback(struct l_io *l_io, void *user_data)
 
 	if (io->disconnect_cb)
 		io->disconnect_cb(io);
+
 }
 
 static void sivair_io_send_keepalive(struct silvair_io *io)
@@ -754,4 +756,11 @@ void silvair_io_destroy(struct silvair_io *io)
 
 	if (io->tls_conn)
 		SSL_free(io->tls_conn);
+}
+
+void silvair_io_close(struct silvair_io *io)
+{
+	int fd = silvair_io_get_fd(io);
+
+	shutdown(fd, SHUT_WR);
 }
