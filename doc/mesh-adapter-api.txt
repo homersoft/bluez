@@ -4,164 +4,68 @@ BlueZ D-Bus Mesh Adapter API description
 Overview
 ========
 
-This document describes IO types and API for mesh adapters management.
-It allows for adding / configure new mesh adapter and store it configuration
-in the persistent storage. It is possible to add more than one mesh adapter.
+This document describes API for mesh adapters. It allows to granting and
+revoking access for MicroGateway and reading connection statistics.
 
 
-Configuration options
-=====================
-IO type: "tcpserver"
-
-    Description:
-
-        This IO uses TCP and TLS-PSK protocols to data exchange.
-
-        Security parameters are calculated based on UUID, Device Key and
-        Network Key.
-
-        Formula to calculate TLS-PSK identity and pre-shared key:
-
-            NetworkId = k4(Network Key)
-            Identity = k1(UUID | NetworkId)
-            PSK = s1(Identity, Device Key, "idpsk")
-
-    Options:
-
-        string Address [optional]
-
-            Address on which daemon listening for incoming connections.
-            Default: 0.0.0.0 (ANY)
-
-        int Port [optional]
-
-            Port for listening for incoming connections.
-            Default: 65267
-
-        array{byte}[16] UUID [identifier]
-
-            UUID in 16-byte array format.
-
-        array{byte}[16] DeviceKey
-
-            Device Key in 16-byte array format.
-
-        array{byte}[16] NetworkKey
-
-            Network Key in 16-byte array format.
-
-IO type: "silvair"
-
-    Description:
-
-        This IO uses Serial Port and Silvair radio protocol to data exchange.
-
-    Options:
-
-         string SerialPort [identifier]
-
-             Serial port to which Silvair Radio is attached.
-
-         int Baudrate [optional]
-
-            Serial port baudrate value. Default 115200.
-
-         int DataBits [optional]
-
-             Data bits count. Default: 8
-
-             The defined values are: 5, 6, 7 or 8
-
-         string Parity [optional]
-
-             Parity setting. Default: "none"
-
-             The defined values are: "even", "odd", "none"
-
-         int StopBits [optional]
-
-             Stop bits count. Default: 1
-
-             The defined values are: 1 or 2
-
-         string FlowControl [optional]
-
-             Flow control setting. Default: "none"
-
-             The defined values are: "none", "hardware" or "software"
-
-
-Mesh Network Hierarchy
-======================
+AccessControlList Hierarchy
+===========================
 Service		org.bluez.mesh
-Interface	org.bluez.mesh.AdapterManager1
-Object path	/org/bluez/mesh
+Interface	org.bluez.mesh.AccessControlList1
+Object path	/org/bluez/mesh/{tcpserver_<port>}
+                                where <port> is a TCP port on which
+                                TCP server is listening.
 
 Methods:
-	uint64 token Add(string io_type, dict config)
+    uint64 token GrantAccess(array{byte}[16] uuid,
+                             array{byte}[16] dev_key,
+                             array{byte}[16] net_key)
 
-	    This is method that an application has to call to
-	    add a new mesh adapter with an IO type.
+        This is method that an application has to call to grant access for
+        microGateway. Based on passed arguments it computes an identity and
+        a pre-shared-key. Computed values with generated random token are
+        permanently stored in the configuration file as an ACL entry.
 
-	    The config parameter is a dictionary with configuration
-	    options specific for the chosen IO type. It is possible to only one
-	    adapter with unique identifier. When Adapter with unique identifier
-	    already exists then AlreadyExists error will be raised. When one of
-	    required configuration options is missing then InvalidArguments error
-	    will be raised. When write to persistent storage will fail then Failed
-	    error will be raised
+        The token parameter is a 64-bit number that has been assigned to
+        the access entry when it was created. The daemon uses the token
+        to verify whether the application is authorized revoke access.
 
-        string io_type
+        array{byte}[16] uuid
 
-            This parameter choose which IO type will be used
-            to communicate with an adapter.
+            UUID of the MicroGateway.
 
-            The defined values are: "tcpserver", "silvair"
+        array{byte}[16] dev_key
 
-        dict config
+            Device Key of the MicroGateway.
 
-            This parameter should contain settings tuple for chosen IO type.
+        array{byte}[16] net_key
+
+            Network Key of the network on which MicroGateway is provisioned.
 
         PossibleErrors:
-            org.bluez.mesh.Error.InvalidArguments,
-            org.bluez.mesh.Error.AlreadyExists,
+            org.bluez.mesh.Error.AlreadyExists
+            org.bluez.mesh.Error.InvalidArguments
             org.bluez.mesh.Error.Failed
 
-	void Remove(uint64 token)
+    void RevokeAccess(uint64 token)
 
-        This removes the configuration information about the mesh adapter
-        identified by the 64-bit token parameter. The token parameter
-        has been obtained as a result of successful Add() method call.
-        When configuration for adapter with passed toked does not exist
-        NotFound error will be raised. When remove from persistent storage
-        will faile then Failed error will be raised.
+        This removes the ACL entry identified by the 64-bit token parameter.
+        The token parameter has been obtained as a result of successful
+        GrantAccess() method call.
 
-	    PossibleErrors:
-	        org.bluez.mesh.Error.NotFound,
-	        org.bluez.mesh.Error.Failed
-
-	void Configure(uint64 token, dict config)
-
-	    This configures mesh adapter identified by the 64-bit token
-	    parameter. The token parameter has been obtained as a result of
-	    successful Add() method call. The config parameter should
-	    contains options related to selected IO type, in case of
-	    passed parameter that is not supported by the IO type, then
-	    InvalidArguments error will be raised. If configuration with
-	    passed token doesn't exist then NotFound error will be raised.
-
-	    PossibleErrors:
-	        org.bluez.mesh.Error.NotFound,
-	        org.bluez.mesh.Error.InvalidArguments
+        PossibleErrors:
+            org.bluez.mesh.Error.InvalidArguments
+            org.bluez.mesh.Error.NotFound
+            org.bluez.mesh.Error.Failed
 
 
-Mesh Network Hierarchy
-======================
+Connection State Hierarchy
+==========================
 Service		org.bluez.mesh
-Interface	org.bluez.mesh.Adapter1
-Object path	/org/bluez/mesh/{io_type}/<id>
-                where <id> can be Adapter UUID or
-                Serial port name (depends on IO type).
+Interface	org.bluez.mesh.ConnectionState1
+Object path	/org/bluez/mesh/<adapter>/<name>
+                where <adapter> is an adapter identifier e.g. {tcpserver_65254}
+                <name> is connection name for TCPServer it is an identity.
 
 Properties:
     bool Connected [read-only]
