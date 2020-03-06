@@ -50,7 +50,7 @@ Methods:
 
     void RevokeAccess(uint64 token)
 
-        This removes the ACL entry identified by the 64-bit token parameter.
+        Removes the ACL entry identified by the 64-bit token parameter.
         The token parameter has been obtained as a result of successful
         GrantAccess() method call.
 
