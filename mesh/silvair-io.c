@@ -26,7 +26,10 @@
 
 static bool io_read_callback(struct l_io *l_io, void *user_data);
 
-static const uint32_t silvair_access_address		= 0x8e89bed6;
+// TODO: silvair_access_address has been accidently swaped in pymeshd,
+//	due to cost optimization it should be swapped again when
+//      we make changes that require Silvair Radio reflash in Test Setups.
+static const uint32_t silvair_access_address		= 0xd6be898e;
 static const uint16_t keep_alive_watchdog_period_ms	= 1000;
 static const uint16_t disconnect_watchdog_period_ms	= 10000;
 
@@ -437,7 +440,7 @@ static int build_packet(uint8_t *data,
 		// ADV_NONCONN_IND = <AdvA> | <AdvData>
 		// <AdvA> - 6 bytes of address
 		// <AdvData> = <Len> | <Type> | <Value>
-		// <Len> = len(<Type> + len(<Value)
+		// <Len> = len(<Type>) + len(<Value)
 		// len(<AdvData>) = <Len> + len(<Len>)
 		// "+ 1" below means length of <Len> field
 		size_t adv_data_len = size + 1;
