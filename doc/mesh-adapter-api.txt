@@ -21,8 +21,9 @@ Methods:
                              array{byte}[16] dev_key,
                              array{byte}[16] net_key)
 
-        This is method that an application has to call to grant access for
-        microGateway. Based on passed arguments it computes an identity and
+        Grants access to an internal TCP server to a microGateway defined by
+        its UUID & device and network keys. Computes an identity and
+        a pre-shared key based on these arguments.
         a pre-shared-key. Computed values with generated random token are
         permanently stored in the configuration file as an ACL entry.
 
