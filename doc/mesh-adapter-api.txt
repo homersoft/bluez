@@ -4,7 +4,7 @@ BlueZ D-Bus Mesh Adapter API description
 Overview
 ========
 
-This document describes API for mesh adapters. It allows to granting and
+This document describes API for mesh adapters. It allows granting and
 revoking access for MicroGateway and reading connection statistics.
 
 
