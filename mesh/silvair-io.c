@@ -440,7 +440,7 @@ static int build_packet(uint8_t *data,
 		// ADV_NONCONN_IND = <AdvA> | <AdvData>
 		// <AdvA> - 6 bytes of address
 		// <AdvData> = <Len> | <Type> | <Value>
-		// <Len> = len(<Type>) + len(<Value)
+		// <Len> = len(<Type>) + len(<Value>)
 		// len(<AdvData>) = <Len> + len(<Len>)
 		// "+ 1" below means length of <Len> field
 		size_t adv_data_len = size + 1;
