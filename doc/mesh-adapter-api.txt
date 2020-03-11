@@ -4,8 +4,7 @@ BlueZ D-Bus Mesh Adapter API description
 Overview
 ========
 
-This document describes API for mesh adapters. It allows granting and
-revoking access for MicroGateway and reading connection statistics.
+This document describes API for a mesh-io (e.g. `tcpserver`) configuration.
 
 
 AccessControlList Hierarchy
@@ -21,11 +20,11 @@ Methods:
                              array{byte}[16] dev_key,
                              array{byte}[16] net_key)
 
-        Grants access to an internal TCP server to a microGateway defined by
-        its UUID & device and network keys. Computes an identity and
-        a pre-shared key based on these arguments.
-        a pre-shared-key. Computed values with generated random token are
-        permanently stored in the configuration file as an ACL entry.
+        Grants access to an internal TCP server for a TLS Client defined by
+        its UUID & device and network key. Computes an identity and
+        a pre-shared key based on these arguments. Computed values with an
+        randomly generated token are permanently stored in the configuration
+        file as an ACL entry.
 
         The token parameter is a 64-bit number that has been assigned to
         the access entry when it was created. The daemon uses the token
@@ -33,15 +32,15 @@ Methods:
 
         array{byte}[16] uuid
 
-            UUID of the MicroGateway.
+            UUID of the TLS Client.
 
         array{byte}[16] dev_key
 
-            Device Key of the MicroGateway.
+            Device Key of the TLS Client.
 
         array{byte}[16] net_key
 
-            Network Key of the network on which MicroGateway is provisioned.
+            Primary Network Key of the TLS Client (device must be provisioned).
 
         PossibleErrors:
             org.bluez.mesh.Error.AlreadyExists
@@ -64,9 +63,10 @@ Connection State Hierarchy
 ==========================
 Service		org.bluez.mesh
 Interface	org.bluez.mesh.ConnectionState1
-Object path	/org/bluez/mesh/<adapter>/<name>
+Object path	/org/bluez/mesh/<adapter>/<identity>
                 where <adapter> is an adapter identifier e.g. {tcpserver_65254}
-                <name> is connection name for TCPServer it is an identity.
+                <identity> is client TLS identity hint, calculated after
+                calling GrantAccess() method.
 
 Properties:
     bool Connected [read-only]
