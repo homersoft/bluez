@@ -218,7 +218,7 @@ static bool uart_user_init(struct mesh_io *mesh_io)
 
 static bool uart_tty_init(struct mesh_io *mesh_io, bool flow)
 {
-	struct termios ttys;
+	struct termios ttys = { .c_cflag = CREAD, 0};
 
 	mesh_io->pvt->tty_fd = open(mesh_io->pvt->tty_name, O_RDWR);
 
@@ -229,6 +229,7 @@ static bool uart_tty_init(struct mesh_io *mesh_io, bool flow)
 	}
 
 	cfmakeraw(&ttys);
+
 	cfsetspeed(&ttys, B1000000);
 
 	if (flow)
