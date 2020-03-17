@@ -354,10 +354,7 @@ static void process_packet(struct silvair_io *io,
 		break;
 
 	case SILVAIR_CMD_KEEP_ALIVE:
-		if (io->disconnect_watchdog) {
-			l_timeout_remove(io->disconnect_watchdog);
-			io->disconnect_watchdog = NULL;
-		}
+		silvair_io_keep_alive_wdt_refresh(io);
 		process_evt_keep_alive(io, pkt_hdr, len);
 		break;
 
@@ -713,10 +710,7 @@ struct silvair_io *silvair_io_new(int fd,
 void silvair_io_keep_alive_wdt_refresh(struct silvair_io *io)
 {
 	if (!io)
-		return;
-
-	if (!io->keep_alive_watchdog)
-		return;
+		abort();
 
 	if (io->disconnect_watchdog) {
 		l_timeout_remove(io->disconnect_watchdog);
@@ -725,7 +719,7 @@ void silvair_io_keep_alive_wdt_refresh(struct silvair_io *io)
 	}
 
 	l_timeout_modify_ms(io->keep_alive_watchdog,
-					keep_alive_watchdog_period_ms);
+				    keep_alive_watchdog_period_ms);
 }
 
 int silvair_io_get_fd(struct silvair_io *io)
