@@ -407,7 +407,8 @@ static unsigned int tls_psk_server_cb(SSL *ssl,
 
 static bool tls_ctx_init(struct mesh_io_private *pvt)
 {
-	int off = SSL_OP_NO_TLSv1_3;
+	int off = SSL_OP_NO_TLSv1_3 |
+				SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION;
 
 	ERR_load_crypto_strings();
 
