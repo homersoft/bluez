@@ -497,6 +497,9 @@ struct tcpserver_acl *tcpserver_acl_new(const char *config_dir,
 
 void tcpserver_acl_destroy(struct tcpserver_acl *acl)
 {
+	if (!acl)
+		return;
+
 	if (acl->entries)
 		l_queue_destroy(acl->entries, l_free);
 
