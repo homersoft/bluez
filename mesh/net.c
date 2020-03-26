@@ -1528,7 +1528,8 @@ static void friend_ack_rxed(struct mesh_net *net, uint32_t iv_index,
 	l_queue_foreach(net->friends, enqueue_friend_pkt, &frnd_ack);
 }
 
-static bool send_seg(struct mesh_net *net, struct mesh_sar *msg, uint8_t seg);
+static bool send_seg(struct mesh_net *net, uint16_t net_key_idx,
+					struct mesh_sar *msg, uint8_t seg);
 
 static void send_frnd_ack(struct mesh_net *net, uint16_t src, uint16_t dst,
 						uint32_t hdr, uint32_t flags)
@@ -1723,6 +1724,7 @@ static void ack_received(struct mesh_net *net, bool timeout,
 	ack_copy &= outgoing->flags;
 
 	for (i = 0; i <= SEG_MAX(true, outgoing->len); i++, seg_flag <<= 1) {
+		uint16_t idx;
 		if (seg_flag & ack_flag) {
 			l_debug("Skipping Seg %d of %d",
 					i, SEG_MAX(true, outgoing->len));
@@ -1734,7 +1736,9 @@ static void ack_received(struct mesh_net *net, bool timeout,
 		l_info("Resend Seg %d net:%p dst:%x app_idx:%3.3x",
 				i, net, outgoing->remote, outgoing->app_idx);
 
-		send_seg(net, outgoing, i);
+		idx = appkey_net_idx(net, outgoing->app_idx);
+
+		send_seg(net, idx, outgoing, i);
 	}
 
 	l_timeout_remove(outgoing->seg_timeout);
@@ -2358,6 +2362,8 @@ static enum _relay_advice packet_received(void *user_data,
 		return RELAY_NONE;
 	}
 
+	l_info("NET_KEY_ID: !!!!!!!!!!!!!! %d", net_key_id);
+
 	if (net_dst == 0) {
 		l_error("illegal parms: DST: %4.4x Ctl: %d TTL: %2.2x",
 						net_dst, net_ctl, net_ttl);
@@ -2366,7 +2372,9 @@ static enum _relay_advice packet_received(void *user_data,
 
 	/* Ignore if we originally sent this */
 	if (is_us(net, net_src, true))
+	{
 		return RELAY_NONE;
+	}
 
 	l_debug("check %08x", cache_cookie);
 
@@ -3058,8 +3066,8 @@ bool mesh_net_flush(struct mesh_net *net)
 	return true;
 }
 
-/* TODO: add net key index */
-static bool send_seg(struct mesh_net *net, struct mesh_sar *msg, uint8_t segO)
+static bool send_seg(struct mesh_net *net, uint16_t net_key_idx,
+					struct mesh_sar *msg, uint8_t segO)
 {
 	struct mesh_subnet *subnet;
 	uint8_t seg_len;
@@ -3109,7 +3117,11 @@ static bool send_seg(struct mesh_net *net, struct mesh_sar *msg, uint8_t segO)
 	}
 	print_packet("Clr-Net Tx", packet + 1, packet_len);
 
-	subnet = get_primary_subnet(net);
+	subnet = l_queue_find(net->subnets, match_key_index,
+						L_UINT_TO_PTR(net_key_idx));
+	if (!subnet)
+		return false;
+
 	key_id = subnet->net_key_tx;
 
 	if (!net_key_encrypt(key_id, msg->iv_index, packet + 1, packet_len)) {
@@ -3266,17 +3278,20 @@ bool mesh_net_app_send(struct mesh_net *net, bool frnd_cred, uint16_t src,
 		}
 	}
 
+	l_info("NET_IDX: %d", net_idx);
+
+
 	result = true;
 	if (!IS_UNICAST(dst) && segmented) {
 		int i;
 
 		for (i = 0; i < 4; i++) {
 			for (seg = 0; seg <= seg_max && result; seg++)
-				result = send_seg(net, payload, seg);
+				result = send_seg(net, net_idx, payload, seg);
 		}
 	} else {
 		for (seg = 0; seg <= seg_max && result; seg++)
-			result = send_seg(net, payload, seg);
+			result = send_seg(net, net_idx, payload, seg);
 	}
 
 	/* Reliable: Cache; Unreliable: Flush*/
