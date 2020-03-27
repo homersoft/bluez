@@ -1528,7 +1528,8 @@ static void friend_ack_rxed(struct mesh_net *net, uint32_t iv_index,
 	l_queue_foreach(net->friends, enqueue_friend_pkt, &frnd_ack);
 }
 
-static bool send_seg(struct mesh_net *net, struct mesh_sar *msg, uint8_t seg);
+static bool send_seg(struct mesh_net *net, uint16_t net_idx,
+					struct mesh_sar *msg, uint8_t seg);
 
 static void send_frnd_ack(struct mesh_net *net, uint16_t src, uint16_t dst,
 						uint32_t hdr, uint32_t flags)
@@ -1684,6 +1685,7 @@ static void ack_received(struct mesh_net *net, bool timeout,
 	struct mesh_sar *outgoing;
 	uint32_t seg_flag = 0x00000001;
 	uint32_t ack_copy = ack_flag;
+	uint16_t net_idx;
 	uint16_t i;
 
 	l_info("ACK Rxed (%x) (to:%d): %8.8x", seq0, timeout, ack_flag);
@@ -1734,7 +1736,9 @@ static void ack_received(struct mesh_net *net, bool timeout,
 		l_info("Resend Seg %d net:%p dst:%x app_idx:%3.3x",
 				i, net, outgoing->remote, outgoing->app_idx);
 
-		send_seg(net, outgoing, i);
+		net_idx = appkey_net_idx(net, outgoing->app_idx);
+
+		send_seg(net, net_idx, outgoing, i);
 	}
 
 	l_timeout_remove(outgoing->seg_timeout);
@@ -3058,8 +3062,8 @@ bool mesh_net_flush(struct mesh_net *net)
 	return true;
 }
 
-/* TODO: add net key index */
-static bool send_seg(struct mesh_net *net, struct mesh_sar *msg, uint8_t segO)
+static bool send_seg(struct mesh_net *net, uint16_t net_idx,
+					struct mesh_sar *msg, uint8_t segO)
 {
 	struct mesh_subnet *subnet;
 	uint8_t seg_len;
@@ -3068,7 +3072,6 @@ static bool send_seg(struct mesh_net *net, struct mesh_sar *msg, uint8_t segO)
 	uint8_t packet_len;
 	uint8_t segN = SEG_MAX(msg->segmented, msg->len);
 	uint16_t seg_off = SEG_OFF(segO);
-	uint32_t key_id = 0;
 	uint32_t seq_num;
 
 	if (msg->segmented) {
@@ -3109,10 +3112,13 @@ static bool send_seg(struct mesh_net *net, struct mesh_sar *msg, uint8_t segO)
 	}
 	print_packet("Clr-Net Tx", packet + 1, packet_len);
 
-	subnet = get_primary_subnet(net);
-	key_id = subnet->net_key_tx;
+	subnet = l_queue_find(net->subnets, match_key_index,
+							L_UINT_TO_PTR(net_idx));
+	if (!subnet)
+		return false;
 
-	if (!net_key_encrypt(key_id, msg->iv_index, packet + 1, packet_len)) {
+	if (!net_key_encrypt(subnet->net_key_tx, msg->iv_index, packet + 1,
+							     packet_len)) {
 		l_error("Failed to encode packet");
 		return false;
 	}
@@ -3272,11 +3278,11 @@ bool mesh_net_app_send(struct mesh_net *net, bool frnd_cred, uint16_t src,
 
 		for (i = 0; i < 4; i++) {
 			for (seg = 0; seg <= seg_max && result; seg++)
-				result = send_seg(net, payload, seg);
+				result = send_seg(net, net_idx, payload, seg);
 		}
 	} else {
 		for (seg = 0; seg <= seg_max && result; seg++)
-			result = send_seg(net, payload, seg);
+			result = send_seg(net, net_idx, payload, seg);
 	}
 
 	/* Reliable: Cache; Unreliable: Flush*/
