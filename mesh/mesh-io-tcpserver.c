@@ -405,14 +405,19 @@ static unsigned int tls_psk_server_cb(SSL *ssl,
 
 static bool tls_ctx_init(struct mesh_io_private *pvt)
 {
-	int off = SSL_OP_NO_TLSv1_3 |
-				SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION;
+	int off = SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION;
 
 	ERR_load_crypto_strings();
 
 	SSL_library_init();
 
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+	off |= SSL_OP_NO_TLSv1_3;
 	pvt->tls_ctx = SSL_CTX_new(TLS_server_method());
+#else
+	pvt->tls_ctx = SSL_CTX_new(TLSv1_2_server_method());
+#endif
+
 	if (!pvt->tls_ctx) {
 		l_error("Failed to alloc TLS context object.");
 		return false;
