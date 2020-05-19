@@ -2388,13 +2388,10 @@ static enum _relay_advice packet_received(void *user_data,
 	if (msg_in_cache(net, net_src, net_seq, cache_cookie))
 		return RELAY_NONE;
 
-	l_debug("RX: Network %04x -> %04x : TTL 0x%02x : IV : %8.8x SEQ 0x%06x",
-			net_src, net_dst, net_ttl, iv_index, net_seq);
-
 	if (is_us(net, net_dst, false) ||
 			(net_ctl && net_opcode == NET_OP_HEARTBEAT)) {
 
-		l_info("RX: App 0x%04x -> 0x%04x : TTL 0x%02x : SEQ 0x%06x",
+		l_debug("RX: App 0x%04x -> 0x%04x : TTL 0x%02x : SEQ 0x%06x",
 					net_src, net_dst, net_ttl, net_seq);
 
 		if (net_ctl) {
