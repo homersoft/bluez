@@ -57,7 +57,7 @@ static bool aes_ecb_one(const uint8_t key[16], const uint8_t in[16],
 	result = true;
 
 done:
-	EVP_CIPHER_CTX_cleanup(cipher);
+	EVP_CIPHER_CTX_free(cipher);
 	return result;
 }
 
@@ -133,7 +133,7 @@ bool mesh_crypto_aes_ccm_encrypt(const uint8_t nonce[13], const uint8_t key[16],
 	result = true;
 
 done:
-	EVP_CIPHER_CTX_cleanup(cipher);
+	EVP_CIPHER_CTX_free(cipher);
 	return result;
 }
 
@@ -188,7 +188,7 @@ bool mesh_crypto_aes_ccm_decrypt(const uint8_t nonce[13], const uint8_t key[16],
 	result = true;
 
 done:
-	EVP_CIPHER_CTX_cleanup(cipher);
+	EVP_CIPHER_CTX_free(cipher);
 	return result;
 }
 
