@@ -248,6 +248,7 @@ static bool save_config(struct tcpserver_acl *acl)
 	else
 		result = true;
 
+	json_object_put(jcfg);
 	fclose(outfile);
 
 	return result;
