@@ -76,7 +76,7 @@ struct mesh_io_private {
 	/* TLS context */
 	SSL_CTX			*tls_ctx;
 
-	const char		*dbus_path;
+	char		        *dbus_path;
 	struct l_dbus		*dbus;
 	struct tcpserver_acl	*acl;
 };
@@ -603,6 +603,9 @@ static bool tcpserver_io_destroy(struct mesh_io *mesh_io)
 	l_queue_destroy(pvt->tx_pkts, l_free);
 	l_timeout_remove(pvt->tx_timeout);
 
+	l_free(pvt->dbus_path);
+
+	SSL_CTX_free(pvt->tls_ctx);
 	tcpserver_acl_destroy(pvt->acl);
 
 	l_free(pvt);

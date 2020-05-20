@@ -754,6 +754,8 @@ void silvair_io_destroy(struct silvair_io *io)
 
 	if (io->tls_conn)
 		SSL_free(io->tls_conn);
+
+	l_free(io);
 }
 
 void silvair_io_close(struct silvair_io *io)
