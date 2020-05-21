@@ -997,16 +997,27 @@ bool mesh_crypto_packet_encode(uint8_t *packet, uint8_t packet_len,
 
 	if (!network_header_parse(packet, packet_len,
 						&ctl, &ttl, &seq, &src, &dst))
+	{
+		l_error("Malformed header");
 		return false;
+	}
 
 	if (!mesh_crypto_packet_encrypt(packet, packet_len, network_key,
 							iv_index, !dst,
 							ctl, ttl, seq, src))
-
+	{
+		l_error("Encryption failed");
 		return false;
+	}
 
-	return mesh_crypto_network_obfuscate(packet, privacy_key, iv_index,
-							ctl, ttl, seq, src);
+	if (!mesh_crypto_network_obfuscate(packet, privacy_key, iv_index,
+							ctl, ttl, seq, src))
+	{
+		l_error("Obfuscation failed");
+		return false;
+	}
+
+	return true;
 }
 
 static bool mesh_crypto_packet_decrypt(uint8_t *packet, uint8_t packet_len,
