@@ -17,6 +17,9 @@
 #include <limits.h>
 #include <stdio.h>
 #include <sys/time.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
 
 #include <ell/ell.h>
 
@@ -98,6 +101,8 @@ struct mesh_node {
 	uint8_t proxy;
 	uint8_t friend;
 	uint8_t beacon;
+	struct l_io *fd_io;
+	char *unix_fd_path;
 };
 
 struct node_import {
@@ -212,6 +217,7 @@ static void set_defaults(struct mesh_node *node)
 							MESH_MODE_UNSUPPORTED;
 	node->ttl = TTL_MASK;
 	node->seq_number = DEFAULT_SEQUENCE_NUMBER;
+	node->fd_io = NULL;
 }
 
 static struct mesh_node *node_new(const uint8_t uuid[16])
@@ -274,6 +280,12 @@ static void free_node_dbus_resources(struct mesh_node *node)
 		l_free(node->obj_path);
 		node->obj_path = NULL;
 	}
+
+	if (node->fd_io) {
+		l_io_set_disconnect_handler(node->fd_io, NULL, NULL, NULL);
+		l_io_destroy(node->fd_io);
+		node->fd_io = NULL;
+	}
 }
 
 static void free_node_resources(void *data)
@@ -282,7 +294,6 @@ static void free_node_resources(void *data)
 
 	/* Unregister io callbacks */
 	mesh_net_detach(node->net);
-
 
 	/* In case of a provisioner, stop active scanning */
 	if (node->provisioner)
@@ -295,6 +306,7 @@ static void free_node_resources(void *data)
 	mesh_agent_remove(node->agent);
 	mesh_config_release(node->cfg);
 	mesh_net_free(node->net);
+
 	l_free(node->storage_dir);
 	l_free(node);
 }
@@ -677,6 +689,11 @@ uint16_t node_get_crpl(struct mesh_node *node)
 		return 0;
 
 	return node->comp.crpl;
+}
+
+struct l_io *node_get_fd_io(struct mesh_node *node)
+{
+	return node->fd_io;
 }
 
 uint8_t node_relay_mode_get(struct mesh_node *node, uint8_t *count,
@@ -1621,9 +1638,104 @@ static void send_managed_objects_request(const char *destination,
 					req, l_free, DEFAULT_DBUS_TIMEOUT);
 }
 
+static void fd_io_hup(struct l_io *io, void *user_data)
+{
+	struct mesh_node *node = user_data;
+
+	if (node->fd_io) {
+		l_io_destroy(node->fd_io);
+		node->fd_io = NULL;
+	}
+}
+
+static struct l_io *fd_io_new(struct mesh_node *node, int *fd)
+{
+	struct l_io *io;
+	int fds[2];
+
+	if (socketpair(AF_LOCAL, SOCK_DGRAM | SOCK_NONBLOCK | SOCK_CLOEXEC,
+								0, fds) < 0)
+	{
+		return NULL;
+	}
+
+	io = l_io_new(fds[0]);
+	if (!io)
+		goto fail;
+
+	l_io_set_close_on_destroy(io, true);
+
+	if (!l_io_set_disconnect_handler(io, fd_io_hup, node, NULL))
+		goto fail;
+
+	*fd = fds[1];
+
+	return io;
+
+fail:
+	if (io)
+		l_io_destroy(io);
+
+	close(fds[0]);
+	close(fds[1]);
+
+	return NULL;
+}
+
+static struct l_io *fd_unix_new(struct mesh_node *node,
+						const char *unix_fd_path)
+{
+	struct sockaddr_un addr;
+	struct l_io *io;
+	const char *snap_data = NULL;
+
+	int fd = socket(AF_LOCAL, SOCK_DGRAM | SOCK_NONBLOCK, 0);
+	if (fd < 0)
+	{
+		return NULL;
+	}
+
+	memset(&addr, 0, sizeof(addr));
+	addr.sun_family = AF_UNIX;
+
+	// This is a workaround for the SNAP.
+	// Snap creates separate environments for BlueZ and the application.
+	// Socket created in the application context is not available from the
+	// BlueZ context (but Snap copies it implicitly to the BlueZ
+	// root directory).
+	snap_data = getenv("SNAP_DATA");
+	if (snap_data)
+	{
+		memset(addr.sun_path, 0, sizeof(addr.sun_path));
+		snprintf(addr.sun_path, sizeof(addr.sun_path) - 1,
+			 "%s/sockets/%s", snap_data, basename(unix_fd_path));
+	} else
+		strncpy(addr.sun_path, unix_fd_path, sizeof(addr.sun_path) - 1);
+
+	if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+		goto fail;
+
+	io = l_io_new(fd);
+	if (!io)
+		goto fail;
+
+	l_io_set_close_on_destroy(io, true);
+
+	if (!l_io_set_disconnect_handler(io, fd_io_hup, node, NULL))
+		goto fail;
+
+	l_info("Unix FD created");
+
+	return io;
+fail:
+	close(fd);
+	return NULL;
+}
+
 /* Establish relationship between application and mesh node */
 void node_attach(const char *app_root, const char *sender, uint64_t token,
-					node_ready_func_t cb, void *user_data)
+				const char *unix_fd_path, node_ready_func_t cb,
+								void *user_data)
 {
 	struct managed_obj_request *req;
 	struct mesh_node *node;
@@ -1661,6 +1773,7 @@ void node_attach(const char *app_root, const char *sender, uint64_t token,
 	req->type = REQUEST_TYPE_ATTACH;
 
 	node->busy = true;
+	node->unix_fd_path = l_strdup(unix_fd_path);
 
 	send_managed_objects_request(sender, app_root, req);
 }
@@ -1749,8 +1862,16 @@ static void build_element_config(void *a, void *b)
 	l_dbus_message_builder_leave_struct(builder);
 }
 
+static void append_fd(struct l_dbus_message_builder *builder, ...)
+{
+	va_list args;
+	va_start(args, builder);
+	l_dbus_message_builder_append_from_valist(builder, "h", args);
+	va_end(args);
+}
+
 void node_build_attach_reply(struct mesh_node *node,
-						struct l_dbus_message *reply)
+				struct l_dbus_message *reply, bool use_fd)
 {
 	struct l_dbus_message_builder *builder;
 
@@ -1763,6 +1884,24 @@ void node_build_attach_reply(struct mesh_node *node,
 	l_dbus_message_builder_enter_array(builder, "(ya(qa{sv}))");
 	l_queue_foreach(node->elements, build_element_config, builder);
 	l_dbus_message_builder_leave_array(builder);
+
+	if (use_fd)
+	{
+		int fd = -1;
+		node->fd_io = fd_io_new(node, &fd);
+		append_fd(builder, fd);
+
+		close(fd);
+	}
+
+	if (node->unix_fd_path)
+	{
+		node->fd_io = fd_unix_new(node, node->unix_fd_path);
+
+		l_free(node->unix_fd_path);
+		node->unix_fd_path = NULL;
+	}
+
 	l_dbus_message_builder_finalize(builder);
 	l_dbus_message_builder_destroy(builder);
 }
