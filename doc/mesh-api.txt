@@ -120,6 +120,60 @@ Methods:
 			org.bluez.mesh.Error.Busy,
 			org.bluez.mesh.Error.Failed
 
+    object node, array{byte, array{(uint16, dict)}} configuration, fd
+            AttachFD(object app_root, uint64 token)
+
+        This is an alternative version of the Attach() method. This method
+        acquires file descriptor for message reception.
+
+        Method behaviour and usage is similiar to the Attach() method.
+        The difference between those two method is that after call AttachFD()
+        all received messages will be passed via file descriptor,
+        instead of daemon calling MessageReceived() and
+        DevKeyMessageReceived() methods.
+
+
+        The data format used for the exchange:
+
+            Message types:
+                0 - Device Key Message
+                1 - Application Key Message
+
+            struct {
+                uint8_t element;
+                uint8_t src;
+
+                uint8_t type;
+                union {
+                    struct {
+                        uint8_t net_idx;
+                        bool remote;
+                    } dev; // only meaningful when type is 0
+
+                    struct {
+                        uint8_t app_idx;
+                        uint16_t dst;
+                        uint8_t label[16]; // only meaningful when dst is virtual
+                    } app; // only meaningful when type is 1
+                }
+
+                uint8_t data[];
+            };
+
+    object node, array{byte, array{(uint16, dict)}} configuration, fd
+                AttachUnix(object app_root, uint64 token, string unix_fd_path)
+
+            This is an alternative version of the AttachFD() method, dedicated
+            for systems that doesn't allow for socket passing. This method
+            connects to named Unix file descriptor created by the application.
+            Path to the file descriptor is passed via 'unix_fd_path' argument.
+
+            Method behaviour and usage is similiar to the Attach() method.
+            The difference between those two method is that after call AttachUnix()
+            all received messages will be passed via file descriptor,
+            instead of daemon calling MessageReceived() and
+            DevKeyMessageReceived() methods.
+
 	void Leave(uint64 token)
 
 		This removes the configuration information about the mesh node
