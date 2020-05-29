@@ -119,37 +119,43 @@ Methods:
 			org.bluez.mesh.Error.Failed
 
     object node, array{byte, array{(uint16, dict)}} configuration, fd
-            Attach1(object app_root, uint64 token)
+            AttachFD(object app_root, uint64 token)
 
         This is an alternative version of the Attach() method. This method
-        acquires file descriptor for message reception
-        (which increases performance).
+        acquires file descriptor for message reception.
 
         Method behaviour and usage is similiar to the Attach() method.
-        The difference between those two method is that after call Attach1()
+        The difference between those two method is that after call AttachFD()
         all received messages will be passed via file descriptor,
-        no more MessageReceived() and DevKeyMessageReceived() method
-        will be called.
+        instead of daemon calling MessageReceived() and
+        DevKeyMessageReceived() methods.
+
 
         The data format used for the exchange:
 
             Message types:
                 0 - Device Key Message
-                1 - Message without virtual address
-                2 - Message with virtual address
+                1 - Application Key Message
 
             struct {
-                uint8_t  type;
-                uint8_t  ele_idx;
-                uint16_t src;
-                uint16_t app_idx;
+                uint8_t element;
+                uint8_t src;
+
+                uint8_t type;
                 union {
-                    uint16_t net_idx;
-                    uint16_t dst;
-                    uint8_t  virt_label[16];
-                };
-                uint16_t size;
-                uint8_t  data[size];
+                    struct {
+                        uint8_t net_idx;
+                        bool remote;
+                    } dev; // only meaningful when type is 0
+
+                    struct {
+                        uint8_t app_idx;
+                        uint16_t dst;
+                        uint8_t label[16]; // only meaningful when dst is virtual
+                    } app; // only meaningful when type is 1
+                }
+
+                uint8_t data[];
             };
 
 	void Leave(uint64 token)
