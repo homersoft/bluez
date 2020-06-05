@@ -264,6 +264,7 @@ static struct mesh_node *node_new(const uint8_t uuid[16])
 	node = l_new(struct mesh_node, 1);
 	node->net = mesh_net_new(node);
 	node->elements = l_queue_new();
+	l_info("new elements: %p", node->elements);
 	memcpy(node->uuid, uuid, sizeof(node->uuid));
 	set_defaults(node);
 
@@ -274,8 +275,11 @@ static void free_element_path(void *a, void *b)
 {
 	struct node_element *element = a;
 
+	l_info("el: %p, path: %p", element, element->path);
+
 	l_free(element->path);
 	element->path = NULL;
+
 }
 
 static void element_free(void *data)
@@ -289,6 +293,8 @@ static void element_free(void *data)
 
 static void free_node_dbus_resources(struct mesh_node *node)
 {
+	l_info("Node: %p", node);
+
 	if (!node)
 		return;
 
@@ -296,6 +302,8 @@ static void free_node_dbus_resources(struct mesh_node *node)
 		l_dbus_remove_watch(dbus_get_bus(), node->disc_watch);
 		node->disc_watch = 0;
 	}
+
+	l_info("elements: %p", node->elements);
 
 	l_queue_foreach(node->elements, free_element_path, NULL);
 	l_free(node->owner);
@@ -332,13 +340,17 @@ static void free_node_resources(void *data)
 
 	/* Free dynamic resources */
 	free_node_dbus_resources(node);
+	l_info("log1");
 	l_queue_destroy(node->elements, element_free);
+	l_info("log2");
 	node->elements = NULL;
+	l_info("log3");
 	mesh_agent_remove(node->agent);
 	mesh_config_release(node->cfg);
 	mesh_net_free(node->net);
 	l_free(node->storage_dir);
 	l_free(node);
+	l_info("log4");
 }
 
 /*
@@ -1199,6 +1211,7 @@ static void convert_node_to_storage(struct mesh_node *node,
 	db_node->seq_number = node->seq_number;
 
 	db_node->elements = l_queue_new();
+	l_info("db_node->elements %p", db_node->elements);
 
 	entry = l_queue_get_entries(node->elements);
 
@@ -2397,6 +2410,8 @@ void node_finalize_new_node(struct mesh_node *node, struct mesh_io *io)
 {
 	if (!node)
 		return;
+
+	l_info("Nnnnode: %p", node);
 
 	free_node_dbus_resources(node);
 	mesh_agent_remove(node->agent);
