@@ -21,6 +21,8 @@
 #include <config.h>
 #endif
 
+#include <sys/types.h>
+#include <sys/socket.h>
 #include <sys/time.h>
 #include <ell/ell.h>
 
@@ -43,6 +45,33 @@
 #define CEILDIV(val, div) (((val) + (div) - 1) / (div))
 
 #define VIRTUAL_BASE			0x10000
+
+enum fd_msg_type {
+	DEV_KEY_MSG = 0,
+	APP_KEY_MSG = 1,
+};
+
+struct fd_msg {
+
+	uint8_t element;
+	uint16_t src;
+
+	enum fd_msg_type type :8;
+	union {
+		struct {
+			uint16_t net_idx;
+			uint8_t remote;
+		} dev;
+
+		struct {
+			uint16_t app_idx;
+			uint16_t dst;
+			uint8_t label[16];
+		} app;
+	};
+
+	uint8_t data[];
+} __attribute__((packed));
 
 struct mesh_model {
 	const struct mesh_model_ops *cbs;
@@ -780,7 +809,50 @@ static int add_sub(struct mesh_net *net, struct mesh_model *mod,
 	return MESH_STATUS_SUCCESS;
 }
 
-static void send_dev_key_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
+static struct fd_msg *fd_msg_new(uint8_t ele_idx, uint16_t src, uint16_t size, const uint8_t *data, enum fd_msg_type type)
+{
+	size_t msg_len = sizeof(struct fd_msg) + size;
+	struct fd_msg *msg = l_malloc(msg_len);
+
+	msg->element = ele_idx;
+	msg->src = src;
+	msg->type = type;
+
+	memcpy(msg->data, data, size);
+
+	return msg;
+}
+
+static void fd_msg_send(struct l_io *io, struct fd_msg *msg, size_t size)
+{
+	struct iovec iov = {
+		.iov_base = msg,
+		.iov_len = sizeof(struct fd_msg) + size,
+	};
+	struct msghdr hdr = {
+		.msg_iov = &iov,
+		.msg_iovlen = 1,
+	};
+
+	(void)sendmsg(l_io_get_fd(io), &hdr, MSG_NOSIGNAL);
+
+	l_free(msg);
+}
+
+static void send_fd_dev_key_msg_rcvd(struct l_io *io, uint8_t ele_idx,
+				     uint16_t src, uint16_t app_idx,
+				     uint16_t net_idx, uint16_t size,
+				     const uint8_t *data)
+{
+	struct fd_msg *msg = fd_msg_new(ele_idx, src, size, data, DEV_KEY_MSG);
+
+	msg->dev.net_idx = net_idx;
+	msg->dev.remote = (app_idx != APP_IDX_DEV_LOCAL);
+
+	fd_msg_send(io, msg, size);
+}
+
+static void send_dbus_dev_key_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
 					uint16_t src, uint16_t app_idx,
 					uint16_t net_idx, uint16_t size,
 					const uint8_t *data)
@@ -816,7 +888,40 @@ static void send_dev_key_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
 	l_dbus_send(dbus, msg);
 }
 
-static void send_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
+static void send_dev_key_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
+				       uint16_t src, uint16_t app_idx,
+				       uint16_t net_idx, uint16_t size,
+				       const uint8_t *data)
+{
+	struct l_io *io = node_get_fd_io(node);
+
+	if (io)
+		send_fd_dev_key_msg_rcvd(io, ele_idx, src, app_idx, net_idx,
+					 size, data);
+	else
+		send_dbus_dev_key_msg_rcvd(node, ele_idx, src, app_idx, net_idx,
+					   size, data);
+}
+
+static void send_fd_msg_rcvd(struct l_io *io, uint8_t ele_idx,
+			     uint16_t src, uint16_t dst,
+			     const struct mesh_virtual *virt,
+			     uint16_t app_idx,
+			     uint16_t size, const uint8_t *data)
+{
+	struct fd_msg *msg = fd_msg_new(ele_idx, src, size, data, APP_KEY_MSG);
+
+	msg->app.app_idx = app_idx;
+	msg->app.dst = dst;
+
+	if (virt)
+		memcpy(msg->app.label, virt, sizeof(msg->app.label));
+
+	fd_msg_send(io, msg, size);
+}
+
+
+static void send_dbus_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
 					uint16_t src, uint16_t dst,
 					const struct mesh_virtual *virt,
 					uint16_t app_idx,
@@ -859,6 +964,22 @@ static void send_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
 	l_dbus_message_builder_finalize(builder);
 	l_dbus_message_builder_destroy(builder);
 	l_dbus_send(dbus, msg);
+}
+
+static void send_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
+			  uint16_t src, uint16_t dst,
+			  const struct mesh_virtual *virt,
+			  uint16_t app_idx,
+			  uint16_t size, const uint8_t *data)
+{
+	struct l_io *io = node_get_fd_io(node);
+
+	if (io)
+		send_fd_msg_rcvd(io, ele_idx, src, dst, virt, app_idx,
+				 size, data);
+	else
+		send_dbus_msg_rcvd(node, ele_idx, src, dst, virt, app_idx,
+				   size, data);
 }
 
 bool mesh_model_rx(struct mesh_node *node, bool szmict, uint32_t seq0,
@@ -983,6 +1104,7 @@ bool mesh_model_rx(struct mesh_node *node, bool szmict, uint32_t seq0,
 				send_msg_rcvd(node, i, src, dst, decrypt_virt,
 						forward.app_idx, forward.size,
 						forward.data);
+
 			else if (decrypt_idx == APP_IDX_DEV_REMOTE ||
 				 decrypt_idx == APP_IDX_DEV_LOCAL)
 				send_dev_key_msg_rcvd(node, i, src, decrypt_idx,
