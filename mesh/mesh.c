@@ -621,14 +621,18 @@ static void attach_ready_cb(void *user_data, int status, struct mesh_node *node)
 {
 	struct l_dbus_message *reply;
 	struct l_dbus_message *pending_msg;
+	const char *method;
 
 	pending_msg = l_queue_remove_if(pending_queue, simple_match, user_data);
 	if (!pending_msg)
 		return;
 
+	method = l_dbus_message_get_member(pending_msg);
+
 	if (status == MESH_ERROR_NONE) {
 		reply = l_dbus_message_new_method_return(pending_msg);
-		node_build_attach_reply(node, reply);
+		node_build_attach_reply(node, reply,
+						!strcmp(method, "AttachFD"));
 	} else
 		reply = dbus_error(pending_msg, status, "Attach failed");
 
@@ -645,7 +649,7 @@ static struct l_dbus_message *attach_call(struct l_dbus *dbus,
 	struct l_dbus_message *pending_msg;
 	struct mesh_node *node;
 
-	l_debug("Attach");
+	l_debug("%s", l_dbus_message_get_member(msg));
 
 	if (!l_dbus_message_get_arguments(msg, "ot", &app_path, &token))
 		return dbus_error(msg, MESH_ERROR_INVALID_ARGS, NULL);
@@ -925,6 +929,10 @@ static void setup_network_interface(struct l_dbus_interface *iface)
 	l_dbus_interface_method(iface, "Attach", 0, attach_call,
 					"oa(ya(qa{sv}))", "ot", "node",
 					"configuration", "app", "token");
+
+	l_dbus_interface_method(iface, "AttachFD", 0, attach_call,
+					"oa(ya(qa{sv}))h", "ot", "node",
+					"configuration", "fd", "app", "token");
 
 	l_dbus_interface_method(iface, "Leave", 0, leave_call, "", "t",
 								"token");
