@@ -60,7 +60,7 @@ struct bt_mesh {
 	bool initialized;
 };
 
-struct join_data{
+struct join_data {
 	struct l_dbus_message *msg;
 	char *sender;
 	struct mesh_node *node;
@@ -89,6 +89,9 @@ static struct bt_mesh mesh = {
 
 /* We allow only one outstanding Join request */
 static struct join_data *join_pending;
+
+/* Deferred method requests */
+static struct l_hashmap *def_hashmap;
 
 /* Pending method requests */
 static struct l_queue *pending_queue;
@@ -291,6 +294,7 @@ bool mesh_init(struct l_dbus *dbus, const char *config_dir,
 	l_debug("io %p", mesh.io);
 
 	pending_queue = l_queue_new();
+	def_hashmap = l_hashmap_new();
 
 	return true;
 }
@@ -342,6 +346,7 @@ void mesh_cleanup(void)
 	}
 
 	l_queue_destroy(pending_queue, pending_request_exit);
+	l_hashmap_destroy(def_hashmap, NULL);
 	mesh_agent_cleanup();
 	node_cleanup_all();
 	mesh_model_cleanup();
@@ -440,8 +445,14 @@ static void prov_join_complete_reply_cb(struct l_dbus_message *msg,
 	if (!msg || l_dbus_message_is_error(msg))
 		failed = true;
 
-	if (!failed)
+	if (!failed) {
+		struct l_timeout *tm;
+
 		node_finalize_new_node(join_pending->node, mesh.io);
+		tm = l_hashmap_lookup(def_hashmap, join_pending->node);
+
+		l_timeout_modify_ms(tm, 1);
+	}
 
 	free_pending_join_call(failed);
 }
@@ -637,12 +648,18 @@ static struct l_dbus_message *attach_call(struct l_dbus *dbus,
 	if (!node)
 		return dbus_error(msg, MESH_ERROR_NOT_FOUND, "Attach failed");
 
+	l_hashmap_remove(def_hashmap, node);
+
 	if (node_is_busy(node)) {
+		struct l_timeout *tm;
+
 		if (user_data)
 			return dbus_error(msg, MESH_ERROR_BUSY, NULL);
 
 		/* Try once more in 1 second */
-		l_timeout_create(1, def_attach, l_dbus_message_ref(msg), NULL);
+		tm = l_timeout_create(1, def_attach, l_dbus_message_ref(msg),
+									NULL);
+		l_hashmap_insert(def_hashmap, node, tm);
 		return NULL;
 	}
 
@@ -685,12 +702,18 @@ static struct l_dbus_message *leave_call(struct l_dbus *dbus,
 	if (!node)
 		return dbus_error(msg, MESH_ERROR_NOT_FOUND, NULL);
 
+	l_hashmap_remove(def_hashmap, node);
+
 	if (node_is_busy(node)) {
+		struct l_timeout *tm;
+
 		if (user_data)
 			return dbus_error(msg, MESH_ERROR_BUSY, NULL);
 
 		/* Try once more in 1 second */
-		l_timeout_create(1, def_leave, l_dbus_message_ref(msg), NULL);
+		tm = l_timeout_create(1, def_leave, l_dbus_message_ref(msg),
+									NULL);
+		l_hashmap_insert(def_hashmap, node, tm);
 		return NULL;
 	}
 
@@ -716,6 +739,7 @@ static void create_join_complete_reply_cb(struct l_dbus_message *msg,
 								void *user_data)
 {
 	struct mesh_node *node = user_data;
+	struct l_timeout *tm = l_hashmap_lookup(def_hashmap, node);
 
 	if (!msg || l_dbus_message_is_error(msg)) {
 		node_remove(node);
@@ -723,6 +747,9 @@ static void create_join_complete_reply_cb(struct l_dbus_message *msg,
 	}
 
 	node_finalize_new_node(node, mesh.io);
+
+	if (tm)
+		l_timeout_modify_ms(tm, 1);
 }
 
 static void create_node_ready_cb(void *user_data, int status,
