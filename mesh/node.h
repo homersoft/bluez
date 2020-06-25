@@ -86,7 +86,8 @@ bool node_add_pending_local(struct mesh_node *node, void *info);
 void node_attach_io_all(struct mesh_io *io);
 void node_attach_io(struct mesh_node *node, struct mesh_io *io);
 void node_attach(const char *app_root, const char *sender, uint64_t token,
-					node_ready_func_t cb, void *user_data);
+				const char *unix_fd_path, node_ready_func_t cb,
+							void *user_data);
 void node_build_attach_reply(struct mesh_node *node,
 				struct l_dbus_message *reply, bool use_fd);
 void node_create(const char *app_root, const char *sender, const uint8_t *uuid,
