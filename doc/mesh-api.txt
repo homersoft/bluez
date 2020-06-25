@@ -160,6 +160,20 @@ Methods:
                 uint8_t data[];
             };
 
+    object node, array{byte, array{(uint16, dict)}} configuration, fd
+                AttachUnix(object app_root, uint64 token, string unix_fd_path)
+
+            This is an alternative version of the AttachFD() method, dedicated
+            for systems that doesn't allow for socket passing. This method
+            connects to named Unix file descriptor created by the application.
+            Path to the file descriptor is passed via 'unix_fd_path' argument.
+
+            Method behaviour and usage is similiar to the Attach() method.
+            The difference between those two method is that after call AttachUnix()
+            all received messages will be passed via file descriptor,
+            instead of daemon calling MessageReceived() and
+            DevKeyMessageReceived() methods.
+
 	void Leave(uint64 token)
 
 		This removes the configuration information about the mesh node
