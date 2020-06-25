@@ -27,6 +27,7 @@
 #include <stdio.h>
 #include <sys/time.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <unistd.h>
 
 #include <ell/ell.h>
@@ -110,6 +111,7 @@ struct mesh_node {
 	uint8_t friend;
 	uint8_t beacon;
 	struct l_io *fd_io;
+	char *unix_fd_path;
 };
 
 struct node_import {
@@ -1734,9 +1736,60 @@ fail:
 	return NULL;
 }
 
+static struct l_io *fd_unix_new(struct mesh_node *node,
+						const char *unix_fd_path)
+{
+	struct sockaddr_un addr;
+	struct l_io *io;
+	const char *snap_data = NULL;
+
+	int fd = socket(AF_LOCAL, SOCK_DGRAM | SOCK_NONBLOCK, 0);
+	if (fd < 0)
+	{
+		return NULL;
+	}
+
+	memset(&addr, 0, sizeof(addr));
+	addr.sun_family = AF_UNIX;
+
+	// This is a workaround for the SNAP.
+	// Snap creates separate environments for BlueZ and the application.
+	// Socket created in the application context is not available from the
+	// BlueZ context (but Snap copies it implicitly to the BlueZ
+	// root directory).
+	snap_data = getenv("SNAP_DATA");
+	if (snap_data)
+	{
+		memset(addr.sun_path, 0, sizeof(addr.sun_path));
+		snprintf(addr.sun_path, sizeof(addr.sun_path) - 1,
+			 "%s/sockets/%s", snap_data, basename(unix_fd_path));
+	} else
+		strncpy(addr.sun_path, unix_fd_path, sizeof(addr.sun_path) - 1);
+
+	if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+		goto fail;
+
+	io = l_io_new(fd);
+	if (!io)
+		goto fail;
+
+	l_io_set_close_on_destroy(io, true);
+
+	if (!l_io_set_disconnect_handler(io, fd_io_hup, node, NULL))
+		goto fail;
+
+	l_info("Unix FD created");
+
+	return io;
+fail:
+	close(fd);
+	return NULL;
+}
+
 /* Establish relationship between application and mesh node */
 void node_attach(const char *app_root, const char *sender, uint64_t token,
-					node_ready_func_t cb, void *user_data)
+				const char *unix_fd_path, node_ready_func_t cb,
+								void *user_data)
 {
 	struct managed_obj_request *req;
 	struct mesh_node *node;
@@ -1774,6 +1827,7 @@ void node_attach(const char *app_root, const char *sender, uint64_t token,
 	req->type = REQUEST_TYPE_ATTACH;
 
 	node->busy = true;
+	node->unix_fd_path = l_strdup(unix_fd_path);
 
 	send_managed_objects_request(sender, app_root, req);
 }
@@ -1892,6 +1946,14 @@ void node_build_attach_reply(struct mesh_node *node,
 		append_fd(builder, fd);
 
 		close(fd);
+	}
+
+	if (node->unix_fd_path)
+	{
+		node->fd_io = fd_unix_new(node, node->unix_fd_path);
+
+		l_free(node->unix_fd_path);
+		node->unix_fd_path = NULL;
 	}
 
 	l_dbus_message_builder_finalize(builder);
