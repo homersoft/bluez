@@ -34,6 +34,7 @@
 
 /* To prevent local node JSON cache thrashing, minimum update times */
 #define MIN_SEQ_CACHE_TRIGGER	32
+#define MAX_SEQ_CACHE_VALUE	(128 * 32)
 #define MIN_SEQ_CACHE_VALUE	(2 * 32)
 #define MIN_SEQ_CACHE_TIME	(5 * 60)
 
@@ -2246,6 +2247,9 @@ bool mesh_config_write_seq_number(struct mesh_config *cfg, uint32_t seq,
 
 		if (cached < seq + MIN_SEQ_CACHE_VALUE)
 			cached = seq + MIN_SEQ_CACHE_VALUE;
+
+		if (cached > seq + MAX_SEQ_CACHE_VALUE)
+			cached = seq + MAX_SEQ_CACHE_VALUE;
 
 		/* Cap the seq cache maximum to fixed out-of-range value.
 		 * If daemon restarts with out-of-range value, no packets
