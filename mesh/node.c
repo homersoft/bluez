@@ -1764,7 +1764,7 @@ static struct l_io *fd_unix_new(struct mesh_node *node,
 		snprintf(addr.sun_path, sizeof(addr.sun_path), "%s/%s",
 					 snap_data, basename(unix_fd_path));
 	} else
-		strncpy(addr.sun_path, unix_fd_path, sizeof(addr.sun_path));
+		strncpy(addr.sun_path, unix_fd_path, sizeof(addr.sun_path) - 1);
 
 	if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
 		goto fail;
