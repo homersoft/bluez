@@ -74,6 +74,7 @@ enum silvair_pkt_type {
 	SILVAIR_CMD_FILTER	= 0x1B,
 	SILVAIR_EVT_RESET	= 0x1C,
 	SILVAIR_CMD_KEEP_ALIVE	= 0x1D,
+	SILVAIR_RADIO_STAT      = 0x1E,
 };
 
 struct silvair_pkt_hdr {
@@ -137,6 +138,12 @@ struct silvair_keep_alive_cmd_pld {
 	uint8_t		last_fault[128];
 } __packed;
 
+struct silvair_radio_stat_pld {
+	uint32_t adv_packet_sent;
+	uint32_t adv_packet_received;
+	uint32_t adv_crc_errors;
+	uint32_t window_size_ms;
+} __packed;
 
 static void io_error_callback(void *user_data)
 {
@@ -330,6 +337,22 @@ static void process_evt_keep_alive(struct silvair_io *io,
 							keep_alive_pld->uptime);
 }
 
+static void process_radio_stat(struct silvair_io *io,
+				const struct silvair_pkt_hdr *pkt_hdr,
+				size_t len)
+{
+	const struct silvair_radio_stat_pld *radio_stat_pld;
+
+	radio_stat_pld = (struct silvair_radio_stat_pld *)(pkt_hdr + 1);
+
+	l_info("Radio stats: "
+		"ADV: [Sent: %d, Rcvd: %d, CRC Err: %d], Window size: %dms",
+		radio_stat_pld->adv_packet_sent,
+		radio_stat_pld->adv_packet_received,
+		radio_stat_pld->adv_crc_errors,
+		radio_stat_pld->window_size_ms);
+}
+
 static void process_packet(struct silvair_io *io,
 				uint8_t *buf,
 				size_t size,
@@ -359,6 +382,10 @@ static void process_packet(struct silvair_io *io,
 			io->disconnect_watchdog = NULL;
 		}
 		process_evt_keep_alive(io, pkt_hdr, len);
+		break;
+
+	case SILVAIR_RADIO_STAT:
+		process_radio_stat(io, pkt_hdr, len);
 		break;
 
 	case SILVAIR_EVT_RESET:
