@@ -11,7 +11,7 @@
 struct mesh_model;
 
 #define MAX_MODEL_BINDINGS	10
-#define MAX_MODEL_SUBS		10
+#define MAX_MODEL_SUBS		16383
 
 #define ACTION_ADD	1
 #define ACTION_UPDATE	2
