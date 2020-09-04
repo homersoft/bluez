@@ -44,6 +44,8 @@ struct slip {
 };
 
 struct silvair_io {
+	uint8_t                 nid_filter[16];
+
 	struct l_io		*l_io;
 	struct l_ringbuf	*out_ringbuf;
 
@@ -79,3 +81,7 @@ void silvair_io_keep_alive_wdt_refresh(struct silvair_io *io);
 void silvair_io_send_message(struct silvair_io *io, uint8_t *buf, size_t size);
 
 void silvair_io_close(struct silvair_io *io);
+
+void silvair_io_nid_filter_nid_set(struct silvair_io *io, uint8_t nid);
+
+void silvair_io_nid_filter_send(struct silvair_io *io);

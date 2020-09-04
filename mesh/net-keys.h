@@ -41,3 +41,4 @@ void net_key_beacon_enable(uint32_t id);
 bool net_key_beacon_refresh(uint32_t id, uint32_t iv_index, bool kr, bool ivu);
 void net_key_beacon_disable(uint32_t id);
 uint32_t net_key_beacon_last_seen(uint32_t id);
+size_t net_key_nids_get(uint8_t *key_id, size_t length);

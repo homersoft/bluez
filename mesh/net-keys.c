@@ -532,3 +532,21 @@ void net_key_cleanup(void)
 	l_queue_destroy(keys, l_free);
 	keys = NULL;
 }
+
+
+size_t net_key_nids_get(uint8_t *key_id, size_t length)
+{
+	size_t index = 0;
+	const struct l_queue_entry *entry = l_queue_get_entries(keys);
+
+	if (!entry)
+		return index;
+
+	while (entry && index < length)
+	{
+		key_id[index++] = (uint8_t)((struct net_key *)entry->data)->nid;
+		entry = entry->next;
+	}
+
+	return index;
+}

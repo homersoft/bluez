@@ -15,6 +15,7 @@
 #include "mesh/mesh-io.h"
 #include "mesh/mesh-io-api.h"
 #include "mesh/silvair-io.h"
+#include "mesh/net-keys.h"
 
 #define FRAME_BUFFER_SIZE 512
 #define SLIP_FRAME_BUFFER_SIZE ((2*FRAME_BUFFER_SIZE) + 2)
@@ -67,14 +68,15 @@ enum silvair_pwr {
 };
 
 enum silvair_pkt_type {
-	SILVAIR_EVT_RX		= 0x06,
-	SILVAIR_CMD_TX		= 0x18,
-	SILVAIR_CMD_RX		= 0x19,
-	SILVAIR_CMD_BOOTLOADER	= 0x1A,
-	SILVAIR_CMD_FILTER	= 0x1B,
-	SILVAIR_EVT_RESET	= 0x1C,
-	SILVAIR_CMD_KEEP_ALIVE	= 0x1D,
-	SILVAIR_RADIO_STAT      = 0x1E,
+	SILVAIR_EVT_RX			= 0x06,
+	SILVAIR_CMD_TX			= 0x18,
+	SILVAIR_CMD_RX			= 0x19,
+	SILVAIR_CMD_BOOTLOADER		= 0x1A,
+	SILVAIR_CMD_FILTER		= 0x1B,
+	SILVAIR_EVT_RESET		= 0x1C,
+	SILVAIR_CMD_KEEP_ALIVE		= 0x1D,
+	SILVAIR_RADIO_STAT		= 0x1E,
+	SILVAIR_CMD_NID_FILTER_SET	= 0x1F,
 };
 
 struct silvair_pkt_hdr {
@@ -125,6 +127,10 @@ struct silvair_tx_cmd_pld {
 	uint8_t			__unused;
 	uint8_t			address[6];
 	uint8_t			adv_data[0];
+} __packed;
+
+struct silvair_nid_filter_set_cmd_pld {
+	uint8_t			nid_filter[16];
 } __packed;
 
 struct silvair_keep_alive_cmd_pld {
@@ -386,6 +392,23 @@ static void process_packet(struct silvair_io *io,
 
 	case SILVAIR_RADIO_STAT:
 		process_radio_stat(io, pkt_hdr, len);
+
+		{
+			uint8_t nids[128];
+			size_t count = net_key_nids_get(nids, sizeof(nids));
+
+			l_debug("send filter");
+
+			memset(io->nid_filter, 0x00, sizeof(io->nid_filter));
+
+			for (size_t i = 0; i < count; i++)
+			{
+				l_debug("nid[%lu]: %d", i, nids[i]);
+				silvair_io_nid_filter_nid_set(io, nids[i]);
+			}
+
+			silvair_io_nid_filter_send(io);
+		}
 		break;
 
 	case SILVAIR_EVT_RESET:
@@ -393,6 +416,7 @@ static void process_packet(struct silvair_io *io,
 	case SILVAIR_CMD_RX:
 	case SILVAIR_CMD_BOOTLOADER:
 	case SILVAIR_CMD_FILTER:
+	case SILVAIR_CMD_NID_FILTER_SET:
 		break;
 	}
 }
@@ -511,6 +535,20 @@ static int build_packet(uint8_t *data,
 		pkt_hdr->pld_len = sizeof(*keep_alive_pld);
 	}
 
+	if (pkt_hdr->type == SILVAIR_CMD_NID_FILTER_SET)
+	{
+		struct silvair_nid_filter_set_cmd_pld *nid_filter_set_pld;
+
+		nid_filter_set_pld =
+			(struct silvair_nid_filter_set_cmd_pld*)(pkt_hdr + 1);
+
+		memcpy(nid_filter_set_pld->nid_filter, buf,
+				       sizeof(nid_filter_set_pld->nid_filter));
+
+		pkt_hdr->pld_len = sizeof(*nid_filter_set_pld);
+
+	}
+
 	return pkt_hdr->hdr_len + pkt_hdr->pld_len;
 }
 
@@ -533,6 +571,16 @@ static bool send_keep_alive_request(struct silvair_io *io,
 	uint8_t data[FRAME_BUFFER_SIZE] = { 0 };
 
 	len = build_packet(&data[0], buf, size, SILVAIR_CMD_KEEP_ALIVE);
+	return io_write(io, data, len);
+}
+
+static bool send_nid_filter_set(struct silvair_io *io, uint8_t *buf,
+								size_t size)
+{
+	int len = 0;
+	uint8_t data[FRAME_BUFFER_SIZE] = { 0 };
+
+	len = build_packet(&data[0], buf, size, SILVAIR_CMD_NID_FILTER_SET);
 	return io_write(io, data, len);
 }
 
@@ -788,4 +836,15 @@ void silvair_io_close(struct silvair_io *io)
 	int fd = silvair_io_get_fd(io);
 
 	shutdown(fd, SHUT_WR);
+}
+
+void silvair_io_nid_filter_nid_set(struct silvair_io *io, uint8_t nid)
+{
+	div_t result = div(nid, 8);
+	io->nid_filter[sizeof(io->nid_filter) - 1 - result.quot] |= (1 << result.rem);
+}
+
+void silvair_io_nid_filter_send(struct silvair_io *io)
+{
+	send_nid_filter_set(io, io->nid_filter, sizeof(io->nid_filter));
 }
