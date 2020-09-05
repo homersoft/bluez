@@ -254,6 +254,10 @@ done:
 		*plain = cache_plain;
 		*plain_len = cache_plainlen;
 	}
+	else
+	{
+		l_warn("failed to decrypt: NID: %d", cache_pkt[0] & 0x7f);
+	}
 
 	return cache_id;
 }
