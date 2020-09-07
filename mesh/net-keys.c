@@ -256,7 +256,7 @@ done:
 	}
 	else
 	{
-		l_warn("failed to decrypt: NID: %d (%d)", cache_pkg[0], cache_pkt[0] & 0x7f);
+		l_warn("failed to decrypt: NID: %d (%d)", cache_pkt[0], cache_pkt[0] & 0x7f);
 	}
 
 	return cache_id;
