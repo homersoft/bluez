@@ -256,7 +256,7 @@ done:
 	}
 	else
 	{
-		l_warn("failed to decrypt: NID: %d", cache_pkt[0] & 0x7f);
+		l_warn("failed to decrypt: NID: %d (%d)", cache_pkg[0], cache_pkt[0] & 0x7f);
 	}
 
 	return cache_id;
@@ -543,12 +543,9 @@ size_t net_key_nids_get(uint8_t *key_id, size_t length)
 	size_t index = 0;
 	const struct l_queue_entry *entry = l_queue_get_entries(keys);
 
-	if (!entry)
-		return index;
-
 	while (entry && index < length)
 	{
-		key_id[index++] = (uint8_t)((struct net_key *)entry->data)->nid;
+		key_id[index++] = ((uint8_t)((struct net_key *)entry->data)->nid) & 0x7F;
 		entry = entry->next;
 	}
 
