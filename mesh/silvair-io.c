@@ -575,7 +575,7 @@ static bool io_read_callback(struct l_io *l_io, void *user_data)
 {
 	struct silvair_io *io = user_data;
 	struct mesh_io *mesh_io = io->context;
-	uint8_t buf[512];
+	uint8_t buf[8192];
 	int r, fd;
 
 	fd = l_io_get_fd(l_io);
