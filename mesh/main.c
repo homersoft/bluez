@@ -38,6 +38,7 @@
 #include "mesh/dbus.h"
 #include "mesh/mesh-io.h"
 #include "mesh/util.h"
+#include "mesh/token_bucket.h"
 
 static const char *config_dir;
 static const char *mesh_conf_fname;
