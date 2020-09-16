@@ -33,10 +33,12 @@
 #include <ell/ell.h>
 #include <stdlib.h>
 
+#include "mesh/mesh-defs.h"
 #include "mesh/mesh-io.h"
 #include "mesh/mesh-io-api.h"
 #include "mesh/mesh-io-uart.h"
 #include "mesh/silvair-io.h"
+#include "mesh/token_bucket.h"
 
 
 struct mesh_io_private {
@@ -55,6 +57,7 @@ struct mesh_io_private {
 
 	/* Simple filtering on AD type only */
 	struct tx_pkt		*tx;
+	struct token_bucket	*token_bucket;
 };
 
 struct pvt_rx_reg {
@@ -111,6 +114,10 @@ static void process_rx(struct silvair_io *silvair_io, int8_t rssi,
 {
 	struct mesh_io *mesh_io = user_data;
 	struct process_data rx;
+
+	if (data[0] == MESH_AD_TYPE_NETWORK &&
+			!token_bucket_token_get(mesh_io->pvt->token_bucket))
+		return;
 
 	rx.pvt = mesh_io->pvt,
 	rx.data = data,
@@ -253,6 +260,7 @@ static bool uart_io_init(struct mesh_io *mesh_io, void *opts, void *user_data)
 {
 	bool tty_kernel = false;
 	bool tty_flow = false;
+	int packets_per_second = 0;
 
 	char *opts_delim = strchr(opts, ':');
 	char *opt;
@@ -284,6 +292,13 @@ static bool uart_io_init(struct mesh_io *mesh_io, void *opts, void *user_data)
 
 			if (!strcmp(opt, "noflow"))
 				tty_flow = false;
+
+			if (!strncmp(opt, "limit", strlen("limit")))
+				if(sscanf(opt, "limit=%d",
+						&packets_per_second) != 1) {
+					l_error("invalid syntax");
+					return false;
+				}
 
 			opt = delim + 1;
 
@@ -317,6 +332,8 @@ static bool uart_io_init(struct mesh_io *mesh_io, void *opts, void *user_data)
 
 	mesh_io->pvt->user_data = user_data;
 
+	mesh_io->pvt->token_bucket = token_bucket_new(packets_per_second);
+
 	mesh_io->pvt->tx_timeout = l_timeout_create_ms(0, send_timeout,
 					mesh_io, NULL);
 
@@ -341,6 +358,7 @@ static bool uart_io_destroy(struct mesh_io *mesh_io)
 	l_timeout_remove(pvt->tx_timeout);
 	l_queue_destroy(pvt->rx_regs, l_free);
 	l_queue_destroy(pvt->tx_pkts, l_free);
+	l_free(pvt->token_bucket);
 	l_free(pvt);
 
 	return true;
