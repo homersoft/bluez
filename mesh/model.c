@@ -655,9 +655,6 @@ static int update_binding(struct mesh_node *node, uint16_t addr, uint32_t id,
 		return MESH_STATUS_SUCCESS;
 	}
 
-	if (l_queue_length(mod->bindings) >= MAX_MODEL_BINDINGS)
-		return MESH_STATUS_INSUFF_RESOURCES;
-
 	if (!mesh_config_model_binding_add(node_config_get(node), addr,
 							id, vendor, app_idx))
 		return MESH_STATUS_STORAGE_FAIL;
@@ -1626,12 +1623,6 @@ static struct mesh_model *model_setup(struct mesh_net *net, uint8_t ele_idx,
 	struct mesh_model *mod;
 	struct mesh_config_pub *pub = db_mod->pub;
 	uint32_t i;
-
-	if (db_mod->num_bindings > MAX_MODEL_BINDINGS) {
-		l_warn("Binding list too long %u (max %u)",
-				db_mod->num_bindings, MAX_MODEL_BINDINGS);
-		return NULL;
-	}
 
 	mod = model_new(db_mod->vendor ? db_mod->id :
 						SET_ID(SIG_VENDOR, db_mod->id));
