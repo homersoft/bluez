@@ -795,10 +795,6 @@ static int add_sub(struct mesh_net *net, struct mesh_model *mod,
 	if (l_queue_find(mod->subs, simple_match, L_UINT_TO_PTR(addr)))
 		return MESH_STATUS_SUCCESS;
 
-	if ((l_queue_length(mod->subs) + l_queue_length(mod->virtuals)) >=
-						MAX_MODEL_SUBS)
-		return MESH_STATUS_INSUFF_RESOURCES;
-
 	l_queue_push_tail(mod->subs, L_UINT_TO_PTR(addr));
 	mesh_net_dst_reg(net, addr);
 	l_debug("Added group subscription %4.4x", addr);
