@@ -10,8 +10,6 @@
 
 struct mesh_model;
 
-#define MAX_MODEL_SUBS		10
-
 #define ACTION_ADD	1
 #define ACTION_UPDATE	2
 #define ACTION_DELETE	3
