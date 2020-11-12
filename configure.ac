@@ -412,4 +412,9 @@ PKG_CHECK_MODULES(OPENSSL, openssl, dummy=yes,
 AC_SUBST(OPENSSL_CFLAGS)
 AC_SUBST(OPENSSL_LIBS)
 
+PKG_CHECK_MODULES(RABBITMQ, librabbitmq, dummy=yes,
+			AC_MSG_ERROR(librabbitmq is required))
+AC_SUBST(RABBITMQ_CFLAGS)
+AC_SUBST(RABBITMQ_LIBS)
+
 AC_OUTPUT(Makefile src/bluetoothd.8 lib/bluez.pc)
