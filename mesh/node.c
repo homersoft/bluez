@@ -48,6 +48,7 @@
 #include "mesh/agent.h"
 #include "mesh/manager.h"
 #include "mesh/node.h"
+#include "mesh/amqp.h"
 
 #define MESH_NODE_PATH_PREFIX "/node"
 
@@ -111,6 +112,7 @@ struct mesh_node {
 	uint8_t beacon;
 	struct l_io *fd_io;
 	char *unix_fd_path;
+	struct mesh_amqp *amqp;
 };
 
 struct node_import {
@@ -231,6 +233,7 @@ static struct mesh_node *node_new(const uint8_t uuid[16])
 	node->net = mesh_net_new(node);
 	node->elements = l_queue_new();
 	node->pages = l_queue_new();
+	node->amqp = mesh_amqp_new();
 	memcpy(node->uuid, uuid, sizeof(node->uuid));
 	set_defaults(node);
 
@@ -278,6 +281,9 @@ static void free_node_dbus_resources(struct mesh_node *node)
 						MESH_MANAGEMENT_INTERFACE);
 
 		l_dbus_object_remove_interface(dbus_get_bus(), node->obj_path,
+						MESH_AMQP_INTERFACE);
+
+		l_dbus_object_remove_interface(dbus_get_bus(), node->obj_path,
 						L_DBUS_INTERFACE_PROPERTIES);
 
 		l_free(node->obj_path);
@@ -309,6 +315,7 @@ static void free_node_resources(void *data)
 	mesh_agent_remove(node->agent);
 	mesh_config_release(node->cfg);
 	mesh_net_free(node->net);
+	mesh_amqp_free(node->amqp);
 
 	l_free(node->storage_dir);
 	l_free(node);
@@ -436,6 +443,11 @@ static bool init_from_storage(struct mesh_config_node *db_node,
 			void *user_data)
 {
 	unsigned int num_ele;
+	struct mesh_amqp_config config = {
+			.url = (char *)db_node->amqp.url,
+			.exchange = (char *)db_node->amqp.exchange,
+			.routing_key = (char *)db_node->amqp.routing_key,
+	};
 
 	struct mesh_node *node = node_new(uuid);
 
@@ -456,6 +468,8 @@ static bool init_from_storage(struct mesh_config_node *db_node,
 	node->relay.cnt = db_node->modes.relay.cnt;
 	node->relay.interval = db_node->modes.relay.interval;
 	node->beacon = db_node->modes.beacon;
+
+	mesh_amqp_start(node->amqp, &config);
 
 	l_debug("relay %2.2x, proxy %2.2x, lpn %2.2x, friend %2.2x",
 			node->relay.mode, node->proxy, node->lpn, node->friend);
@@ -540,7 +554,9 @@ void node_cleanup_all(void)
 {
 	l_queue_destroy(nodes, cleanup_node);
 	l_dbus_unregister_interface(dbus_get_bus(), MESH_NODE_INTERFACE);
+	l_dbus_unregister_interface(dbus_get_bus(), MESH_AMQP_INTERFACE);
 	l_dbus_unregister_interface(dbus_get_bus(), MESH_MANAGEMENT_INTERFACE);
+	l_dbus_unregister_interface(dbus_get_bus(), L_DBUS_INTERFACE_PROPERTIES);
 }
 
 bool node_is_provisioner(struct mesh_node *node)
@@ -706,6 +722,11 @@ uint16_t node_get_crpl(struct mesh_node *node)
 struct l_io *node_get_fd_io(struct mesh_node *node)
 {
 	return node->fd_io;
+}
+
+struct mesh_amqp *node_get_amqp(struct mesh_node *node)
+{
+	return node->amqp;
 }
 
 uint8_t node_relay_mode_get(struct mesh_node *node, uint8_t *count,
@@ -993,6 +1014,10 @@ static bool register_node_object(struct mesh_node *node)
 
 	if (!l_dbus_object_add_interface(dbus_get_bus(), node->obj_path,
 						MESH_NODE_INTERFACE, node))
+		return false;
+
+	if (!l_dbus_object_add_interface(dbus_get_bus(), node->obj_path,
+						MESH_AMQP_INTERFACE, node))
 		return false;
 
 	if (!l_dbus_object_add_interface(dbus_get_bus(), node->obj_path,
@@ -1660,7 +1685,7 @@ static struct l_io *fd_io_new(struct mesh_node *node, int *fd)
 	int fds[2];
 
 	if (socketpair(AF_LOCAL, SOCK_DGRAM | SOCK_NONBLOCK | SOCK_CLOEXEC,
-		       0, fds) < 0)
+			   0, fds) < 0)
 	{
 		return NULL;
 	}
@@ -2399,7 +2424,135 @@ static bool lastheard_getter(struct l_dbus *dbus, struct l_dbus_message *msg,
 	l_dbus_message_builder_append_basic(builder, 'u', &last_heard);
 
 	return true;
+}
 
+static bool amqp_url_getter(struct l_dbus *dbus, struct l_dbus_message *msg,
+					struct l_dbus_message_builder *builder,
+					void *user_data)
+{
+	struct mesh_node *node = user_data;
+	char *url = mesh_amqp_get_url(node->amqp);
+
+	if (!url)
+		return false;
+
+	l_dbus_message_builder_append_basic(builder, 's', url);
+	l_free(url);
+
+	return true;
+}
+
+static struct l_dbus_message *amqp_url_setter(struct l_dbus *dbus,
+					struct l_dbus_message *msg,
+					struct l_dbus_message_iter *value,
+					l_dbus_property_complete_cb_t complete,
+					void *user_data)
+{
+	struct mesh_node *node = user_data;
+	const char *sender;
+	const char *url;
+
+	sender = l_dbus_message_get_sender(msg);
+
+	if (strcmp(sender, node->owner))
+		return dbus_error(msg, MESH_ERROR_NOT_AUTHORIZED, NULL);
+
+	if (!l_dbus_message_iter_get_variant(value, "s", &url))
+		return dbus_error(msg, MESH_ERROR_INVALID_ARGS,
+							"String expected");
+
+	mesh_amqp_set_url(node->amqp, url);
+	mesh_config_write_amqp_url(node->cfg, url);
+
+	complete(dbus, msg, NULL);
+
+	return NULL;
+}
+
+static bool amqp_exchange_getter(struct l_dbus *dbus, struct l_dbus_message *msg,
+					struct l_dbus_message_builder *builder,
+					void *user_data)
+{
+	struct mesh_node *node = user_data;
+	char *exchange = mesh_amqp_get_exchange(node->amqp);
+
+	if (!exchange)
+		return false;
+
+	l_dbus_message_builder_append_basic(builder, 's', exchange);
+	l_free(exchange);
+
+	return true;
+}
+
+static struct l_dbus_message *amqp_exchange_setter(struct l_dbus *dbus,
+					struct l_dbus_message *msg,
+					struct l_dbus_message_iter *value,
+					l_dbus_property_complete_cb_t complete,
+					void *user_data)
+{
+	struct mesh_node *node = user_data;
+	const char *sender;
+	const char *url;
+
+	sender = l_dbus_message_get_sender(msg);
+
+	if (strcmp(sender, node->owner))
+		return dbus_error(msg, MESH_ERROR_NOT_AUTHORIZED, NULL);
+
+	if (!l_dbus_message_iter_get_variant(value, "s", &url))
+		return dbus_error(msg, MESH_ERROR_INVALID_ARGS,
+							"String expected");
+
+	mesh_amqp_set_exchange(node->amqp, url);
+	mesh_config_write_amqp_exchange(node->cfg, url);
+
+	complete(dbus, msg, NULL);
+
+	return NULL;
+}
+
+static bool amqp_routing_key_getter(struct l_dbus *dbus, struct l_dbus_message *msg,
+					struct l_dbus_message_builder *builder,
+					void *user_data)
+{
+	struct mesh_node *node = user_data;
+	char *routing_key = mesh_amqp_get_routing_key(node->amqp);
+
+	if (!routing_key)
+		return false;
+
+	l_dbus_message_builder_append_basic(builder, 's', routing_key);
+	l_free(routing_key);
+
+	return true;
+}
+
+static struct l_dbus_message *amqp_routing_key_setter(struct l_dbus *dbus,
+					struct l_dbus_message *msg,
+					struct l_dbus_message_iter *value,
+					l_dbus_property_complete_cb_t complete,
+					void *user_data)
+{
+	struct mesh_node *node = user_data;
+	const char *sender;
+	const char *url;
+
+	sender = l_dbus_message_get_sender(msg);
+
+	if (strcmp(sender, node->owner))
+		return dbus_error(msg, MESH_ERROR_NOT_AUTHORIZED, NULL);
+
+	if (!l_dbus_message_iter_get_variant(value, "s", &url))
+		return dbus_error(msg, MESH_ERROR_INVALID_ARGS,
+							"String expected");
+
+	mesh_amqp_set_routing_key(node->amqp, url);
+	mesh_config_write_amqp_routing_key(node->cfg, url);
+
+	complete(dbus, msg, NULL);
+
+	return NULL;
 }
 
 static bool addresses_getter(struct l_dbus *dbus, struct l_dbus_message *msg,
@@ -2464,6 +2617,19 @@ static void setup_node_interface(struct l_dbus_interface *iface)
 									NULL);
 }
 
+static void setup_amqp_interface(struct l_dbus_interface *iface)
+{
+	l_dbus_interface_property(iface, "Url", 0, "s", amqp_url_getter,
+							amqp_url_setter);
+
+	l_dbus_interface_property(iface, "Exchange", 0, "s",
+				  amqp_exchange_getter, amqp_exchange_setter);
+
+	l_dbus_interface_property(iface, "RoutingKey", 0, "s",
+				  amqp_routing_key_getter, amqp_routing_key_setter);
+
+}
+
 void node_property_changed(struct mesh_node *node, const char *property)
 {
 	struct l_dbus *bus = dbus_get_bus();
@@ -2479,6 +2645,13 @@ bool node_dbus_init(struct l_dbus *bus)
 						setup_node_interface,
 						NULL, false)) {
 		l_info("Unable to register %s interface", MESH_NODE_INTERFACE);
+		return false;
+	}
+
+	if (!l_dbus_register_interface(bus, MESH_AMQP_INTERFACE,
+						setup_amqp_interface,
+						NULL, false)) {
+		l_info("Unable to register %s interface", MESH_AMQP_INTERFACE);
 		return false;
 	}
 
@@ -2569,4 +2742,5 @@ void node_finalize_new_node(struct mesh_node *node, struct mesh_io *io)
 
 	/* Register callback for the node's io */
 	attach_io(node, io);
+	mesh_amqp_start(node->amqp, NULL);
 }

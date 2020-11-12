@@ -96,6 +96,13 @@ struct mesh_config_comp_page {
 	uint8_t data[];
 };
 
+struct mesh_config_amqp {
+	const char *url;
+	const char *exchange;
+	const char *routing_key;
+};
+
+
 struct mesh_config_node {
 	struct l_queue *elements;
 	struct l_queue *netkeys;
@@ -114,6 +121,7 @@ struct mesh_config_node {
 	uint8_t ttl;
 	uint8_t dev_key[16];
 	uint8_t token[8];
+	struct mesh_config_amqp amqp;
 };
 
 typedef void (*mesh_config_status_func_t)(void *user_data, bool result);
@@ -196,3 +204,7 @@ bool mesh_config_update_company_id(struct mesh_config *cfg, uint16_t cid);
 bool mesh_config_update_product_id(struct mesh_config *cfg, uint16_t pid);
 bool mesh_config_update_version_id(struct mesh_config *cfg, uint16_t vid);
 bool mesh_config_update_crpl(struct mesh_config *cfg, uint16_t crpl);
+
+bool mesh_config_write_amqp_url(struct mesh_config *cfg, const char *amqp_url);
+bool mesh_config_write_amqp_exchange(struct mesh_config *cfg, const char *amqp_exchange);
+bool mesh_config_write_amqp_routing_key(struct mesh_config *cfg, const char *amqp_routing_key);
