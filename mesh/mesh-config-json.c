@@ -1299,6 +1299,11 @@ static void parse_features(json_object *jconfig, struct mesh_config_node *node)
 	/* TODO: check range */
 	interval = json_object_get_int(jvalue);
 	node->modes.relay.interval = interval;
+
+	if (!json_object_object_get_ex(jconfig, "amqp", &jvalue))
+		return;
+
+	node->amqp_url = (char *)json_object_get_string(jvalue);
 }
 
 static bool parse_composition(json_object *jcomp, struct mesh_config_node *node)
@@ -1474,6 +1479,19 @@ static bool write_int(json_object *jobj, const char *desc, int val)
 	json_object *jvalue;
 
 	jvalue = json_object_new_int(val);
+	if (!jvalue)
+		return false;
+
+	json_object_object_del(jobj, desc);
+	json_object_object_add(jobj, desc, jvalue);
+	return true;
+}
+
+static bool write_string(json_object *jobj, const char *desc, const char *val)
+{
+	json_object *jvalue;
+
+	jvalue = json_object_new_string(val);
 	if (!jvalue)
 		return false;
 
@@ -2315,6 +2333,14 @@ bool mesh_config_update_version_id(struct mesh_config *cfg, uint16_t vid)
 bool mesh_config_update_crpl(struct mesh_config *cfg, uint16_t crpl)
 {
 	if (!cfg || !write_uint16_hex(cfg->jnode, "crpl", crpl))
+		return false;
+
+	return save_config(cfg->jnode, cfg->node_dir_path);
+}
+
+bool mesh_config_write_amqp_url(struct mesh_config *cfg, const char *amqp_url)
+{
+	if (!cfg || !write_string(cfg->jnode, "amqp", amqp_url))
 		return false;
 
 	return save_config(cfg->jnode, cfg->node_dir_path);

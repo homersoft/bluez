@@ -40,6 +40,7 @@
 #include "mesh/util.h"
 #include "mesh/model.h"
 #include "mesh/keyring.h"
+#include "mesh/amqp.h"
 
 /* Divide and round to ceiling (up) to calculate segment count */
 #define CEILDIV(val, div) (((val) + (div) - 1) / (div))
@@ -887,6 +888,7 @@ static void send_dev_key_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
 				       const uint8_t *data)
 {
 	struct l_io *io = node_get_fd_io(node);
+	struct mesh_amqp *amqp = node_get_amqp(node);
 
 	if (io)
 		send_fd_dev_key_msg_rcvd(io, ele_idx, src, app_idx, net_idx,
@@ -894,6 +896,12 @@ static void send_dev_key_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
 	else
 		send_dbus_dev_key_msg_rcvd(node, ele_idx, src, app_idx, net_idx,
 					   size, data);
+
+	// XXX: maybe publish fd_msg, with node uuid as routing key?
+	if (amqp)
+		mesh_amqp_publish(amqp, size, data);
+
+
 }
 
 static void send_fd_msg_rcvd(struct l_io *io, uint8_t ele_idx,

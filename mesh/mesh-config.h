@@ -114,6 +114,7 @@ struct mesh_config_node {
 	uint8_t ttl;
 	uint8_t dev_key[16];
 	uint8_t token[8];
+	const char *amqp_url;
 };
 
 typedef void (*mesh_config_status_func_t)(void *user_data, bool result);
@@ -196,3 +197,5 @@ bool mesh_config_update_company_id(struct mesh_config *cfg, uint16_t cid);
 bool mesh_config_update_product_id(struct mesh_config *cfg, uint16_t pid);
 bool mesh_config_update_version_id(struct mesh_config *cfg, uint16_t vid);
 bool mesh_config_update_crpl(struct mesh_config *cfg, uint16_t crpl);
+
+bool mesh_config_write_amqp_url(struct mesh_config *cfg, const char *amqp_url);
