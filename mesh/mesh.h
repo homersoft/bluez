@@ -12,6 +12,7 @@
 
 #define MESH_NETWORK_INTERFACE "org.bluez.mesh.Network1"
 #define MESH_NODE_INTERFACE "org.bluez.mesh.Node1"
+#define MESH_AMQP_INTERFACE "org.bluez.mesh.Amqp1"
 #define MESH_MANAGEMENT_INTERFACE "org.bluez.mesh.Management1"
 #define MESH_ELEMENT_INTERFACE "org.bluez.mesh.Element1"
 #define MESH_APPLICATION_INTERFACE "org.bluez.mesh.Application1"

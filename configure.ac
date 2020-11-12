@@ -461,5 +461,10 @@ PKG_CHECK_MODULES(OPENSSL, openssl, dummy=yes,
 AC_SUBST(OPENSSL_CFLAGS)
 AC_SUBST(OPENSSL_LIBS)
 
+PKG_CHECK_MODULES(RABBITMQ, librabbitmq, dummy=yes,
+			AC_MSG_ERROR(librabbitmq is required))
+AC_SUBST(RABBITMQ_CFLAGS)
+AC_SUBST(RABBITMQ_LIBS)
+
 AC_CONFIG_FILES(Makefile src/bluetoothd.rst lib/bluez.pc mesh/bluetooth-meshd.rst)
 AC_OUTPUT

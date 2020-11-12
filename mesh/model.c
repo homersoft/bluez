@@ -32,6 +32,7 @@
 #include "mesh/model.h"
 #include "mesh/keyring.h"
 #include "mesh/fd_msg.h"
+#include "mesh/amqp.h"
 
 /* Divide and round to ceiling (up) to calculate segment count */
 #define CEILDIV(val, div) (((val) + (div) - 1) / (div))
@@ -792,6 +793,11 @@ static void fd_msg_send(struct l_io *io, struct fd_msg *msg, size_t size)
 
 typedef void (*send_callback_t)(void *data, size_t len, void *user_data);
 
+static inline void send_amqp(void *data, size_t len, void *user_data)
+{
+	mesh_amqp_publish(user_data, data, len);
+}
+
 static inline void send_fd(void *data, size_t len, void *user_data)
 {
 	fd_msg_send(user_data, data, len);
@@ -865,6 +871,11 @@ static void send_dev_key_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
 					   const uint8_t *data)
 {
 	struct l_io *fd_io = node_get_fd_io(node);
+	struct mesh_amqp *amqp = node_get_amqp(node);
+
+	if (amqp && mesh_amqp_is_ready(amqp))
+		send_fd_dev_key_msg_rcvd(ele_idx, src, app_idx, net_idx,
+				 size, data, send_amqp, amqp);
 
 	if (fd_io)
 		send_fd_dev_key_msg_rcvd(ele_idx, src, app_idx, net_idx,
@@ -950,6 +961,11 @@ static void send_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
 			  uint16_t size, const uint8_t *data)
 {
 	struct l_io *fd_io = node_get_fd_io(node);
+	struct mesh_amqp *amqp = node_get_amqp(node);
+
+	if (amqp && mesh_amqp_is_ready(amqp))
+		send_fd_msg_rcvd(ele_idx, src, dst, virt, app_idx,
+						 size, data, send_amqp, amqp);
 
 	if (fd_io)
 		send_fd_msg_rcvd(ele_idx, src, dst, virt, app_idx,
