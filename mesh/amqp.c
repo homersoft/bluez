@@ -347,6 +347,8 @@ bool mesh_amqp_set_url(struct mesh_amqp *amqp, const char *url)
 	amqp->url = l_strdup(url);
 
 	msg = l_new(struct message, 1);
+	memset(msg, 0, sizeof(*msg));
+
 	msg->type = CONNECT;
 	strncpy(msg->connect.host, info.host, sizeof(msg->connect.host) - 1);
 	msg->connect.port = info.port;
@@ -354,6 +356,10 @@ bool mesh_amqp_set_url(struct mesh_amqp *amqp, const char *url)
 	strncpy(msg->connect.vhost, strlen(info.vhost) ? info.vhost : "/", sizeof(msg->connect.vhost) - 1);
 	strncpy(msg->connect.user, info.user, sizeof(msg->connect.user) - 1);
 	strncpy(msg->connect.pass, info.password, sizeof(msg->connect.pass) - 1);
+
+	l_info("vhost: '%s' '%s'", info.vhost, msg->connect.vhost);
+	l_info("user: '%s' '%s'", info.user, msg->connect.user);
+	l_info("password: '%s' '%s'", info.password, msg->connect.pass);
 
 	l_queue_push_tail(amqp->queue, msg);
 	l_io_set_write_handler(amqp->io, amqp_write_handler, amqp, NULL);
