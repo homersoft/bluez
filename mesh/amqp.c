@@ -328,6 +328,13 @@ bool mesh_amqp_set_url(struct mesh_amqp *amqp, const char *url)
 	char *tmp = l_strdup(url);
 	struct message *msg = l_new(struct message, 1);
 
+	if (!url) {
+	    l_warn("AMQP url is NULL");
+	    return false;
+    }
+
+	l_info("Connecting to: '%s'", url);
+
 	if (amqp->url && !strcmp(amqp->url, url))
 		return true;
 
