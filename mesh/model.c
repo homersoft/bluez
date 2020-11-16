@@ -974,6 +974,7 @@ static void send_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
 			  uint16_t size, const uint8_t *data)
 {
 	struct l_io *io = node_get_fd_io(node);
+	struct mesh_amqp *amqp = node_get_amqp(node);
 
 	if (io)
 		send_fd_msg_rcvd(io, ele_idx, src, dst, virt, app_idx,
@@ -981,6 +982,10 @@ static void send_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
 	else
 		send_dbus_msg_rcvd(node, ele_idx, src, dst, virt, app_idx,
 				   size, data);
+
+	// XXX: maybe publish fd_msg, with node uuid as routing key?
+	if (amqp)
+		mesh_amqp_publish(amqp, size, data);
 }
 
 bool mesh_model_rx(struct mesh_node *node, bool szmict, uint32_t seq0,
