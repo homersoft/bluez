@@ -26,5 +26,6 @@ void mesh_amqp_free(struct mesh_amqp *amqp);
 
 const char *mesh_amqp_get_url(struct mesh_amqp *amqp);
 bool mesh_amqp_set_url(struct mesh_amqp *amqp, const char *url);
-void mesh_amqp_set_exchange(struct mesh_amqp *amqp, const char *exchange);
+const char *mesh_amqp_get_exchange(struct mesh_amqp *amqp);
+bool mesh_amqp_set_exchange(struct mesh_amqp *amqp, const char *exchange);
 void mesh_amqp_publish(struct mesh_amqp *amqp, size_t size, const void *data);

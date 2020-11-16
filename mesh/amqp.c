@@ -60,6 +60,7 @@ struct message {
 
 struct mesh_amqp {
 	char *url;
+	char *exchange;
 	pthread_t thread;
 	struct l_queue *queue;
 	struct l_io *io;
@@ -326,7 +327,12 @@ bool mesh_amqp_set_url(struct mesh_amqp *amqp, const char *url)
 {
 	struct amqp_connection_info info;
 	char *tmp = l_strdup(url);
-	struct message *msg = l_new(struct message, 1);
+	struct message *msg;
+	
+	if (!url)
+		return false;
+	
+	msg = l_new(struct message, 1);
 
 	if (amqp->url && !strcmp(amqp->url, url))
 		return true;
@@ -355,16 +361,28 @@ bool mesh_amqp_set_url(struct mesh_amqp *amqp, const char *url)
 	return true;
 }
 
-void mesh_amqp_set_exchange(struct mesh_amqp *amqp, const char *exchange)
+const char *mesh_amqp_get_exchange(struct mesh_amqp *amqp)
+{
+	return amqp->exchange;
+}
+
+bool mesh_amqp_set_exchange(struct mesh_amqp *amqp, const char *exchange)
 {
 	struct message *msg;
 
+	if (!exchange)
+		return false;
+
+	amqp->exchange = l_strdup(exchange);
+
 	msg = l_new(struct message, 1);
 	msg->type = EXCHANGE;
-	strncpy(msg->exchange.name, exchange, sizeof(msg->exchange.name) - 1);
+	strncpy(msg->exchange.name, amqp->exchange, sizeof(msg->exchange.name) - 1);
 
 	l_queue_push_tail(amqp->queue, msg);
 	l_io_set_write_handler(amqp->io, amqp_write_handler, amqp, NULL);
+
+	return true;
 }
 
 void mesh_amqp_publish(struct mesh_amqp *amqp, size_t size, const void *data)

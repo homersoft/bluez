@@ -1246,7 +1246,7 @@ static int get_mode(json_object *jvalue)
 
 static void parse_features(json_object *jconfig, struct mesh_config_node *node)
 {
-	json_object *jvalue, *jrelay;
+	json_object *jvalue, *jrelay, *jamqp;
 	int mode, count;
 	uint16_t interval;
 
@@ -1300,10 +1300,13 @@ static void parse_features(json_object *jconfig, struct mesh_config_node *node)
 	interval = json_object_get_int(jvalue);
 	node->modes.relay.interval = interval;
 
-	if (!json_object_object_get_ex(jconfig, "amqp", &jvalue))
-		return;
+	if (json_object_object_get_ex(jconfig, "amqp", &jamqp)) {
+		if (json_object_object_get_ex(jamqp, "url", &jvalue))
+			node->amqp.url = (char *)json_object_get_string(jvalue);
 
-	node->amqp_url = (char *)json_object_get_string(jvalue);
+		if (!json_object_object_get_ex(jamqp, "exchange", &jvalue))
+			node->amqp.exchange = (char *)json_object_get_string(jvalue);
+	}
 }
 
 static bool parse_composition(json_object *jcomp, struct mesh_config_node *node)
@@ -2340,7 +2343,36 @@ bool mesh_config_update_crpl(struct mesh_config *cfg, uint16_t crpl)
 
 bool mesh_config_write_amqp_url(struct mesh_config *cfg, const char *amqp_url)
 {
-	if (!cfg || !write_string(cfg->jnode, "amqp", amqp_url))
+	json_object *jamqp;
+
+	if (!cfg)
+		return false;
+
+	if (!json_object_object_get_ex(cfg->jnode, "amqp", &jamqp)) {
+		jamqp = json_object_new_object();
+		json_object_object_add(cfg->jnode, "amqp", jamqp);
+	}
+
+	if (!write_string(jamqp, "url", amqp_url))
+		return false;
+
+	return save_config(cfg->jnode, cfg->node_dir_path);
+}
+
+bool mesh_config_write_amqp_exchange(struct mesh_config *cfg,
+						const char *amqp_exchange)
+{
+	json_object *jamqp;
+
+	if (!cfg)
+		return false;
+
+	if (!json_object_object_get_ex(cfg->jnode, "amqp", &jamqp)) {
+		jamqp = json_object_new_object();
+		json_object_object_add(cfg->jnode, "amqp", jamqp);
+	}
+
+	if (!write_string(jamqp, "exchange", amqp_exchange))
 		return false;
 
 	return save_config(cfg->jnode, cfg->node_dir_path);

@@ -281,6 +281,9 @@ static void free_node_dbus_resources(struct mesh_node *node)
 						MESH_MANAGEMENT_INTERFACE);
 
 		l_dbus_object_remove_interface(dbus_get_bus(), node->obj_path,
+						MESH_AMQP_INTERFACE);
+
+		l_dbus_object_remove_interface(dbus_get_bus(), node->obj_path,
 						L_DBUS_INTERFACE_PROPERTIES);
 
 		l_free(node->obj_path);
@@ -461,7 +464,8 @@ static bool init_from_storage(struct mesh_config_node *db_node,
 	node->relay.cnt = db_node->modes.relay.cnt;
 	node->relay.interval = db_node->modes.relay.interval;
 	node->beacon = db_node->modes.beacon;
-	mesh_amqp_set_url(node->amqp, db_node->amqp_url);
+	mesh_amqp_set_url(node->amqp, db_node->amqp.url);
+	mesh_amqp_set_exchange(node->amqp, db_node->amqp.exchange);
 
 	// XXX: should be network id, not node id
 	uuid_str = l_util_hexstring(node->uuid, 16);
@@ -551,7 +555,9 @@ void node_cleanup_all(void)
 {
 	l_queue_destroy(nodes, cleanup_node);
 	l_dbus_unregister_interface(dbus_get_bus(), MESH_NODE_INTERFACE);
+	l_dbus_unregister_interface(dbus_get_bus(), MESH_AMQP_INTERFACE);
 	l_dbus_unregister_interface(dbus_get_bus(), MESH_MANAGEMENT_INTERFACE);
+	l_dbus_unregister_interface(dbus_get_bus(), L_DBUS_INTERFACE_PROPERTIES);
 }
 
 bool node_is_provisioner(struct mesh_node *node)
@@ -1009,6 +1015,10 @@ static bool register_node_object(struct mesh_node *node)
 
 	if (!l_dbus_object_add_interface(dbus_get_bus(), node->obj_path,
 						MESH_NODE_INTERFACE, node))
+		return false;
+
+	if (!l_dbus_object_add_interface(dbus_get_bus(), node->obj_path,
+						MESH_AMQP_INTERFACE, node))
 		return false;
 
 	if (!l_dbus_object_add_interface(dbus_get_bus(), node->obj_path,
@@ -2437,7 +2447,6 @@ static struct l_dbus_message *amqp_url_setter(struct l_dbus *dbus,
 					void *user_data)
 {
 	struct mesh_node *node = user_data;
-	char *uuid_str;
 	const char *sender;
 	const char *url;
 
@@ -2453,10 +2462,44 @@ static struct l_dbus_message *amqp_url_setter(struct l_dbus *dbus,
 	mesh_amqp_set_url(node->amqp, url);
 	mesh_config_write_amqp_url(node->cfg, url);
 
-	// XXX: should be network id, not node id
-	uuid_str = l_util_hexstring(node->uuid, 16);
-	mesh_amqp_set_exchange(node->amqp, uuid_str);
-	l_free(uuid_str);
+	complete(dbus, msg, NULL);
+
+	return NULL;
+}
+
+static bool amqp_exchange_getter(struct l_dbus *dbus, struct l_dbus_message *msg,
+					struct l_dbus_message_builder *builder,
+					void *user_data)
+{
+	struct mesh_node *node = user_data;
+	const char *exchange = mesh_amqp_get_exchange(node->amqp);
+
+	l_dbus_message_builder_append_basic(builder, 's', exchange ?: "");
+
+	return true;
+}
+
+static struct l_dbus_message *amqp_exchange_setter(struct l_dbus *dbus,
+					struct l_dbus_message *msg,
+					struct l_dbus_message_iter *value,
+					l_dbus_property_complete_cb_t complete,
+					void *user_data)
+{
+	struct mesh_node *node = user_data;
+	const char *sender;
+	const char *url;
+
+	sender = l_dbus_message_get_sender(msg);
+
+	if (strcmp(sender, node->owner))
+		return dbus_error(msg, MESH_ERROR_NOT_AUTHORIZED, NULL);
+
+	if (!l_dbus_message_iter_get_variant(value, "s", &url))
+		return dbus_error(msg, MESH_ERROR_INVALID_ARGS,
+							"String expected");
+
+	mesh_amqp_set_exchange(node->amqp, url);
+	mesh_config_write_amqp_exchange(node->cfg, url);
 
 	complete(dbus, msg, NULL);
 
@@ -2523,8 +2566,16 @@ static void setup_node_interface(struct l_dbus_interface *iface)
 					lastheard_getter, NULL);
 	l_dbus_interface_property(iface, "Addresses", 0, "aq", addresses_getter,
 									NULL);
-	l_dbus_interface_property(iface, "AmqpUrl", 0, "s", amqp_url_getter,
+}
+
+static void setup_amqp_interface(struct l_dbus_interface *iface)
+{
+	l_dbus_interface_property(iface, "Url", 0, "s", amqp_url_getter,
 							amqp_url_setter);
+
+	l_dbus_interface_property(iface, "Exchange", 0, "s",
+				  amqp_exchange_getter, amqp_exchange_setter);
+
 }
 
 void node_property_changed(struct mesh_node *node, const char *property)
@@ -2542,6 +2593,13 @@ bool node_dbus_init(struct l_dbus *bus)
 						setup_node_interface,
 						NULL, false)) {
 		l_info("Unable to register %s interface", MESH_NODE_INTERFACE);
+		return false;
+	}
+
+	if (!l_dbus_register_interface(bus, MESH_AMQP_INTERFACE,
+						setup_amqp_interface,
+						NULL, false)) {
+		l_info("Unable to register %s interface", MESH_AMQP_INTERFACE);
 		return false;
 	}
 
