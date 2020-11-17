@@ -821,7 +821,7 @@ static void fd_msg_send(struct l_io *io, struct fd_msg *msg, size_t size)
 {
 	struct iovec iov = {
 		.iov_base = msg,
-		.iov_len = sizeof(struct fd_msg) + size,
+		.iov_len = size,
 	};
 	struct msghdr hdr = {
 		.msg_iov = &iov,
@@ -829,8 +829,6 @@ static void fd_msg_send(struct l_io *io, struct fd_msg *msg, size_t size)
 	};
 
 	(void)sendmsg(l_io_get_fd(io), &hdr, MSG_NOSIGNAL);
-
-	l_free(msg);
 }
 
 static void send_fd_dev_key_msg_rcvd(struct l_io *io, uint8_t ele_idx,
@@ -843,7 +841,7 @@ static void send_fd_dev_key_msg_rcvd(struct l_io *io, uint8_t ele_idx,
 	msg->dev.net_idx = net_idx;
 	msg->dev.remote = (app_idx != APP_IDX_DEV_LOCAL);
 
-	fd_msg_send(io, msg, size);
+	fd_msg_send(io, msg, sizeof(*msg) + size);
 }
 
 static void send_dbus_dev_key_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
@@ -901,13 +899,21 @@ typedef void (*send_callback_t)(void *data, size_t len, void *context);
 
 static void send_amqp(void *data, size_t len, void *context)
 {
-    mesh_amqp_publish(context, data, len, "");
+    struct mesh_node *node = context;
+    struct mesh_amqp *amqp = node_get_amqp(node);
+
+    char *str = l_util_hexstring(node_uuid_get(node), 16);
+
+    mesh_amqp_publish(amqp, data, len, str);
+
+    free(str);
     free(data);
 }
 
 static void send_fd(void *data, size_t len, void *context)
 {
     fd_msg_send(context, data, len);
+    free(data);
 }
 
 static void send_fd_msg_rcvd(uint8_t ele_idx,
@@ -925,7 +931,7 @@ static void send_fd_msg_rcvd(uint8_t ele_idx,
 	if (virt)
 		memcpy(msg->app.label, virt, sizeof(msg->app.label));
 
-	send_callback(msg, size, context);
+	send_callback(msg, sizeof(*msg) + size, context);
 }
 
 static void send_dbus_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
@@ -984,8 +990,9 @@ static void send_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
 
 	if (amqp && mesh_amqp_get_exchange(amqp))
 	    send_fd_msg_rcvd(ele_idx, src, dst, virt, app_idx,
-                         size, data, send_amqp, amqp);
-	else if (io)
+                         size, data, send_amqp, node);
+
+	if (io)
 		send_fd_msg_rcvd(ele_idx, src, dst, virt, app_idx,
                          size, data, send_fd, io);
 	else
