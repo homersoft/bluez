@@ -385,7 +385,7 @@ bool mesh_amqp_set_exchange(struct mesh_amqp *amqp, const char *exchange)
 	return true;
 }
 
-void mesh_amqp_publish(struct mesh_amqp *amqp, size_t size, const void *data)
+void mesh_amqp_publish(struct mesh_amqp *amqp, const void *data, size_t size, const char *routing_key)
 {
 	struct message *msg;
 
@@ -395,7 +395,7 @@ void mesh_amqp_publish(struct mesh_amqp *amqp, size_t size, const void *data)
 	msg = l_new(struct message, 1);
 	msg->type = PUBLISH;
 	strncpy(msg->publish.exchange, amqp->exchange, sizeof(msg->publish.exchange) - 1);
-	strncpy(msg->publish.routing_key, "foo", sizeof(msg->publish.routing_key) - 1);
+	strncpy(msg->publish.routing_key, routing_key ?: "", sizeof(msg->publish.routing_key) - 1);
 
 	msg->publish.size = size;
 	memcpy(msg->publish.data, data, sizeof(msg->publish.data));
