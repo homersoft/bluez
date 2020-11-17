@@ -389,10 +389,13 @@ void mesh_amqp_publish(struct mesh_amqp *amqp, size_t size, const void *data)
 {
 	struct message *msg;
 
+	if (!amqp->exchange)
+	    return;
+
 	msg = l_new(struct message, 1);
 	msg->type = PUBLISH;
-	strncpy(msg->publish.exchange, "83bf3b46810345a28bcce70d8d0b46d3", sizeof(msg->publish.exchange));
-	strncpy(msg->publish.routing_key, "foo", sizeof(msg->publish.routing_key));
+	strncpy(msg->publish.exchange, amqp->exchange, sizeof(msg->publish.exchange) - 1);
+	strncpy(msg->publish.routing_key, "foo", sizeof(msg->publish.routing_key) - 1);
 
 	msg->publish.size = size;
 	memcpy(msg->publish.data, data, sizeof(msg->publish.data));

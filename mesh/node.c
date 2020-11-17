@@ -443,7 +443,6 @@ static bool init_from_storage(struct mesh_config_node *db_node,
 			void *user_data)
 {
 	unsigned int num_ele;
-	char *uuid_str;
 
 	struct mesh_node *node = node_new(uuid);
 
@@ -466,11 +465,6 @@ static bool init_from_storage(struct mesh_config_node *db_node,
 	node->beacon = db_node->modes.beacon;
 	mesh_amqp_set_url(node->amqp, db_node->amqp.url);
 	mesh_amqp_set_exchange(node->amqp, db_node->amqp.exchange);
-
-	// XXX: should be network id, not node id
-	uuid_str = l_util_hexstring(node->uuid, 16);
-	mesh_amqp_set_exchange(node->amqp, uuid_str);
-	l_free(uuid_str);
 
 	l_debug("relay %2.2x, proxy %2.2x, lpn %2.2x, friend %2.2x",
 			node->relay.mode, node->proxy, node->lpn, node->friend);

@@ -1304,7 +1304,7 @@ static void parse_features(json_object *jconfig, struct mesh_config_node *node)
 		if (json_object_object_get_ex(jamqp, "url", &jvalue))
 			node->amqp.url = (char *)json_object_get_string(jvalue);
 
-		if (!json_object_object_get_ex(jamqp, "exchange", &jvalue))
+		if (json_object_object_get_ex(jamqp, "exchange", &jvalue))
 			node->amqp.exchange = (char *)json_object_get_string(jvalue);
 	}
 }
