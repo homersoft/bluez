@@ -24,6 +24,7 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/timerfd.h>
 #include <unistd.h>
 #include <stdio.h>
 
@@ -31,6 +32,7 @@ enum message_type {
 	CONNECT,
 	EXCHANGE,
 	PUBLISH,
+	CLOSE,
 };
 
 struct message {
@@ -59,6 +61,7 @@ struct message {
 };
 
 struct mesh_amqp {
+	bool thread_started;
 	char *url;
 	char *exchange;
 	char *routing_key;
@@ -103,7 +106,49 @@ static bool amqp_write_handler(struct l_io *io, void *user_data)
 	return true;
 }
 
-static void amqp_connect_handler(amqp_connection_state_t conn,
+static bool is_reply_ok(amqp_rpc_reply_t *reply)
+{
+	switch (reply->reply_type)
+	{
+		case AMQP_RESPONSE_NORMAL:
+			return true;
+
+		case AMQP_RESPONSE_NONE:
+			l_error("response none");
+			break;
+
+		case AMQP_RESPONSE_LIBRARY_EXCEPTION:
+			l_error("library exception: %s", amqp_error_string2(reply->library_error));
+			break;
+
+		case AMQP_RESPONSE_SERVER_EXCEPTION:
+			switch (reply->reply.id)
+			{
+				case AMQP_CONNECTION_CLOSE_METHOD:
+				{
+					amqp_connection_close_t *m = (amqp_connection_close_t *)reply->reply.decoded;
+					l_error("server exception: %.*s", (int)m->reply_text.len, (char*)m->reply_text.bytes);
+					break;
+				}
+
+				case AMQP_CHANNEL_CLOSE_METHOD:
+				{
+					amqp_channel_close_t *m = (amqp_channel_close_t *)reply->reply.decoded;
+					l_error("server exception: %.*s", (int)m->reply_text.len, (char*)m->reply_text.bytes);
+					break;
+				}
+
+				default:
+					l_error("server exception: 0x%08x", reply->reply.id);
+					break;
+			}
+			break;
+	}
+
+	return false;
+}
+
+static bool amqp_connect_handler(amqp_connection_state_t conn,
 						struct message_connect *connect)
 {
 	int status;
@@ -116,54 +161,34 @@ static void amqp_connect_handler(amqp_connection_state_t conn,
 
 	if (status != AMQP_STATUS_OK) {
 		l_error("amqp_socket_open() failed: %i", status);
-		return;
+		return false;
 	}
 
 	reply = amqp_login(conn, connect->vhost, 0, AMQP_DEFAULT_FRAME_SIZE, 0,
 		AMQP_SASL_METHOD_PLAIN, connect->user, connect->pass);
 
-	switch (reply.reply_type)
-	{
-		case AMQP_RESPONSE_LIBRARY_EXCEPTION:
-			l_error("amqp_login() failed: %s", amqp_error_string2(reply.library_error));
-			return;
-			break;
-
-		case AMQP_RESPONSE_SERVER_EXCEPTION:
-			switch (reply.reply.id)
-			{
-				case AMQP_CONNECTION_CLOSE_METHOD:
-				{
-					amqp_connection_close_t *m = (amqp_connection_close_t *)reply.reply.decoded;
-					l_error("amqp_login() failed: %.*s", (int)m->reply_text.len, (char*)m->reply_text.bytes);
-					return;
-				}
-			}
-			break;
-
-		case AMQP_RESPONSE_NORMAL:
-			l_info("Connected to amqp://%s:***@%s:%i/%s",
-			       connect->user, connect->host, connect->port,
-			       connect->vhost);
-			break;
-
-		case AMQP_RESPONSE_NONE:
-			return;
+	if (!is_reply_ok(&reply)) {
+		l_error("Login failed");
+		return false;
 	}
+
+	l_info("Connected to amqp://%s:***@%s:%i/%s",
+		   connect->user, connect->host, connect->port,
+		   connect->vhost);
 
 	amqp_channel_open(conn, 1);
-
 	reply = amqp_get_rpc_reply(conn);
 
-	if (reply.reply_type != AMQP_RESPONSE_NORMAL) {
+	if (!is_reply_ok(&reply)) {
 		l_error("Channel failed");
-		return;
+		return false;
 	}
 
-	l_error("Channel open");
+	l_info("Channel opened");
+	return true;
 }
 
-static void amqp_exchange_handler(amqp_connection_state_t conn,
+static bool amqp_exchange_handler(amqp_connection_state_t conn,
 					struct message_exchange *exchange)
 {
 	amqp_rpc_reply_t reply;
@@ -179,12 +204,13 @@ static void amqp_exchange_handler(amqp_connection_state_t conn,
 
 	reply = amqp_get_rpc_reply(conn);
 
-	if (reply.reply_type != AMQP_RESPONSE_NORMAL) {
+	if (!is_reply_ok(&reply)) {
 		l_error("Exchange failed");
-		return;
+		return false;
 	}
 
 	l_info("Exchange declared %s", exchange->name);
+	return true;
 }
 
 static void amqp_publish_handler(amqp_connection_state_t conn,
@@ -210,31 +236,122 @@ static void amqp_publish_handler(amqp_connection_state_t conn,
 
 	reply = amqp_get_rpc_reply(conn);
 
-	if (reply.reply_type != AMQP_RESPONSE_NORMAL) {
+	if (!is_reply_ok(&reply))
 		l_error("Publish failed");
+}
+
+struct amqp_thread_context {
+	amqp_connection_state_t conn_state;
+	amqp_socket_t *sock;
+
+	struct message_connect connect_msg;
+	struct message_exchange exchange_msg;
+
+	bool reconnect;
+	int reconn_tim_fd;
+
+	bool close;
+};
+
+static void amqp_disconnect(struct amqp_thread_context *context)
+{
+	if (context->conn_state)
+		amqp_destroy_connection(context->conn_state);
+
+	context->conn_state = NULL;
+	context->sock = NULL;
+}
+
+static bool amqp_connect(struct amqp_thread_context *context)
+{
+	context->conn_state = amqp_new_connection();
+	if (!context->conn_state)
+		return false;
+
+	context->sock = amqp_tcp_socket_new(context->conn_state);
+	if (!context->sock) {
+		amqp_destroy_connection(context->conn_state);
+		context->conn_state = NULL;
+
+		return false;
+	}
+
+	return true;
+}
+
+static void amqp_reconnect(struct amqp_thread_context *context);
+
+static void reconnect_timeout(struct amqp_thread_context *context)
+{
+	l_info("AMQP reconnecting...");
+
+	amqp_disconnect(context);
+
+	if (!amqp_connect(context)) {
+		amqp_reconnect(context);
+		return;
+	}
+
+	if (!amqp_connect_handler(context->conn_state, &context->connect_msg))
+	{
+		amqp_reconnect(context);
+		return;
+	}
+
+	if (!amqp_exchange_handler(context->conn_state, &context->exchange_msg))
+	{
+		amqp_reconnect(context);
 		return;
 	}
 }
 
-static void amqp_message_handler(amqp_connection_state_t conn, int fd)
+static void amqp_reconnect(struct amqp_thread_context *context)
+{
+	struct itimerspec newitimspec = {0};
+	newitimspec.it_value.tv_sec = 5;
+
+	if (context->reconnect) {
+		l_warn("Reconnect already in progress...");
+		return;
+	}
+
+	amqp_disconnect(context);
+
+	if (timerfd_settime(context->reconn_tim_fd, 0, &newitimspec, NULL) == 0)
+	{
+		context->reconnect = true;
+	}
+}
+
+static void amqp_message_handler(int fd, struct amqp_thread_context *context)
 {
 	struct message msg;
 
 	while (recv(fd, &msg, sizeof(msg), 0) == sizeof(msg))
 	{
-		switch (msg.type)
-		{
-		case CONNECT:
-			amqp_connect_handler(conn, &msg.connect);
-			break;
+		switch (msg.type) {
+			case CONNECT:
+				memcpy(&context->connect_msg, &msg.connect, sizeof(context->connect_msg));
+				amqp_reconnect(context);
+				return;
 
-		case EXCHANGE:
-			amqp_exchange_handler(conn, &msg.exchange);
-			break;
+			case EXCHANGE:
+				memcpy(&context->exchange_msg, &msg.exchange, sizeof(context->exchange_msg));
 
-		case PUBLISH:
-			amqp_publish_handler(conn, &msg.publish);
-			break;
+				if (context->conn_state)
+					amqp_reconnect(context);
+				return;
+
+			case PUBLISH:
+				if (!context->conn_state)
+					return;
+
+				amqp_publish_handler(context->conn_state, &msg.publish);
+				return;
+
+			case CLOSE:
+				context->close = true;
+				return;
 		}
 	}
 }
@@ -242,81 +359,117 @@ static void amqp_message_handler(amqp_connection_state_t conn, int fd)
 static void *amqp_thread(void *user_data)
 {
 	int fd = L_PTR_TO_INT(user_data);
-	bool connected = false;
-
-	amqp_connection_state_t conn = amqp_new_connection();
-	amqp_socket_t *sock = amqp_tcp_socket_new(conn);
 
 	fd_set read_fds;
 	int max_fd = -1;
+
+	struct amqp_thread_context context = {0};
+
+	context.reconn_tim_fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
+	if (context.reconn_tim_fd < 0)
+	{
+		l_error("Failed to create reconnect timer");
+		return NULL;
+	}
+	amqp_reconnect(&context);
 
 	while (true)
 	{
 		FD_ZERO(&read_fds);
 
+		FD_SET(context.reconn_tim_fd, &read_fds);
+		if (context.reconn_tim_fd > max_fd)
+			max_fd = context.reconn_tim_fd;
+
 		FD_SET(fd, &read_fds);
 		if (fd > max_fd)
 			max_fd = fd;
 
-		if (connected) {
-			FD_SET(amqp_socket_get_sockfd(sock), &read_fds);
-			if (amqp_socket_get_sockfd(sock) > max_fd)
-				max_fd = amqp_socket_get_sockfd(sock);
+		if (context.sock) {
+			int fd = amqp_socket_get_sockfd(context.sock);
+
+			FD_SET(fd, &read_fds);
+			if (fd > max_fd)
+				max_fd = fd;
 		}
 
 		select(max_fd + 1, &read_fds, NULL, NULL, NULL);
 
-		if (FD_ISSET(fd, &read_fds))
-			amqp_message_handler(conn, fd);
+		if (FD_ISSET(context.reconn_tim_fd, &read_fds)) {
+			uint64_t no_expir;
 
-		if (connected && FD_ISSET(amqp_socket_get_sockfd(sock), &read_fds)) {
+			if (read(context.reconn_tim_fd, &no_expir, sizeof(no_expir)) == sizeof(no_expir))
+			{
+				context.reconnect = false;
+				reconnect_timeout(&context);
+			}
+		}
+
+		if (FD_ISSET(fd, &read_fds))
+			amqp_message_handler(fd, &context);
+
+		if (context.close)
+			break;
+
+		if (context.sock && FD_ISSET(amqp_socket_get_sockfd(context.sock), &read_fds)) {
 			amqp_rpc_reply_t ret;
 			amqp_envelope_t envelope;
 
-			amqp_maybe_release_buffers(conn);
-			ret = amqp_consume_message(conn, &envelope, NULL, 0);
+			amqp_maybe_release_buffers(context.conn_state);
+			ret = amqp_consume_message(context.conn_state, &envelope, NULL, 0);
 
-			if (ret.reply_type != AMQP_RESPONSE_NORMAL)
-				break;
+			if (!is_reply_ok(&ret))
+					amqp_reconnect(&context);
 
 			amqp_destroy_envelope(&envelope);
 		}
 	}
 
+	amqp_disconnect(&context);
+
 	close(fd);
 	return NULL;
 }
 
-
 struct mesh_amqp *mesh_amqp_new(void)
 {
 	struct mesh_amqp *amqp = l_new(struct mesh_amqp, 1);
+	memset(amqp, 0, sizeof(*amqp));
+
+	return amqp;
+}
+
+void mesh_amqp_start(struct mesh_amqp *amqp)
+{
 	pthread_attr_t attr;
 	int fds[2];
 
 	socketpair(AF_UNIX, SOCK_DGRAM, 0, fds);
 
 	pthread_attr_init(&attr);
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
-	pthread_create(&amqp->thread, &attr, amqp_thread, L_INT_TO_PTR(fds[1]));
-
+	amqp->thread_started = !pthread_create(&amqp->thread, &attr, amqp_thread, L_INT_TO_PTR(fds[1]));
 	amqp->queue = l_queue_new();
 	amqp->io = l_io_new(fds[0]);
+
 	l_io_set_close_on_destroy(amqp->io, true);
 	l_io_set_read_handler(amqp->io, amqp_read_handler, amqp, NULL);
-
-	return amqp;
 }
 
 void mesh_amqp_free(struct mesh_amqp *amqp)
 {
+	if (amqp->thread_started) {
+		mesh_amqp_close(amqp);
+		pthread_join(amqp->thread, NULL);
+	}
+
 	l_io_destroy(amqp->io);
 	l_queue_destroy(amqp->queue, l_free);
 	l_free(amqp->url);
+	l_free(amqp->exchange);
+	l_free(amqp->routing_key);
 	l_free(amqp);
-
-	// pthread_cancel(amqp->thread);
 }
 
 const char *mesh_amqp_get_url(struct mesh_amqp *amqp)
@@ -403,21 +556,32 @@ bool mesh_amqp_set_routing_key(struct mesh_amqp *amqp, const char *routing_key)
 	return true;
 }
 
-void mesh_amqp_publish(struct mesh_amqp *amqp, const void *data, size_t size, const char *routing_key)
+void mesh_amqp_publish(struct mesh_amqp *amqp, const void *data, size_t size)
 {
 	struct message *msg;
 
 	if (!amqp->exchange)
-	    return;
+		return;
 
 	msg = l_new(struct message, 1);
 	msg->type = PUBLISH;
 	strncpy(msg->publish.exchange, amqp->exchange, sizeof(msg->publish.exchange) - 1);
-	strncpy(msg->publish.routing_key, routing_key ?: "", sizeof(msg->publish.routing_key) - 1);
+	strncpy(msg->publish.routing_key, amqp->routing_key, sizeof(msg->publish.routing_key) - 1);
 
 	msg->publish.size = size;
 	memcpy(msg->publish.data, data, sizeof(msg->publish.data));
 
 	l_queue_push_tail(amqp->queue, msg);
 	l_io_set_write_handler(amqp->io, amqp_write_handler, amqp, NULL);
+}
+
+void mesh_amqp_close(struct mesh_amqp *amqp)
+{
+	struct message *msg;
+
+	msg = l_new(struct message, 1);
+	msg->type = CLOSE;
+
+	send(l_io_get_fd(amqp->io), msg, sizeof(*msg), 0);
+	l_free(msg);
 }

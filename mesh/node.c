@@ -463,6 +463,8 @@ static bool init_from_storage(struct mesh_config_node *db_node,
 	node->relay.cnt = db_node->modes.relay.cnt;
 	node->relay.interval = db_node->modes.relay.interval;
 	node->beacon = db_node->modes.beacon;
+
+	mesh_amqp_start(node->amqp);
 	mesh_amqp_set_url(node->amqp, db_node->amqp.url);
 	mesh_amqp_set_exchange(node->amqp, db_node->amqp.exchange);
 	mesh_amqp_set_routing_key(node->amqp, db_node->amqp.routing_key);
@@ -1681,7 +1683,7 @@ static struct l_io *fd_io_new(struct mesh_node *node, int *fd)
 	int fds[2];
 
 	if (socketpair(AF_LOCAL, SOCK_DGRAM | SOCK_NONBLOCK | SOCK_CLOEXEC,
-		       0, fds) < 0)
+			   0, fds) < 0)
 	{
 		return NULL;
 	}
@@ -2727,4 +2729,5 @@ void node_finalize_new_node(struct mesh_node *node, struct mesh_io *io)
 
 	/* Register callback for the node's io */
 	attach_io(node, io);
+	mesh_amqp_start(node->amqp);
 }
