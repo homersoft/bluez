@@ -373,6 +373,7 @@ bool mesh_amqp_set_exchange(struct mesh_amqp *amqp, const char *exchange)
 	if (!exchange)
 		return false;
 
+	l_free(amqp->exchange);
 	amqp->exchange = l_strdup(exchange);
 
 	msg = l_new(struct message, 1);
