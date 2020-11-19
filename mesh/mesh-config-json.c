@@ -1306,6 +1306,9 @@ static void parse_features(json_object *jconfig, struct mesh_config_node *node)
 
 		if (json_object_object_get_ex(jamqp, "exchange", &jvalue))
 			node->amqp.exchange = (char *)json_object_get_string(jvalue);
+
+		if (json_object_object_get_ex(jamqp, "routingKey", &jvalue))
+			node->amqp.routing_key = (char *)json_object_get_string(jvalue);
 	}
 }
 
@@ -2377,6 +2380,26 @@ bool mesh_config_write_amqp_exchange(struct mesh_config *cfg,
 
 	return save_config(cfg->jnode, cfg->node_dir_path);
 }
+
+bool mesh_config_write_amqp_routing_key(struct mesh_config *cfg,
+						const char *amqp_routing_key)
+{
+	json_object *jamqp;
+
+	if (!cfg)
+		return false;
+
+	if (!json_object_object_get_ex(cfg->jnode, "amqp", &jamqp)) {
+		jamqp = json_object_new_object();
+		json_object_object_add(cfg->jnode, "amqp", jamqp);
+	}
+
+	if (!write_string(jamqp, "routingKey", amqp_routing_key))
+		return false;
+
+	return save_config(cfg->jnode, cfg->node_dir_path);
+}
+
 
 static bool load_node(const char *fname, const uint8_t uuid[16],
 				mesh_config_node_func_t cb, void *user_data)

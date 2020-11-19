@@ -61,6 +61,7 @@ struct message {
 struct mesh_amqp {
 	char *url;
 	char *exchange;
+	char *routing_key;
 	pthread_t thread;
 	struct l_queue *queue;
 	struct l_io *io;
@@ -382,6 +383,22 @@ bool mesh_amqp_set_exchange(struct mesh_amqp *amqp, const char *exchange)
 
 	l_queue_push_tail(amqp->queue, msg);
 	l_io_set_write_handler(amqp->io, amqp_write_handler, amqp, NULL);
+
+	return true;
+}
+
+const char *mesh_amqp_get_routing_key(struct mesh_amqp *amqp)
+{
+	return amqp->routing_key;
+}
+
+bool mesh_amqp_set_routing_key(struct mesh_amqp *amqp, const char *routing_key)
+{
+	if (!routing_key)
+		return false;
+
+	l_free(amqp->routing_key);
+	amqp->routing_key = l_strdup(routing_key);
 
 	return true;
 }

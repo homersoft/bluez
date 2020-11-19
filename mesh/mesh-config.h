@@ -99,6 +99,7 @@ struct mesh_config_comp_page {
 struct mesh_config_amqp {
 	const char *url;
 	const char *exchange;
+	const char *routing_key;
 };
 
 
@@ -206,3 +207,4 @@ bool mesh_config_update_crpl(struct mesh_config *cfg, uint16_t crpl);
 
 bool mesh_config_write_amqp_url(struct mesh_config *cfg, const char *amqp_url);
 bool mesh_config_write_amqp_exchange(struct mesh_config *cfg, const char *amqp_exchange);
+bool mesh_config_write_amqp_routing_key(struct mesh_config *cfg, const char *amqp_routing_key);
