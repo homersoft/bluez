@@ -48,14 +48,14 @@ struct message {
 		} connect;
 
 		struct message_exchange {
-			char name[33];
+			char name[48];
 		} exchange;
 
 		struct message_publish {
-			char exchange[33];
+			char exchange[48];
 			char routing_key[33];
 			size_t size;
-			uint8_t data[30];
+			uint8_t data[32];
 		} publish;
 	};
 };
@@ -205,11 +205,11 @@ static bool amqp_exchange_handler(amqp_connection_state_t conn,
 	reply = amqp_get_rpc_reply(conn);
 
 	if (!is_reply_ok(&reply)) {
-		l_error("Exchange failed");
+		l_error("Exchange declaration failed");
 		return false;
 	}
 
-	l_info("Exchange declared %s", exchange->name);
+	l_info("Exchange '%s' declared", exchange->name);
 	return true;
 }
 
@@ -524,11 +524,8 @@ bool mesh_amqp_set_exchange(struct mesh_amqp *amqp, const char *exchange)
 {
 	struct message *msg;
 
-	if (!exchange)
-		return false;
-
 	l_free(amqp->exchange);
-	amqp->exchange = l_strdup(exchange);
+	amqp->exchange = l_strdup(exchange ?: "not_configured");
 
 	msg = l_new(struct message, 1);
 	msg->type = EXCHANGE;
@@ -566,7 +563,7 @@ void mesh_amqp_publish(struct mesh_amqp *amqp, const void *data, size_t size)
 	msg = l_new(struct message, 1);
 	msg->type = PUBLISH;
 	strncpy(msg->publish.exchange, amqp->exchange, sizeof(msg->publish.exchange) - 1);
-	strncpy(msg->publish.routing_key, amqp->routing_key, sizeof(msg->publish.routing_key) - 1);
+	strncpy(msg->publish.routing_key, amqp->routing_key ?: "", sizeof(msg->publish.routing_key) - 1);
 
 	msg->publish.size = size;
 	memcpy(msg->publish.data, data, sizeof(msg->publish.data));
