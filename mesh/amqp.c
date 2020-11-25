@@ -68,6 +68,7 @@ struct message {
 			bool is_ready;
 		} is_ready;
 	};
+	size_t seq;
 };
 
 struct amqp_thread_context {
@@ -88,6 +89,7 @@ struct mesh_amqp {
 	struct l_queue *queue;
 	struct l_queue *ret_queue;
 	struct l_io *io;
+	uint32_t seq;
 };
 
 static bool amqp_read_handler(struct l_io *io, void *user_data)
@@ -401,6 +403,7 @@ static void control_message_handler(struct amqp_thread_context *context)
 			struct message ret_msg = {0};
 
 			ret_msg.type = GET_URL;
+			ret_msg.seq = msg.seq;
 			strncpy(ret_msg.url.url,
 					context->config.url,
 					sizeof(ret_msg.url.url) - 1);
@@ -423,6 +426,7 @@ static void control_message_handler(struct amqp_thread_context *context)
 			struct message ret_msg = {0};
 
 			ret_msg.type = GET_EXCHANGE;
+			ret_msg.seq = msg.seq;
 			strncpy(ret_msg.exchange.exchange,
 				 context->config.exchange,
 				 sizeof(ret_msg.exchange.exchange) - 1);
@@ -440,6 +444,7 @@ static void control_message_handler(struct amqp_thread_context *context)
 			struct message ret_msg = {0};
 
 			ret_msg.type = GET_ROUTING_KEY;
+			ret_msg.seq = msg.seq;
 			strncpy(ret_msg.routing_key.routing_key,
 				context->config.routing_key,
 				sizeof(ret_msg.routing_key.routing_key) - 1);
@@ -450,6 +455,7 @@ static void control_message_handler(struct amqp_thread_context *context)
 			struct message ret_msg = {0};
 
 			ret_msg.type = GET_READY_STATUS;
+			ret_msg.seq = msg.seq;
 			ret_msg.is_ready.is_ready = (
 				context->amqp_state == AMQP_STATE_CONNECTED);
 
@@ -613,7 +619,7 @@ static void awaiting_timeout(struct l_timeout *timeout, void *user_data)
 	*expired = true;
 }
 
-static void *get_ret_message(struct mesh_amqp *amqp)
+static struct message *get_ret_message(struct mesh_amqp *amqp, size_t seq)
 {
 	/* ELL DBus API requires that getters are blocking,
 	   so keep iterating the loop while we wait for reply from the thread". */
@@ -625,12 +631,17 @@ static void *get_ret_message(struct mesh_amqp *amqp)
 	if (!amqp->thread_started)
 		return NULL;
 
-	timeout = l_timeout_create_ms(100, awaiting_timeout, &expired, NULL);
+	timeout = l_timeout_create_ms(1000, awaiting_timeout, &expired, NULL);
 
 	while (1) {
 		ret_msg = l_queue_pop_head(amqp->ret_queue);
-		if (ret_msg)
-			break;
+		if (ret_msg) {
+			if (ret_msg->seq == seq)
+				break;
+
+			ret_msg = NULL;
+			l_free(ret_msg);
+		}
 
 		if (expired) {
 			l_error("amqp: command timed out");
@@ -644,10 +655,14 @@ static void *get_ret_message(struct mesh_amqp *amqp)
 	return ret_msg;
 }
 
-static void send_message(struct mesh_amqp *amqp, struct message *msg)
+static size_t send_message(struct mesh_amqp *amqp, struct message *msg)
 {
+	msg->seq = ++(amqp->seq);
+
 	l_queue_push_tail(amqp->queue, msg);
 	l_io_set_write_handler(amqp->io, amqp_write_handler, amqp, NULL);
+
+	return msg->seq;
 }
 
 static struct message *new_message(enum message_type type)
@@ -665,8 +680,8 @@ char *mesh_amqp_get_url(struct mesh_amqp *amqp)
 	char *url;
 	struct message *ret_msg;
 
-	send_message(amqp, new_message(GET_URL));
-	ret_msg = get_ret_message(amqp);
+	size_t seq = send_message(amqp, new_message(GET_URL));
+	ret_msg = get_ret_message(amqp, seq);
 	if (!ret_msg)
 		return NULL;
 
@@ -689,8 +704,8 @@ char *mesh_amqp_get_exchange(struct mesh_amqp *amqp)
 	char *exchange;
 	struct message *ret_msg;
 
-	send_message(amqp, new_message(GET_EXCHANGE));
-	ret_msg = get_ret_message(amqp);
+	size_t seq = send_message(amqp, new_message(GET_EXCHANGE));
+	ret_msg = get_ret_message(amqp, seq);
 	if (!ret_msg)
 		return NULL;
 
@@ -713,8 +728,8 @@ char *mesh_amqp_get_routing_key(struct mesh_amqp *amqp)
 	char *routing_key;
 	struct message *ret_msg;
 
-	send_message(amqp, new_message(GET_ROUTING_KEY));
-	ret_msg = get_ret_message(amqp);
+	size_t seq = send_message(amqp, new_message(GET_ROUTING_KEY));
+	ret_msg = get_ret_message(amqp, seq);
 	if (!ret_msg)
 		return NULL;
 
@@ -757,8 +772,8 @@ bool mesh_amqp_is_ready(struct mesh_amqp *amqp)
 	bool is_ready;
 	struct message *ret_msg;
 
-	send_message(amqp, new_message(GET_READY_STATUS));
-	ret_msg = get_ret_message(amqp);
+	size_t seq = send_message(amqp, new_message(GET_READY_STATUS));
+	ret_msg = get_ret_message(amqp, seq);
 	if (!ret_msg)
 		return false;
 
