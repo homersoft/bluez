@@ -62,7 +62,7 @@ struct message {
 		} routing_key;
 		struct message_publish {
 			size_t size;
-			uint8_t data[32];
+			uint8_t data[384];
 		} publish;
 		struct message_is_ready {
 			bool is_ready;
@@ -84,12 +84,13 @@ struct amqp_thread_context {
 };
 
 struct mesh_amqp {
-	bool thread_started;
-	pthread_t thread;
 	struct l_queue *queue;
 	struct l_queue *ret_queue;
 	struct l_io *io;
-	uint32_t seq;
+    	pthread_t thread;
+    	size_t seq;
+    	bool thread_started;
+    	bool lock;
 };
 
 static bool amqp_read_handler(struct l_io *io, void *user_data)
@@ -585,6 +586,10 @@ void mesh_amqp_start(struct mesh_amqp *amqp, struct mesh_amqp_config *config)
 		thread_context->config.url = l_strdup(config->url ?: "");
 		thread_context->config.exchange = l_strdup(config->exchange ?: "");
 		thread_context->config.routing_key = l_strdup(config->routing_key ?: "");
+	} else {
+		thread_context->config.url = l_strdup("");
+		thread_context->config.exchange = l_strdup("");
+		thread_context->config.routing_key = l_strdup("");
 	}
 
 	amqp->thread_started = !pthread_create(&amqp->thread, &attr, amqp_thread, thread_context);
@@ -679,9 +684,18 @@ char *mesh_amqp_get_url(struct mesh_amqp *amqp)
 {
 	char *url;
 	struct message *ret_msg;
+	size_t seq;
 
-	size_t seq = send_message(amqp, new_message(GET_URL));
+	if (amqp->lock)
+		return NULL;
+
+	amqp->lock = true;
+
+	seq = send_message(amqp, new_message(GET_URL));
 	ret_msg = get_ret_message(amqp, seq);
+
+	amqp->lock = false;
+
 	if (!ret_msg)
 		return NULL;
 
@@ -703,9 +717,18 @@ char *mesh_amqp_get_exchange(struct mesh_amqp *amqp)
 {
 	char *exchange;
 	struct message *ret_msg;
+	size_t seq;
 
-	size_t seq = send_message(amqp, new_message(GET_EXCHANGE));
+	if (amqp->lock)
+		return NULL;
+
+	amqp->lock = true;
+
+	seq = send_message(amqp, new_message(GET_EXCHANGE));
 	ret_msg = get_ret_message(amqp, seq);
+
+	amqp->lock = false;
+
 	if (!ret_msg)
 		return NULL;
 
@@ -727,9 +750,18 @@ char *mesh_amqp_get_routing_key(struct mesh_amqp *amqp)
 {
 	char *routing_key;
 	struct message *ret_msg;
+	size_t seq;
 
-	size_t seq = send_message(amqp, new_message(GET_ROUTING_KEY));
+	if (amqp->lock)
+		return NULL;
+
+	amqp->lock = true;
+
+	seq = send_message(amqp, new_message(GET_ROUTING_KEY));
 	ret_msg = get_ret_message(amqp, seq);
+
+	amqp->lock = false;
+
 	if (!ret_msg)
 		return NULL;
 
@@ -771,9 +803,18 @@ bool mesh_amqp_is_ready(struct mesh_amqp *amqp)
 {
 	bool is_ready;
 	struct message *ret_msg;
+	size_t seq;
 
-	size_t seq = send_message(amqp, new_message(GET_READY_STATUS));
+	if (amqp->lock)
+		return false;
+
+	amqp->lock = true;
+
+	seq = send_message(amqp, new_message(GET_READY_STATUS));
 	ret_msg = get_ret_message(amqp, seq);
+
+	amqp->lock = false;
+
 	if (!ret_msg)
 		return false;
 
