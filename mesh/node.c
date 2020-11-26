@@ -663,7 +663,7 @@ void node_set_iv_index(struct mesh_node *node, uint32_t iv_index,
 	if (node->obj_path)
 	{
 		l_dbus_property_changed(bus, node->obj_path,
-						MESH_NODE_INTERFACE, "IvIndex");
+					MESH_NODE_INTERFACE, "IvIndex");
 
 		l_dbus_property_changed(bus, node->obj_path,
 					MESH_NODE_INTERFACE, "IvUpdate");
@@ -2431,15 +2431,47 @@ static bool amqp_url_getter(struct l_dbus *dbus, struct l_dbus_message *msg,
 					void *user_data)
 {
 	struct mesh_node *node = user_data;
-	char *url = mesh_amqp_get_url(node->amqp);
+	const char *url = mesh_amqp_get_url(node->amqp);
 
 	if (!url)
 		return false;
 
 	l_dbus_message_builder_append_basic(builder, 's', url);
-	l_free(url);
 
 	return true;
+}
+
+struct property_set_ctx {
+	l_dbus_property_complete_cb_t complete_cb;
+	struct l_dbus *dbus;
+	struct l_dbus_message *msg;
+	struct l_dbus_message *error;
+};
+
+static struct property_set_ctx *new_property_set_ctx(
+					l_dbus_property_complete_cb_t complete,
+							struct l_dbus *dbus,
+						struct l_dbus_message *msg,
+						struct l_dbus_message *error)
+{
+	struct property_set_ctx *ctx = l_new(struct property_set_ctx, 1);
+
+	ctx->complete_cb = complete;
+	ctx->dbus = dbus;
+	ctx->msg = msg;
+	ctx->error = error;
+
+	return ctx;
+}
+
+static void property_set_complete(void *user_data)
+{
+	struct property_set_ctx *ctx = user_data;
+
+	if (ctx->complete_cb)
+		ctx->complete_cb(ctx->dbus, ctx->msg, ctx->error);
+
+	l_free(ctx);
 }
 
 static struct l_dbus_message *amqp_url_setter(struct l_dbus *dbus,
@@ -2461,10 +2493,9 @@ static struct l_dbus_message *amqp_url_setter(struct l_dbus *dbus,
 		return dbus_error(msg, MESH_ERROR_INVALID_ARGS,
 							"String expected");
 
-	mesh_amqp_set_url(node->amqp, url);
 	mesh_config_write_amqp_url(node->cfg, url);
-
-	complete(dbus, msg, NULL);
+	mesh_amqp_set_url(node->amqp, url, property_set_complete,
+			new_property_set_ctx(complete, dbus, msg, NULL));
 
 	return NULL;
 }
@@ -2474,13 +2505,12 @@ static bool amqp_exchange_getter(struct l_dbus *dbus, struct l_dbus_message *msg
 					void *user_data)
 {
 	struct mesh_node *node = user_data;
-	char *exchange = mesh_amqp_get_exchange(node->amqp);
+	const char *exchange = mesh_amqp_get_exchange(node->amqp);
 
 	if (!exchange)
 		return false;
 
 	l_dbus_message_builder_append_basic(builder, 's', exchange);
-	l_free(exchange);
 
 	return true;
 }
@@ -2504,10 +2534,9 @@ static struct l_dbus_message *amqp_exchange_setter(struct l_dbus *dbus,
 		return dbus_error(msg, MESH_ERROR_INVALID_ARGS,
 							"String expected");
 
-	mesh_amqp_set_exchange(node->amqp, url);
 	mesh_config_write_amqp_exchange(node->cfg, url);
-
-	complete(dbus, msg, NULL);
+	mesh_amqp_set_exchange(node->amqp, url, property_set_complete,
+			new_property_set_ctx(complete, dbus, msg, NULL));
 
 	return NULL;
 }
@@ -2517,14 +2546,12 @@ static bool amqp_routing_key_getter(struct l_dbus *dbus, struct l_dbus_message *
 					void *user_data)
 {
 	struct mesh_node *node = user_data;
-	char *routing_key = mesh_amqp_get_routing_key(node->amqp);
+	const char *routing_key = mesh_amqp_get_routing_key(node->amqp);
 
 	if (!routing_key)
 		return false;
 
 	l_dbus_message_builder_append_basic(builder, 's', routing_key);
-	l_free(routing_key);
-
 	return true;
 }
 
@@ -2547,10 +2574,9 @@ static struct l_dbus_message *amqp_routing_key_setter(struct l_dbus *dbus,
 		return dbus_error(msg, MESH_ERROR_INVALID_ARGS,
 							"String expected");
 
-	mesh_amqp_set_routing_key(node->amqp, url);
 	mesh_config_write_amqp_routing_key(node->cfg, url);
-
-	complete(dbus, msg, NULL);
+	mesh_amqp_set_routing_key(node->amqp, url, property_set_complete,
+			new_property_set_ctx(complete, dbus, msg, NULL));
 
 	return NULL;
 }

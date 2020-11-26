@@ -29,16 +29,19 @@
 
 static const int DEFAULT_RECONNECT_DELAY = 5;
 
+
+struct message;
+struct mesh_amqp;
+
+typedef void (*complete_cb_t)(struct message *msg, struct mesh_amqp *amqp);
+
 enum message_type {
 	SET_URL,
-	GET_URL,
 	SET_EXCHANGE,
-	GET_EXCHANGE,
 	SET_ROUTING_KEY,
-	GET_ROUTING_KEY,
-	GET_READY_STATUS,
 	PUBLISH,
 	STOP,
+	STATE_CHANGED,
 };
 
 enum amqp_state {
@@ -47,27 +50,45 @@ enum amqp_state {
 	AMQP_STATE_CONNECTED,
 };
 
+struct set_complete_ctx {
+	mesh_amqp_set_complete_cb_t complete_cb;
+	void *user_data;
+};
+
 struct message {
 	enum message_type type;
+
+	complete_cb_t complete_cb;
+	void *user_data;
+
 	union {
 		struct message_url {
-			char url[255];
+			char value[255];
 		} url;
 		struct message_exchange {
-			char exchange[64];
+			char value[64];
 		} exchange;
 		struct message_routing_key
 		{
-			char routing_key[64];
+			char value[64];
 		} routing_key;
 		struct message_publish {
 			size_t size;
-			uint8_t data[32];
+			uint8_t data[384];
 		} publish;
-		struct message_is_ready {
-			bool is_ready;
-		} is_ready;
+		struct message_state_changed {
+		    	enum amqp_state state;
+		} state_changed;
 	};
+};
+
+struct mesh_amqp {
+    struct mesh_amqp_config config;
+    pthread_t thread;
+    struct l_queue *queue;
+    struct l_io *io;
+    bool thread_started;
+    enum amqp_state amqp_state;
 };
 
 struct amqp_thread_context {
@@ -82,31 +103,32 @@ struct amqp_thread_context {
 	bool stop;
 };
 
-struct mesh_amqp {
-	bool thread_started;
-	pthread_t thread;
-	struct l_queue *queue;
-	struct l_queue *ret_queue;
-	struct l_io *io;
-};
-
 static bool amqp_read_handler(struct l_io *io, void *user_data)
 {
 	struct mesh_amqp *amqp = user_data;
-	struct message *msg = l_new(struct message, 1);
+	struct message msg = {0};
 
-	if (recv(l_io_get_fd(io), msg, sizeof(*msg), 0) == sizeof(*msg))
+	if (recv(l_io_get_fd(io), &msg, sizeof(msg), 0) == sizeof(msg))
 	{
-		if (!l_queue_push_tail(amqp->ret_queue, msg))
+		switch (msg.type)
 		{
-			l_free(msg);
-			return false;
-		}
+			case STATE_CHANGED:
+				amqp->amqp_state = msg.state_changed.state;
+				return true;
 
-		return true;
+			case SET_URL:
+			case SET_EXCHANGE:
+			case SET_ROUTING_KEY:
+				if (msg.complete_cb)
+					msg.complete_cb(&msg, amqp);
+				return true;
+
+			case PUBLISH:
+			case STOP:
+				break;
+		}
 	}
 
-	l_free(msg);
 	return false;
 }
 
@@ -298,9 +320,21 @@ static void amqp_publish_handler(struct amqp_thread_context *context, uint8_t *d
 		l_error("Publish failed");
 }
 
+static void set_amqp_state(struct amqp_thread_context *context, enum amqp_state amqp_state)
+{
+	struct message ret_msg = {0};
+
+	ret_msg.type = STATE_CHANGED;
+	ret_msg.state_changed.state = amqp_state;
+
+	context->amqp_state = amqp_state;
+
+	send(context->fd, &ret_msg, sizeof(ret_msg), 0);
+}
+
 static void destroy_connection(struct amqp_thread_context *context)
 {
-	context->amqp_state = AMQP_STATE_DISCONNECTED;
+	set_amqp_state(context, AMQP_STATE_DISCONNECTED);
 
 	if (context->conn_state) {
 		amqp_connection_close(context->conn_state, AMQP_REPLY_SUCCESS);
@@ -350,7 +384,7 @@ static void connect_with_delay(struct amqp_thread_context *context, int delay)
 
 	if (url_is_set(context) && set_timer(context->tim_fd, delay))
 	{
-		context->amqp_state = AMQP_STATE_CONNECTING;
+		set_amqp_state(context, AMQP_STATE_CONNECTING);
 	}
 }
 
@@ -374,7 +408,7 @@ static bool try_to_connect(struct amqp_thread_context *context)
 		goto reconnect;
 	}
 
-	context->amqp_state = AMQP_STATE_CONNECTED;
+	set_amqp_state(context, AMQP_STATE_CONNECTED);
 	return true;
 
 reconnect:
@@ -389,72 +423,70 @@ static void control_message_handler(struct amqp_thread_context *context)
 	while (recv(context->fd, &msg, sizeof(msg), 0) == sizeof(msg))
 	{
 		switch (msg.type) {
-		case SET_URL:
-			l_free((void *)context->config.url);
-			context->config.url = l_strdup(msg.url.url);
+		case SET_URL: {
+			struct message ret_msg = {0};
+
+			l_free(context->config.url);
+			context->config.url = l_strdup(msg.url.value);
+
+			ret_msg.type = SET_URL;
+			ret_msg.complete_cb = msg.complete_cb;
+			ret_msg.user_data = msg.user_data;
+
+			memset(ret_msg.url.value, 0, sizeof(ret_msg.url.value));
+			strncpy(ret_msg.url.value, context->config.url,
+						sizeof(ret_msg.url) - 1);
+
+			send(context->fd, &ret_msg, sizeof(ret_msg), 0);
 
 			destroy_connection(context);
 			connect_with_delay(context, 1);
-			return;
-
-		case GET_URL: {
-			struct message ret_msg = {0};
-
-			ret_msg.type = GET_URL;
-			strncpy(ret_msg.url.url,
-					context->config.url,
-					sizeof(ret_msg.url.url) - 1);
-
-			send(context->fd, &ret_msg, sizeof(ret_msg), 0);
 		} return;
 
-		case SET_EXCHANGE:
-			l_free((void *)context->config.exchange);
-			context->config.exchange =
-						l_strdup(msg.exchange.exchange);
+		case SET_EXCHANGE: {
+			struct message ret_msg = {0};
+
+			l_free(context->config.exchange);
+			context->config.exchange = l_strdup(msg.exchange.value);
+
+			ret_msg.type = SET_EXCHANGE;
+			ret_msg.complete_cb = msg.complete_cb;
+			ret_msg.user_data = msg.user_data;
+
+			memset(ret_msg.exchange.value, 0,
+					sizeof(ret_msg.exchange.value));
+			strncpy(ret_msg.exchange.value,
+						context->config.exchange,
+						sizeof(ret_msg.exchange) - 1);
+
+			send(context->fd, &ret_msg, sizeof(ret_msg), 0);
 
 			if (context->amqp_state == AMQP_STATE_CONNECTED) {
 				destroy_connection(context);
 				connect_with_delay(context, 1);
 			}
-			return;
-
-		case GET_EXCHANGE: {
-			struct message ret_msg = {0};
-
-			ret_msg.type = GET_EXCHANGE;
-			strncpy(ret_msg.exchange.exchange,
-				 context->config.exchange,
-				 sizeof(ret_msg.exchange.exchange) - 1);
-
-			send(context->fd, &ret_msg, sizeof(ret_msg), 0);
 		} return;
 
-		case SET_ROUTING_KEY:
-			l_free((void *)context->config.routing_key);
+		case SET_ROUTING_KEY: {
+			struct message ret_msg = {0};
+
+			l_free((void *) context->config.routing_key);
 			context->config.routing_key =
-					l_strdup(msg.routing_key.routing_key);
-			return;
+					l_strdup(msg.routing_key.value);
 
-		case GET_ROUTING_KEY: {
-			struct message ret_msg = {0};
+			ret_msg.type = SET_ROUTING_KEY;
+			ret_msg.complete_cb = msg.complete_cb;
+			ret_msg.user_data = msg.user_data;
 
-			ret_msg.type = GET_ROUTING_KEY;
-			strncpy(ret_msg.routing_key.routing_key,
-				context->config.routing_key,
-				sizeof(ret_msg.routing_key.routing_key) - 1);
-			send(context->fd, &ret_msg, sizeof(ret_msg), 0);
-		} return;
-
-		case GET_READY_STATUS: {
-			struct message ret_msg = {0};
-
-			ret_msg.type = GET_READY_STATUS;
-			ret_msg.is_ready.is_ready = (
-				context->amqp_state == AMQP_STATE_CONNECTED);
+			memset(ret_msg.routing_key.value, 0,
+					sizeof(ret_msg.routing_key.value));
+			strncpy(ret_msg.routing_key.value,
+					context->config.routing_key,
+					sizeof(ret_msg.routing_key) - 1);
 
 			send(context->fd, &ret_msg, sizeof(ret_msg), 0);
-		} return;
+
+		}	return;
 
 		case PUBLISH:
 			if (!context->conn_state)
@@ -466,6 +498,9 @@ static void control_message_handler(struct amqp_thread_context *context)
 
 		case STOP:
 			context->stop = true;
+			return;
+
+		case STATE_CHANGED:
 			return;
 		}
 	}
@@ -547,16 +582,41 @@ static void *amqp_thread(void *user_data)
 	return context;
 }
 
+static void config_set_url(struct mesh_amqp_config *config, const char *url)
+{
+	l_free(config->url);
+	config->url = l_strdup(url ?: "");
+}
+
+static void config_set_exchange(struct mesh_amqp_config *config,
+				const char *exchange)
+{
+	l_free(config->exchange);
+	config->exchange = l_strdup(exchange ?: "");
+}
+
+static void config_set_routing_key(struct mesh_amqp_config *config,
+				   const char *routing_key)
+{
+	l_free(config->routing_key);
+	config->routing_key = l_strdup(routing_key ?: "");
+}
+
 struct mesh_amqp *mesh_amqp_new(void)
 {
 	struct mesh_amqp *amqp = l_new(struct mesh_amqp, 1);
 	memset(amqp, 0, sizeof(*amqp));
+
+	config_set_url(&amqp->config, "");
+	config_set_exchange(&amqp->config, "");
+	config_set_routing_key(&amqp->config, "");
 
 	return amqp;
 }
 
 void mesh_amqp_start(struct mesh_amqp *amqp, struct mesh_amqp_config *config)
 {
+	struct mesh_amqp_config empty_config = {0};
 	pthread_attr_t attr;
 	int fds[2];
 
@@ -575,15 +635,18 @@ void mesh_amqp_start(struct mesh_amqp *amqp, struct mesh_amqp_config *config)
 		return;
 	}
 
-	if (config) {
-		thread_context->config.url = l_strdup(config->url ?: "");
-		thread_context->config.exchange = l_strdup(config->exchange ?: "");
-		thread_context->config.routing_key = l_strdup(config->routing_key ?: "");
-	}
+	config = config ?: &empty_config;
+
+	config_set_url(&amqp->config, config->url);
+	config_set_exchange(&amqp->config, config->exchange);
+	config_set_routing_key(&amqp->config, config->routing_key);
+
+	config_set_url(&thread_context->config, config->url);
+	config_set_exchange(&thread_context->config, config->exchange);
+	config_set_routing_key(&thread_context->config, config->routing_key);
 
 	amqp->thread_started = !pthread_create(&amqp->thread, &attr, amqp_thread, thread_context);
 	amqp->queue = l_queue_new();
-	amqp->ret_queue = l_queue_new();
 	amqp->io = l_io_new(fds[0]);
 
 	l_io_set_close_on_destroy(amqp->io, true);
@@ -601,47 +664,13 @@ void mesh_amqp_free(struct mesh_amqp *amqp)
 		l_free(ret);
 	}
 
+	l_free(amqp->config.url);
+	l_free(amqp->config.exchange);
+	l_free(amqp->config.routing_key);
+
 	l_io_destroy(amqp->io);
 	l_queue_destroy(amqp->queue, l_free);
-	l_queue_destroy(amqp->ret_queue, l_free);
 	l_free(amqp);
-}
-
-static void awaiting_timeout(struct l_timeout *timeout, void *user_data)
-{
-	bool *expired = user_data;
-	*expired = true;
-}
-
-static void *get_ret_message(struct mesh_amqp *amqp)
-{
-	/* ELL DBus API requires that getters are blocking,
-	   so keep iterating the loop while we wait for reply from the thread". */
-
-	bool expired = false;
-	struct message *ret_msg;
-	struct l_timeout *timeout;
-
-	if (!amqp->thread_started)
-		return NULL;
-
-	timeout = l_timeout_create_ms(100, awaiting_timeout, &expired, NULL);
-
-	while (1) {
-		ret_msg = l_queue_pop_head(amqp->ret_queue);
-		if (ret_msg)
-			break;
-
-		if (expired) {
-			l_error("amqp: command timed out");
-			break;
-		}
-
-		l_main_iterate(0);
-	}
-
-	l_timeout_remove(timeout);
-	return ret_msg;
 }
 
 static void send_message(struct mesh_amqp *amqp, struct message *msg)
@@ -660,76 +689,104 @@ static struct message *new_message(enum message_type type)
 	return msg;
 }
 
-char *mesh_amqp_get_url(struct mesh_amqp *amqp)
+const char *mesh_amqp_get_url(struct mesh_amqp *amqp)
 {
-	char *url;
-	struct message *ret_msg;
-
-	send_message(amqp, new_message(GET_URL));
-	ret_msg = get_ret_message(amqp);
-	if (!ret_msg)
-		return NULL;
-
-	url = l_strdup(ret_msg->url.url);
-	l_free(ret_msg);
-
-	return url;
+	return amqp->config.url;
 }
 
-void mesh_amqp_set_url(struct mesh_amqp *amqp, const char *url)
+static struct set_complete_ctx *new_set_complete_ctx(struct mesh_amqp *amqp,
+		mesh_amqp_set_complete_cb_t complete_cb, void *user_data)
+{
+	struct set_complete_ctx *ctx = l_new(struct set_complete_ctx, 1);
+	ctx->complete_cb = complete_cb;
+	ctx->user_data = user_data;
+
+	return ctx;
+}
+
+static void url_set_complete(struct message *msg, struct mesh_amqp *amqp)
+{
+	struct set_complete_ctx *ctx = msg->user_data;
+
+	l_info("url: '%s'", msg->url.value);
+	config_set_url(&amqp->config, msg->url.value);
+
+	if (ctx->complete_cb)
+		ctx->complete_cb(ctx->user_data);
+
+	l_free(ctx);
+}
+
+void mesh_amqp_set_url(struct mesh_amqp *amqp, const char *url,
+			mesh_amqp_set_complete_cb_t complete, void *user_data)
 {
 	struct message *msg = new_message(SET_URL);
-	strncpy(msg->url.url, url ?: "", sizeof(msg->url.url) - 1);
+	msg->complete_cb = url_set_complete;
+	msg->user_data = new_set_complete_ctx(amqp, complete, user_data);
+
+	strncpy(msg->url.value, url ?: "", sizeof(msg->url.value) - 1);
 
 	send_message(amqp, msg);
 }
 
-char *mesh_amqp_get_exchange(struct mesh_amqp *amqp)
+const char *mesh_amqp_get_exchange(struct mesh_amqp *amqp)
 {
-	char *exchange;
-	struct message *ret_msg;
-
-	send_message(amqp, new_message(GET_EXCHANGE));
-	ret_msg = get_ret_message(amqp);
-	if (!ret_msg)
-		return NULL;
-
-	exchange = l_strdup(ret_msg->exchange.exchange);
-	l_free(ret_msg);
-
-	return exchange;
+	return amqp->config.exchange;
 }
 
-void mesh_amqp_set_exchange(struct mesh_amqp *amqp, const char *exchange)
+static void exchange_set_complete(struct message *msg, struct mesh_amqp *amqp)
+{
+	struct set_complete_ctx *ctx = msg->user_data;
+
+	l_info("exchange: '%s'", msg->exchange.value);
+	config_set_exchange(&amqp->config, msg->exchange.value);
+
+	if (ctx->complete_cb)
+		ctx->complete_cb(ctx->user_data);
+
+	l_free(ctx);
+}
+
+void mesh_amqp_set_exchange(struct mesh_amqp *amqp, const char *exchange,
+			mesh_amqp_set_complete_cb_t complete, void *user_data)
 {
 	struct message *msg = new_message(SET_EXCHANGE);
-	strncpy(msg->exchange.exchange, exchange ?: "", sizeof(msg->exchange.exchange) - 1);
+	msg->complete_cb = exchange_set_complete;
+	msg->user_data = new_set_complete_ctx(amqp, complete, user_data);
+
+	strncpy(msg->exchange.value, exchange ?: "",
+					sizeof(msg->exchange.value) - 1);
 
 	send_message(amqp, msg);
 }
 
-char *mesh_amqp_get_routing_key(struct mesh_amqp *amqp)
+const char *mesh_amqp_get_routing_key(struct mesh_amqp *amqp)
 {
-	char *routing_key;
-	struct message *ret_msg;
-
-	send_message(amqp, new_message(GET_ROUTING_KEY));
-	ret_msg = get_ret_message(amqp);
-	if (!ret_msg)
-		return NULL;
-
-	routing_key = l_strdup(ret_msg->routing_key.routing_key);
-	l_free(ret_msg);
-
-	return routing_key;
+	return amqp->config.routing_key;
 }
 
-void mesh_amqp_set_routing_key(struct mesh_amqp *amqp, const char *routing_key)
+static void routing_key_set_complete(struct message *msg, struct mesh_amqp *amqp)
+{
+	struct set_complete_ctx *ctx = msg->user_data;
+
+	l_info("routing_key: '%s'", msg->routing_key.value);
+	config_set_routing_key(&amqp->config, msg->routing_key.value);
+
+	if (ctx->complete_cb)
+		ctx->complete_cb(ctx->user_data);
+
+	l_free(ctx);
+}
+
+void mesh_amqp_set_routing_key(struct mesh_amqp *amqp, const char *routing_key,
+			mesh_amqp_set_complete_cb_t complete, void *user_data)
 {
 	struct message *msg = new_message(SET_ROUTING_KEY);
-	strncpy(msg->routing_key.routing_key,
-			routing_key ?: "",
-			sizeof(msg->routing_key.routing_key) - 1);
+	msg->complete_cb = routing_key_set_complete;
+	msg->user_data = new_set_complete_ctx(amqp, complete, user_data);
+
+	strncpy(msg->routing_key.value, routing_key ?: "",
+				sizeof(msg->routing_key.value) - 1);
 
 	send_message(amqp, msg);
 }
@@ -754,16 +811,5 @@ void mesh_amqp_stop(struct mesh_amqp *amqp)
 
 bool mesh_amqp_is_ready(struct mesh_amqp *amqp)
 {
-	bool is_ready;
-	struct message *ret_msg;
-
-	send_message(amqp, new_message(GET_READY_STATUS));
-	ret_msg = get_ret_message(amqp);
-	if (!ret_msg)
-		return false;
-
-	is_ready = ret_msg->is_ready.is_ready;
-	l_free(ret_msg);
-
-	return is_ready;
+	return amqp->amqp_state == AMQP_STATE_CONNECTED;
 }
