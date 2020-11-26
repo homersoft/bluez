@@ -27,17 +27,22 @@ struct mesh_amqp_config {
 	char *routing_key;
 };
 
+typedef void (*mesh_amqp_set_complete_cb_t)(void *user_data);
+
 struct mesh_amqp *mesh_amqp_new(void);
 void mesh_amqp_free(struct mesh_amqp *amqp);
 
-char *mesh_amqp_get_url(struct mesh_amqp *amqp);
-void mesh_amqp_set_url(struct mesh_amqp *amqp, const char *url);
+const char *mesh_amqp_get_url(struct mesh_amqp *amqp);
+void mesh_amqp_set_url(struct mesh_amqp *amqp, const char *url,
+		       mesh_amqp_set_complete_cb_t complete, void *user_data);
 
-char *mesh_amqp_get_exchange(struct mesh_amqp *amqp);
-void mesh_amqp_set_exchange(struct mesh_amqp *amqp, const char *exchange);
+const char *mesh_amqp_get_exchange(struct mesh_amqp *amqp);
+void mesh_amqp_set_exchange(struct mesh_amqp *amqp, const char *exchange,
+			mesh_amqp_set_complete_cb_t complete, void *user_data);
 
-char *mesh_amqp_get_routing_key(struct mesh_amqp *amqp);
-void  mesh_amqp_set_routing_key(struct mesh_amqp *amqp, const char *routing_key);
+const char *mesh_amqp_get_routing_key(struct mesh_amqp *amqp);
+void  mesh_amqp_set_routing_key(struct mesh_amqp *amqp, const char *routing_key,
+			mesh_amqp_set_complete_cb_t complete, void *user_data);
 
 void mesh_amqp_publish(struct mesh_amqp *amqp, const void *data, size_t size);
 
