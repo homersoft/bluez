@@ -77,7 +77,7 @@ struct message {
 			uint8_t data[384];
 		} publish;
 		struct message_state_changed {
-		    	enum amqp_state state;
+			enum amqp_state state;
 		} state_changed;
 	};
 };
@@ -320,6 +320,40 @@ static void amqp_publish_handler(struct amqp_thread_context *context, uint8_t *d
 		l_error("Publish failed");
 }
 
+static void config_set_url(struct mesh_amqp_config *config, const char *url)
+{
+	l_free(config->url);
+	config->url = l_strdup(url ?: "");
+}
+
+static void config_set_exchange(struct mesh_amqp_config *config,
+				const char *exchange)
+{
+	l_free(config->exchange);
+	config->exchange = l_strdup(exchange ?: "");
+}
+
+static void config_set_routing_key(struct mesh_amqp_config *config,
+				   const char *routing_key)
+{
+	l_free(config->routing_key);
+	config->routing_key = l_strdup(routing_key ?: "");
+}
+
+static inline bool url_is_set(struct amqp_thread_context *context)
+{
+	return context->config.url && (strcmp(context->config.url, "") != 0);
+}
+
+static inline bool set_timer(int fd, int delay)
+{
+	struct itimerspec newitimspec = {0};
+	newitimspec.it_value.tv_sec = delay;
+
+	return timerfd_settime(fd, 0, &newitimspec, NULL) == 0;
+}
+
+
 static void set_amqp_state(struct amqp_thread_context *context, enum amqp_state amqp_state)
 {
 	struct message ret_msg = {0};
@@ -343,6 +377,8 @@ static void destroy_connection(struct amqp_thread_context *context)
 
 	context->conn_state = NULL;
 	context->sock = NULL;
+
+	l_info("AMQP disconnected");
 }
 
 static bool new_connection(struct amqp_thread_context *context)
@@ -360,19 +396,6 @@ static bool new_connection(struct amqp_thread_context *context)
 	}
 
 	return true;
-}
-
-static inline bool url_is_set(struct amqp_thread_context *context)
-{
-	return context->config.url && (strcmp(context->config.url, "") != 0);
-}
-
-static inline bool set_timer(int fd, int delay)
-{
-	struct itimerspec newitimspec = {0};
-	newitimspec.it_value.tv_sec = delay;
-
-	return timerfd_settime(fd, 0, &newitimspec, NULL) == 0;
 }
 
 static void connect_with_delay(struct amqp_thread_context *context, int delay)
@@ -426,14 +449,12 @@ static void control_message_handler(struct amqp_thread_context *context)
 		case SET_URL: {
 			struct message ret_msg = {0};
 
-			l_free(context->config.url);
-			context->config.url = l_strdup(msg.url.value);
+			config_set_url(&context->config, msg.url.value);
 
 			ret_msg.type = SET_URL;
 			ret_msg.complete_cb = msg.complete_cb;
 			ret_msg.user_data = msg.user_data;
 
-			memset(ret_msg.url.value, 0, sizeof(ret_msg.url.value));
 			strncpy(ret_msg.url.value, context->config.url,
 						sizeof(ret_msg.url) - 1);
 
@@ -446,15 +467,13 @@ static void control_message_handler(struct amqp_thread_context *context)
 		case SET_EXCHANGE: {
 			struct message ret_msg = {0};
 
-			l_free(context->config.exchange);
-			context->config.exchange = l_strdup(msg.exchange.value);
+			config_set_exchange(&context->config, 
+							msg.exchange.value);
 
 			ret_msg.type = SET_EXCHANGE;
 			ret_msg.complete_cb = msg.complete_cb;
 			ret_msg.user_data = msg.user_data;
 
-			memset(ret_msg.exchange.value, 0,
-					sizeof(ret_msg.exchange.value));
 			strncpy(ret_msg.exchange.value,
 						context->config.exchange,
 						sizeof(ret_msg.exchange) - 1);
@@ -470,22 +489,18 @@ static void control_message_handler(struct amqp_thread_context *context)
 		case SET_ROUTING_KEY: {
 			struct message ret_msg = {0};
 
-			l_free((void *) context->config.routing_key);
-			context->config.routing_key =
-					l_strdup(msg.routing_key.value);
+			config_set_routing_key(&context->config,
+							msg.routing_key.value);
 
 			ret_msg.type = SET_ROUTING_KEY;
 			ret_msg.complete_cb = msg.complete_cb;
 			ret_msg.user_data = msg.user_data;
 
-			memset(ret_msg.routing_key.value, 0,
-					sizeof(ret_msg.routing_key.value));
 			strncpy(ret_msg.routing_key.value,
 					context->config.routing_key,
 					sizeof(ret_msg.routing_key) - 1);
 
 			send(context->fd, &ret_msg, sizeof(ret_msg), 0);
-
 		}	return;
 
 		case PUBLISH:
@@ -582,26 +597,6 @@ static void *amqp_thread(void *user_data)
 	return context;
 }
 
-static void config_set_url(struct mesh_amqp_config *config, const char *url)
-{
-	l_free(config->url);
-	config->url = l_strdup(url ?: "");
-}
-
-static void config_set_exchange(struct mesh_amqp_config *config,
-				const char *exchange)
-{
-	l_free(config->exchange);
-	config->exchange = l_strdup(exchange ?: "");
-}
-
-static void config_set_routing_key(struct mesh_amqp_config *config,
-				   const char *routing_key)
-{
-	l_free(config->routing_key);
-	config->routing_key = l_strdup(routing_key ?: "");
-}
-
 struct mesh_amqp *mesh_amqp_new(void)
 {
 	struct mesh_amqp *amqp = l_new(struct mesh_amqp, 1);
@@ -616,11 +611,14 @@ struct mesh_amqp *mesh_amqp_new(void)
 
 void mesh_amqp_start(struct mesh_amqp *amqp, struct mesh_amqp_config *config)
 {
-	struct mesh_amqp_config empty_config = {0};
 	pthread_attr_t attr;
 	int fds[2];
+	struct amqp_thread_context *thread_context;
 
-	struct amqp_thread_context *thread_context = l_new(struct amqp_thread_context, 1);
+	struct mesh_amqp_config empty_config = {0};
+	config = config ?: &empty_config;
+
+	thread_context = l_new(struct amqp_thread_context, 1);
 	memset(thread_context, 0, sizeof(*thread_context));
 
 	socketpair(AF_UNIX, SOCK_DGRAM, 0, fds);
@@ -634,8 +632,6 @@ void mesh_amqp_start(struct mesh_amqp *amqp, struct mesh_amqp_config *config)
 		l_warn("Failed to create timer! Thread will not be started.");
 		return;
 	}
-
-	config = config ?: &empty_config;
 
 	config_set_url(&amqp->config, config->url);
 	config_set_exchange(&amqp->config, config->exchange);
@@ -708,7 +704,7 @@ static void url_set_complete(struct message *msg, struct mesh_amqp *amqp)
 {
 	struct set_complete_ctx *ctx = msg->user_data;
 
-	l_info("url: '%s'", msg->url.value);
+	l_debug("url: '%s'", msg->url.value);
 	config_set_url(&amqp->config, msg->url.value);
 
 	if (ctx->complete_cb)
@@ -738,7 +734,7 @@ static void exchange_set_complete(struct message *msg, struct mesh_amqp *amqp)
 {
 	struct set_complete_ctx *ctx = msg->user_data;
 
-	l_info("exchange: '%s'", msg->exchange.value);
+	l_debug("exchange: '%s'", msg->exchange.value);
 	config_set_exchange(&amqp->config, msg->exchange.value);
 
 	if (ctx->complete_cb)
@@ -769,7 +765,7 @@ static void routing_key_set_complete(struct message *msg, struct mesh_amqp *amqp
 {
 	struct set_complete_ctx *ctx = msg->user_data;
 
-	l_info("routing_key: '%s'", msg->routing_key.value);
+	l_debug("routing_key: '%s'", msg->routing_key.value);
 	config_set_routing_key(&amqp->config, msg->routing_key.value);
 
 	if (ctx->complete_cb)
