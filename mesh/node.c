@@ -443,12 +443,6 @@ static bool init_from_storage(struct mesh_config_node *db_node,
 			void *user_data)
 {
 	unsigned int num_ele;
-	struct mesh_amqp_config config = {
-			.url = (char *)db_node->amqp.url,
-			.exchange = (char *)db_node->amqp.exchange,
-			.routing_key = (char *)db_node->amqp.routing_key,
-	};
-
 	struct mesh_node *node = node_new(uuid);
 
 	if (!nodes)
@@ -469,7 +463,7 @@ static bool init_from_storage(struct mesh_config_node *db_node,
 	node->relay.interval = db_node->modes.relay.interval;
 	node->beacon = db_node->modes.beacon;
 
-	mesh_amqp_start(node->amqp, &config);
+	mesh_amqp_start(node->amqp);
 
 	l_debug("relay %2.2x, proxy %2.2x, lpn %2.2x, friend %2.2x",
 			node->relay.mode, node->proxy, node->lpn, node->friend);
@@ -1042,6 +1036,9 @@ static void app_disc_cb(struct l_dbus *bus, void *user_data)
 	/* In case of a provisioner, stop active scanning */
 	if (node->provisioner)
 		manager_scan_cancel(node);
+
+	if (node->amqp)
+		mesh_amqp_set_url(node->amqp, "", NULL, NULL);
 
 	free_node_dbus_resources(node);
 }
@@ -2493,7 +2490,6 @@ static struct l_dbus_message *amqp_url_setter(struct l_dbus *dbus,
 		return dbus_error(msg, MESH_ERROR_INVALID_ARGS,
 							"String expected");
 
-	mesh_config_write_amqp_url(node->cfg, url);
 	mesh_amqp_set_url(node->amqp, url, property_set_complete,
 			new_property_set_ctx(complete, dbus, msg, NULL));
 
@@ -2523,19 +2519,18 @@ static struct l_dbus_message *amqp_exchange_setter(struct l_dbus *dbus,
 {
 	struct mesh_node *node = user_data;
 	const char *sender;
-	const char *url;
+	const char *exchange;
 
 	sender = l_dbus_message_get_sender(msg);
 
 	if (strcmp(sender, node->owner))
 		return dbus_error(msg, MESH_ERROR_NOT_AUTHORIZED, NULL);
 
-	if (!l_dbus_message_iter_get_variant(value, "s", &url))
+	if (!l_dbus_message_iter_get_variant(value, "s", &exchange))
 		return dbus_error(msg, MESH_ERROR_INVALID_ARGS,
 							"String expected");
 
-	mesh_config_write_amqp_exchange(node->cfg, url);
-	mesh_amqp_set_exchange(node->amqp, url, property_set_complete,
+	mesh_amqp_set_exchange(node->amqp, exchange, property_set_complete,
 			new_property_set_ctx(complete, dbus, msg, NULL));
 
 	return NULL;
@@ -2563,19 +2558,18 @@ static struct l_dbus_message *amqp_routing_key_setter(struct l_dbus *dbus,
 {
 	struct mesh_node *node = user_data;
 	const char *sender;
-	const char *url;
+	const char *routing_key;
 
 	sender = l_dbus_message_get_sender(msg);
 
 	if (strcmp(sender, node->owner))
 		return dbus_error(msg, MESH_ERROR_NOT_AUTHORIZED, NULL);
 
-	if (!l_dbus_message_iter_get_variant(value, "s", &url))
+	if (!l_dbus_message_iter_get_variant(value, "s", &routing_key))
 		return dbus_error(msg, MESH_ERROR_INVALID_ARGS,
 							"String expected");
 
-	mesh_config_write_amqp_routing_key(node->cfg, url);
-	mesh_amqp_set_routing_key(node->amqp, url, property_set_complete,
+	mesh_amqp_set_routing_key(node->amqp, routing_key, property_set_complete,
 			new_property_set_ctx(complete, dbus, msg, NULL));
 
 	return NULL;
@@ -2768,5 +2762,5 @@ void node_finalize_new_node(struct mesh_node *node, struct mesh_io *io)
 
 	/* Register callback for the node's io */
 	attach_io(node, io);
-	mesh_amqp_start(node->amqp, NULL);
+	mesh_amqp_start(node->amqp);
 }

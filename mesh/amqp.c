@@ -340,9 +340,26 @@ static void config_set_routing_key(struct mesh_amqp_config *config,
 	config->routing_key = l_strdup(routing_key ?: "");
 }
 
-static inline bool url_is_set(struct amqp_thread_context *context)
+static inline bool url_is_empty(const char *url)
 {
-	return context->config.url && (strcmp(context->config.url, "") != 0);
+	return (!url || strcmp(url, "") == 0);
+}
+
+static bool url_is_valid(const char *url)
+{
+	bool valid;
+	char *tmp_url;
+	struct amqp_connection_info info;
+
+	if (url_is_empty(url))
+		return false;
+
+	tmp_url = l_strdup(url);
+
+	valid = amqp_parse_url(tmp_url, &info) == AMQP_STATUS_OK;
+	l_free(tmp_url);
+
+	return valid;
 }
 
 static inline bool set_timer(int fd, int delay)
@@ -352,7 +369,6 @@ static inline bool set_timer(int fd, int delay)
 
 	return timerfd_settime(fd, 0, &newitimspec, NULL) == 0;
 }
-
 
 static void set_amqp_state(struct amqp_thread_context *context, enum amqp_state amqp_state)
 {
@@ -405,10 +421,13 @@ static void connect_with_delay(struct amqp_thread_context *context, int delay)
 		return;
 	}
 
-	if (url_is_set(context) && set_timer(context->tim_fd, delay))
+	if (!set_timer(context->tim_fd, delay))
 	{
-		set_amqp_state(context, AMQP_STATE_CONNECTING);
+		l_warn("amqp: failed to start timer");
+		return;
 	}
+
+	set_amqp_state(context, AMQP_STATE_CONNECTING);
 }
 
 static bool try_to_connect(struct amqp_thread_context *context)
@@ -460,8 +479,11 @@ static void control_message_handler(struct amqp_thread_context *context)
 
 			send(context->fd, &ret_msg, sizeof(ret_msg), 0);
 
-			destroy_connection(context);
-			connect_with_delay(context, 1);
+			if (context->amqp_state == AMQP_STATE_CONNECTED)
+				destroy_connection(context);
+
+			if (url_is_valid(context->config.url))
+				try_to_connect(context);
 		} return;
 
 		case SET_EXCHANGE: {
@@ -482,7 +504,9 @@ static void control_message_handler(struct amqp_thread_context *context)
 
 			if (context->amqp_state == AMQP_STATE_CONNECTED) {
 				destroy_connection(context);
-				connect_with_delay(context, 1);
+
+				if (url_is_valid(context->config.url))
+					try_to_connect(context);
 			}
 		} return;
 
@@ -528,9 +552,6 @@ static void *amqp_thread(void *user_data)
 	fd_set read_fds;
 	int max_fd = -1;
 
-	if (url_is_set(context))
-		try_to_connect(context);
-
 	while (true)
 	{
 		FD_ZERO(&read_fds);
@@ -559,7 +580,9 @@ static void *amqp_thread(void *user_data)
 			if (read(context->tim_fd, &no_expir, sizeof(no_expir)) == sizeof(no_expir))
 			{
 				destroy_connection(context);
-				try_to_connect(context);
+
+				if (url_is_valid(context->config.url))
+					try_to_connect(context);
 			}
 		}
 
@@ -609,16 +632,12 @@ struct mesh_amqp *mesh_amqp_new(void)
 	return amqp;
 }
 
-void mesh_amqp_start(struct mesh_amqp *amqp, struct mesh_amqp_config *config)
+void mesh_amqp_start(struct mesh_amqp *amqp)
 {
 	pthread_attr_t attr;
 	int fds[2];
-	struct amqp_thread_context *thread_context;
 
-	struct mesh_amqp_config empty_config = {0};
-	config = config ?: &empty_config;
-
-	thread_context = l_new(struct amqp_thread_context, 1);
+	struct amqp_thread_context *thread_context = l_new(struct amqp_thread_context, 1);
 	memset(thread_context, 0, sizeof(*thread_context));
 
 	socketpair(AF_UNIX, SOCK_DGRAM, 0, fds);
@@ -630,16 +649,13 @@ void mesh_amqp_start(struct mesh_amqp *amqp, struct mesh_amqp_config *config)
 	thread_context->tim_fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
 	if (thread_context->tim_fd < 0) {
 		l_warn("Failed to create timer! Thread will not be started.");
+		l_free(thread_context);
 		return;
 	}
 
-	config_set_url(&amqp->config, config->url);
-	config_set_exchange(&amqp->config, config->exchange);
-	config_set_routing_key(&amqp->config, config->routing_key);
-
-	config_set_url(&thread_context->config, config->url);
-	config_set_exchange(&thread_context->config, config->exchange);
-	config_set_routing_key(&thread_context->config, config->routing_key);
+	config_set_url(&thread_context->config, amqp->config.url);
+	config_set_exchange(&thread_context->config, amqp->config.exchange);
+	config_set_routing_key(&thread_context->config, amqp->config.routing_key);
 
 	amqp->thread_started = !pthread_create(&amqp->thread, &attr, amqp_thread, thread_context);
 	amqp->queue = l_queue_new();
@@ -652,12 +668,7 @@ void mesh_amqp_start(struct mesh_amqp *amqp, struct mesh_amqp_config *config)
 void mesh_amqp_free(struct mesh_amqp *amqp)
 {
 	if (amqp->thread_started) {
-		void *ret;
-
 		mesh_amqp_stop(amqp);
-		pthread_join(amqp->thread, &ret);
-
-		l_free(ret);
 	}
 
 	l_free(amqp->config.url);
@@ -799,10 +810,15 @@ void mesh_amqp_publish(struct mesh_amqp *amqp, const void *data, size_t size)
 
 void mesh_amqp_stop(struct mesh_amqp *amqp)
 {
-	struct message *msg = new_message(STOP);
+	struct message msg = {.type = STOP};
+	void *ret;
 
-	send(l_io_get_fd(amqp->io), msg, sizeof(*msg), 0);
-	l_free(msg);
+	send(l_io_get_fd(amqp->io), &msg, sizeof(msg), 0);
+
+	pthread_join(amqp->thread, &ret);
+	amqp->thread_started = false;
+
+	l_free(ret);
 }
 
 bool mesh_amqp_is_ready(struct mesh_amqp *amqp)
