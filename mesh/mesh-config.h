@@ -204,7 +204,3 @@ bool mesh_config_update_company_id(struct mesh_config *cfg, uint16_t cid);
 bool mesh_config_update_product_id(struct mesh_config *cfg, uint16_t pid);
 bool mesh_config_update_version_id(struct mesh_config *cfg, uint16_t vid);
 bool mesh_config_update_crpl(struct mesh_config *cfg, uint16_t crpl);
-
-bool mesh_config_write_amqp_url(struct mesh_config *cfg, const char *amqp_url);
-bool mesh_config_write_amqp_exchange(struct mesh_config *cfg, const char *amqp_exchange);
-bool mesh_config_write_amqp_routing_key(struct mesh_config *cfg, const char *amqp_routing_key);

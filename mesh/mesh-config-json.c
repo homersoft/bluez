@@ -1246,7 +1246,7 @@ static int get_mode(json_object *jvalue)
 
 static void parse_features(json_object *jconfig, struct mesh_config_node *node)
 {
-	json_object *jvalue, *jrelay, *jamqp;
+	json_object *jvalue, *jrelay;
 	int mode, count;
 	uint16_t interval;
 
@@ -1299,17 +1299,6 @@ static void parse_features(json_object *jconfig, struct mesh_config_node *node)
 	/* TODO: check range */
 	interval = json_object_get_int(jvalue);
 	node->modes.relay.interval = interval;
-
-	if (json_object_object_get_ex(jconfig, "amqp", &jamqp)) {
-		if (json_object_object_get_ex(jamqp, "url", &jvalue))
-			node->amqp.url = (char *)json_object_get_string(jvalue);
-
-		if (json_object_object_get_ex(jamqp, "exchange", &jvalue))
-			node->amqp.exchange = (char *)json_object_get_string(jvalue);
-
-		if (json_object_object_get_ex(jamqp, "routingKey", &jvalue))
-			node->amqp.routing_key = (char *)json_object_get_string(jvalue);
-	}
 }
 
 static bool parse_composition(json_object *jcomp, struct mesh_config_node *node)
@@ -1485,19 +1474,6 @@ static bool write_int(json_object *jobj, const char *desc, int val)
 	json_object *jvalue;
 
 	jvalue = json_object_new_int(val);
-	if (!jvalue)
-		return false;
-
-	json_object_object_del(jobj, desc);
-	json_object_object_add(jobj, desc, jvalue);
-	return true;
-}
-
-static bool write_string(json_object *jobj, const char *desc, const char *val)
-{
-	json_object *jvalue;
-
-	jvalue = json_object_new_string(val);
 	if (!jvalue)
 		return false;
 
@@ -2343,63 +2319,6 @@ bool mesh_config_update_crpl(struct mesh_config *cfg, uint16_t crpl)
 
 	return save_config(cfg->jnode, cfg->node_dir_path);
 }
-
-bool mesh_config_write_amqp_url(struct mesh_config *cfg, const char *amqp_url)
-{
-	json_object *jamqp;
-
-	if (!cfg)
-		return false;
-
-	if (!json_object_object_get_ex(cfg->jnode, "amqp", &jamqp)) {
-		jamqp = json_object_new_object();
-		json_object_object_add(cfg->jnode, "amqp", jamqp);
-	}
-
-	if (!write_string(jamqp, "url", amqp_url))
-		return false;
-
-	return save_config(cfg->jnode, cfg->node_dir_path);
-}
-
-bool mesh_config_write_amqp_exchange(struct mesh_config *cfg,
-						const char *amqp_exchange)
-{
-	json_object *jamqp;
-
-	if (!cfg)
-		return false;
-
-	if (!json_object_object_get_ex(cfg->jnode, "amqp", &jamqp)) {
-		jamqp = json_object_new_object();
-		json_object_object_add(cfg->jnode, "amqp", jamqp);
-	}
-
-	if (!write_string(jamqp, "exchange", amqp_exchange))
-		return false;
-
-	return save_config(cfg->jnode, cfg->node_dir_path);
-}
-
-bool mesh_config_write_amqp_routing_key(struct mesh_config *cfg,
-						const char *amqp_routing_key)
-{
-	json_object *jamqp;
-
-	if (!cfg)
-		return false;
-
-	if (!json_object_object_get_ex(cfg->jnode, "amqp", &jamqp)) {
-		jamqp = json_object_new_object();
-		json_object_object_add(cfg->jnode, "amqp", jamqp);
-	}
-
-	if (!write_string(jamqp, "routingKey", amqp_routing_key))
-		return false;
-
-	return save_config(cfg->jnode, cfg->node_dir_path);
-}
-
 
 static bool load_node(const char *fname, const uint8_t uuid[16],
 				mesh_config_node_func_t cb, void *user_data)
