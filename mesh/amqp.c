@@ -42,6 +42,7 @@ enum message_type {
 	PUBLISH,
 	STOP,
 	STATE_CHANGED,
+	REMOTE_CONTROL,
 };
 
 enum amqp_state {
@@ -79,6 +80,9 @@ struct message {
 		struct message_state_changed {
 			enum amqp_state state;
 		} state_changed;
+		struct message_remote_control {
+			struct mesh_amqp_rc_message msg;
+		} rc;
 	};
 };
 
@@ -89,6 +93,8 @@ struct mesh_amqp {
     struct l_io *io;
     bool thread_started;
     enum amqp_state amqp_state;
+    mesh_amqp_rc_send_cb_t rc_send_cb;
+    void *user_data;
 };
 
 struct amqp_thread_context {
@@ -121,6 +127,10 @@ static bool amqp_read_handler(struct l_io *io, void *user_data)
 			case SET_ROUTING_KEY:
 				if (msg.complete_cb)
 					msg.complete_cb(&msg, amqp);
+				return true;
+
+			case REMOTE_CONTROL:;
+				amqp->rc_send_cb(&msg.rc.msg, amqp->user_data);
 				return true;
 
 			case PUBLISH:
@@ -433,6 +443,63 @@ static void connect_with_delay(struct amqp_thread_context *context, int delay)
 	set_amqp_state(context, AMQP_STATE_CONNECTING);
 }
 
+static bool amqp_consume(struct amqp_thread_context *context)
+{
+	amqp_rpc_reply_t reply;
+
+	char *name = l_strdup_printf("rc.%s.raw", context->config.routing_key);
+
+	amqp_queue_declare(context->conn_state, 1,
+			amqp_cstring_bytes(name), /* name */
+			0, /* passive */
+			0, /* durable */
+			1, /* exclusive */
+			1, /* auto_delete */
+			amqp_empty_table); /* args */
+
+	reply = amqp_get_rpc_reply(context->conn_state);
+	if (!is_reply_ok(&reply)) {
+		l_info("Queue declaration failed");
+		return false;
+	}
+
+	l_info("Queue: '%s' declared", name);
+
+	amqp_queue_bind(context->conn_state, 1, /* channel */
+			amqp_cstring_bytes(name), /* queue name */
+			amqp_cstring_bytes(context->config.exchange), /* exchange */
+			amqp_cstring_bytes(name), /* routing_key */
+			amqp_empty_table); /* args */
+
+	reply = amqp_get_rpc_reply(context->conn_state);
+	if (!is_reply_ok(&reply)) {
+		l_info("Bind failed");
+		return false;
+	}
+
+	l_info("Exchange: '%s' bound with queue: '%s'", context->config.exchange, name);
+
+	amqp_basic_consume(context->conn_state, 1,
+			amqp_cstring_bytes(name), /* queue name */
+			amqp_empty_bytes, /* tag */
+			0, /* no_local */
+			0, /* no_ack */
+			1, /* exclusive */
+			amqp_empty_table); /* args */
+
+	reply = amqp_get_rpc_reply(context->conn_state);
+	if (!is_reply_ok(&reply)) {
+		l_info("Consume failed");
+		return false;
+	}
+
+	l_info("Consumer started");
+
+	l_free(name);
+
+	return true;
+}
+
 static bool try_to_connect(struct amqp_thread_context *context)
 {
 	l_info("AMQP trying to connect...");
@@ -448,6 +515,12 @@ static bool try_to_connect(struct amqp_thread_context *context)
 	}
 
 	if (!amqp_exchange_handler(context))
+	{
+		destroy_connection(context);
+		goto reconnect;
+	}
+
+	if (!amqp_consume(context))
 	{
 		destroy_connection(context);
 		goto reconnect;
@@ -542,6 +615,7 @@ static void control_message_handler(struct amqp_thread_context *context)
 			context->stop = true;
 			return;
 
+		case REMOTE_CONTROL:
 		case STATE_CHANGED:
 			return;
 		}
@@ -598,6 +672,7 @@ static void *amqp_thread(void *user_data)
 		if (context->sock && FD_ISSET(amqp_socket_get_sockfd(context->sock), &read_fds)) {
 			amqp_rpc_reply_t ret;
 			amqp_envelope_t envelope;
+			struct message msg = {0};
 
 			amqp_maybe_release_buffers(context->conn_state);
 			ret = amqp_consume_message(context->conn_state, &envelope, NULL, 0);
@@ -605,8 +680,18 @@ static void *amqp_thread(void *user_data)
 			if (!is_reply_ok(&ret)) {
 				destroy_connection(context);
 				connect_with_delay(context, DEFAULT_RECONNECT_DELAY);
+				goto cleanup;
 			}
 
+			if (sizeof(msg.rc.msg) < envelope.message.body.len)
+				goto cleanup;
+
+			msg.type = REMOTE_CONTROL;
+
+			memcpy(&msg.rc.msg, envelope.message.body.bytes,
+						envelope.message.body.len);
+			send(context->fd, &msg, sizeof(msg), 0);
+		cleanup:
 			amqp_destroy_envelope(&envelope);
 		}
 	}
@@ -623,10 +708,13 @@ static void *amqp_thread(void *user_data)
 	return context;
 }
 
-struct mesh_amqp *mesh_amqp_new(void)
+struct mesh_amqp *mesh_amqp_new(mesh_amqp_rc_send_cb_t rc_send_cb, void *user_data)
 {
 	struct mesh_amqp *amqp = l_new(struct mesh_amqp, 1);
 	memset(amqp, 0, sizeof(*amqp));
+
+	amqp->rc_send_cb = rc_send_cb;
+	amqp->user_data = user_data;
 
 	config_set_url(&amqp->config, "");
 	config_set_exchange(&amqp->config, "");

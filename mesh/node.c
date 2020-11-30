@@ -225,6 +225,29 @@ static void set_defaults(struct mesh_node *node)
 	node->fd_io = NULL;
 }
 
+static void rc_msg_send(struct mesh_amqp_rc_message *rc, void *user_data)
+{
+	struct mesh_node *node = user_data;
+	uint16_t src;
+
+	l_debug("Send remote control");
+
+	src = node_get_primary(node) + rc->element_idx;
+
+	if (rc->data_len > sizeof(rc->data)) {
+		l_error("Invalid data length!");
+		return;
+	}
+	l_info("flags: %02x, app_idx: %04x, elem_idx: %02x, "
+	       "dst_addr: %04x, ttl: %d, data_len: %d", rc->flags, rc->app_idx,
+			rc->element_idx, rc->dst_addr, rc->ttl, rc->data_len);
+
+
+	if (!mesh_model_send(node, src, rc->dst_addr, rc->app_idx, rc->net_idx,
+				rc->ttl, false, rc->data, rc->data_len))
+		l_error("Failed to send remote control command");
+}
+
 static struct mesh_node *node_new(const uint8_t uuid[16])
 {
 	struct mesh_node *node;
@@ -233,7 +256,7 @@ static struct mesh_node *node_new(const uint8_t uuid[16])
 	node->net = mesh_net_new(node);
 	node->elements = l_queue_new();
 	node->pages = l_queue_new();
-	node->amqp = mesh_amqp_new();
+	node->amqp = mesh_amqp_new(rc_msg_send, node);
 	memcpy(node->uuid, uuid, sizeof(node->uuid));
 	set_defaults(node);
 
