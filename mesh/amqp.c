@@ -279,7 +279,7 @@ static bool amqp_exchange_handler(struct amqp_thread_context *context)
 			amqp_cstring_bytes("topic"), /* type */
 			0, /* passive */
 			1, /* durable */
-			0, /* auto_delete */
+			1, /* auto_delete */
 			0, /* internal */
 			amqp_empty_table /* arguments */);
 
@@ -299,6 +299,7 @@ static void amqp_publish_handler(struct amqp_thread_context *context, uint8_t *d
 	amqp_rpc_reply_t reply;
 	amqp_basic_properties_t props;
 	amqp_bytes_t body;
+	char *key = l_strdup_printf("mon.%s.raw", context->config.routing_key);
 
 	props._flags = AMQP_BASIC_CONTENT_TYPE_FLAG | AMQP_BASIC_DELIVERY_MODE_FLAG;
 	props.content_type = amqp_cstring_bytes("application/octet-stream");
@@ -309,7 +310,7 @@ static void amqp_publish_handler(struct amqp_thread_context *context, uint8_t *d
 
 	amqp_basic_publish(context->conn_state, 1,
 			amqp_cstring_bytes(context->config.exchange), /* name */
-			amqp_cstring_bytes(context->config.routing_key), /* key */
+			amqp_cstring_bytes(key), /* key */
 			0, 0,
 			&props,
 			body);
@@ -318,6 +319,8 @@ static void amqp_publish_handler(struct amqp_thread_context *context, uint8_t *d
 
 	if (!is_reply_ok(&reply))
 		l_error("Publish failed");
+
+	l_free(key);
 }
 
 static void config_set_url(struct mesh_amqp_config *config, const char *url)
@@ -489,7 +492,7 @@ static void control_message_handler(struct amqp_thread_context *context)
 		case SET_EXCHANGE: {
 			struct message ret_msg = {0};
 
-			config_set_exchange(&context->config, 
+			config_set_exchange(&context->config,
 							msg.exchange.value);
 
 			ret_msg.type = SET_EXCHANGE;
