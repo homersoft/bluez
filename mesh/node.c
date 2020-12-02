@@ -225,26 +225,37 @@ static void set_defaults(struct mesh_node *node)
 	node->fd_io = NULL;
 }
 
-static void rc_msg_send(struct mesh_amqp_rc_message *rc, void *user_data)
+static void rc_msg_send(struct fd_msg *msg, size_t msg_len, void *user_data)
 {
 	struct mesh_node *node = user_data;
-	uint16_t src;
+	size_t data_len = (msg_len - sizeof(*msg));
+	uint16_t src, app_idx;
 
 	l_debug("Send remote control");
 
-	src = node_get_primary(node) + rc->element_idx;
+	src = node_get_primary(node) + msg->element_idx;
 
-	if (rc->data_len > sizeof(rc->data)) {
-		l_error("Invalid data length!");
-		return;
+	switch (msg->flags)
+	{
+		case 0x01:
+			app_idx = APP_IDX_DEV_LOCAL;
+			break;
+
+		case 0x03:
+			app_idx = APP_IDX_DEV_REMOTE;
+			break;
+
+		default:
+			app_idx = msg->app_idx;
+			break;
 	}
-	l_info("flags: %02x, app_idx: %04x, elem_idx: %02x, "
-	       "dst_addr: %04x, ttl: %d, data_len: %d", rc->flags, rc->app_idx,
-			rc->element_idx, rc->dst_addr, rc->ttl, rc->data_len);
 
+	l_debug("flags: %02x, app_idx: %04x, elem_idx: %02x, "
+	       "dst_addr: %04x, ttl: %d, data_len: %ld", msg->flags, app_idx,
+			msg->element_idx, msg->dst_addr, msg->ttl, data_len);
 
-	if (!mesh_model_send(node, src, rc->dst_addr, rc->app_idx, rc->net_idx,
-				rc->ttl, false, rc->data, rc->data_len))
+	if (!mesh_model_send(node, src, msg->dst_addr, app_idx, msg->net_idx,
+		      msg->ttl, FD_MSG_IS_SEGMENTED(msg), msg->data, data_len))
 		l_error("Failed to send remote control command");
 }
 
