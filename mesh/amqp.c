@@ -696,11 +696,23 @@ static void *amqp_thread(void *user_data)
 				goto cleanup;
 			}
 
-			if ((sizeof(msg.rc.msg) + 384) <
-						envelope.message.body.len) {
-				l_error("Too long message");
+			if (envelope.message.body.len < sizeof(msg.rc.msg)) {
+				l_warn("Too short message");
+				amqp_basic_nack(context->conn_state, 1,
+						envelope.delivery_tag, 0, 0);
 				goto cleanup;
 			}
+
+			if ((sizeof(msg.rc.msg) + 384) <
+						envelope.message.body.len) {
+				l_warn("Too long message");
+				amqp_basic_nack(context->conn_state, 1,
+						envelope.delivery_tag, 0, 0);
+				goto cleanup;
+			}
+
+			amqp_basic_ack(context->conn_state, 1,
+				       envelope.delivery_tag, 0);
 
 			msg.type = REMOTE_CONTROL;
 
