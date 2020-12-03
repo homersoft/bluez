@@ -253,7 +253,7 @@ static bool amqp_connect_handler(struct amqp_thread_context *context)
 
 	vhost = l_strdup_printf("/%s", info.vhost);
 
-	reply = amqp_login(context->conn_state, vhost, 0, AMQP_DEFAULT_FRAME_SIZE, 0,
+	reply = amqp_login(context->conn_state, vhost, 0, AMQP_DEFAULT_FRAME_SIZE, 15,
 		AMQP_SASL_METHOD_PLAIN, info.user, info.password);
 
 	if (!is_reply_ok(&reply)) {
@@ -676,9 +676,19 @@ static void *amqp_thread(void *user_data)
 			amqp_envelope_t envelope;
 			struct message msg;
 
+			struct timeval timeout = {
+				.tv_sec = 0,
+				.tv_usec = 0,
+			};
 
 			amqp_maybe_release_buffers(context->conn_state);
-			ret = amqp_consume_message(context->conn_state, &envelope, NULL, 0);
+			ret = amqp_consume_message(context->conn_state, &envelope, &timeout, 0);
+
+			if (ret.reply_type == AMQP_RESPONSE_LIBRARY_EXCEPTION &&
+				ret.library_error == AMQP_STATUS_TIMEOUT)
+			{
+				goto cleanup;
+			}
 
 			if (!is_reply_ok(&ret)) {
 				destroy_connection(context);
