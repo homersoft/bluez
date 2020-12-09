@@ -45,12 +45,6 @@ enum message_type {
 	REMOTE_CONTROL,
 };
 
-enum amqp_state {
-	AMQP_STATE_DISCONNECTED = 0,
-	AMQP_STATE_CONNECTING,
-	AMQP_STATE_CONNECTED,
-};
-
 struct set_complete_ctx {
 	mesh_amqp_set_complete_cb_t complete_cb;
 	void *user_data;
@@ -78,7 +72,7 @@ struct message {
 			uint8_t data[384];
 		} publish;
 		struct message_state_changed {
-			enum amqp_state state;
+			enum mesh_amqp_state state;
 		} state_changed;
 		struct message_remote_control {
 			size_t msg_len;
@@ -88,14 +82,14 @@ struct message {
 };
 
 struct mesh_amqp {
-    struct mesh_amqp_config config;
-    pthread_t thread;
-    struct l_queue *queue;
-    struct l_io *io;
-    bool thread_started;
-    enum amqp_state amqp_state;
-    mesh_amqp_rc_send_cb_t rc_send_cb;
-    void *user_data;
+	struct mesh_amqp_config config;
+	pthread_t thread;
+	struct l_queue *queue;
+	struct l_io *io;
+	bool thread_started;
+	enum mesh_amqp_state amqp_state;
+	mesh_amqp_rc_send_cb_t rc_send_cb;
+	void *user_data;
 };
 
 struct amqp_thread_context {
@@ -103,7 +97,7 @@ struct amqp_thread_context {
 	amqp_socket_t *sock;
 
 	struct mesh_amqp_config config;
-	enum amqp_state amqp_state;
+	enum mesh_amqp_state amqp_state;
 
 	int fd;
 	int tim_fd;
@@ -385,7 +379,8 @@ static inline bool set_timer(int fd, int delay)
 	return timerfd_settime(fd, 0, &newitimspec, NULL) == 0;
 }
 
-static void set_amqp_state(struct amqp_thread_context *context, enum amqp_state amqp_state)
+static void set_amqp_state(struct amqp_thread_context *context,
+						enum mesh_amqp_state amqp_state)
 {
 	struct message ret_msg = {0};
 
@@ -399,7 +394,7 @@ static void set_amqp_state(struct amqp_thread_context *context, enum amqp_state 
 
 static void destroy_connection(struct amqp_thread_context *context)
 {
-	set_amqp_state(context, AMQP_STATE_DISCONNECTED);
+	set_amqp_state(context, MESH_AMQP_STATE_DISCONNECTED);
 
 	if (context->conn_state) {
 		amqp_connection_close(context->conn_state, AMQP_REPLY_SUCCESS);
@@ -431,7 +426,7 @@ static bool new_connection(struct amqp_thread_context *context)
 
 static void connect_with_delay(struct amqp_thread_context *context, int delay)
 {
-	if (context->amqp_state == AMQP_STATE_CONNECTING) {
+	if (context->amqp_state == MESH_AMQP_STATE_CONNECTING) {
 		l_warn("Reconnect already in progress...");
 		return;
 	}
@@ -442,7 +437,9 @@ static void connect_with_delay(struct amqp_thread_context *context, int delay)
 		return;
 	}
 
-	set_amqp_state(context, AMQP_STATE_CONNECTING);
+	l_info("%p", context);
+
+	set_amqp_state(context, MESH_AMQP_STATE_CONNECTING);
 }
 
 static bool amqp_consume(struct amqp_thread_context *context)
@@ -528,7 +525,7 @@ static bool try_to_connect(struct amqp_thread_context *context)
 		goto reconnect;
 	}
 
-	set_amqp_state(context, AMQP_STATE_CONNECTED);
+	set_amqp_state(context, MESH_AMQP_STATE_CONNECTED);
 	return true;
 
 reconnect:
@@ -557,7 +554,7 @@ static void control_message_handler(struct amqp_thread_context *context)
 
 			send(context->fd, &ret_msg, sizeof(ret_msg), 0);
 
-			if (context->amqp_state == AMQP_STATE_CONNECTED)
+			if (context->amqp_state == MESH_AMQP_STATE_CONNECTED)
 				destroy_connection(context);
 
 			if (url_is_valid(context->config.url))
@@ -580,7 +577,7 @@ static void control_message_handler(struct amqp_thread_context *context)
 
 			send(context->fd, &ret_msg, sizeof(ret_msg), 0);
 
-			if (context->amqp_state == AMQP_STATE_CONNECTED) {
+			if (context->amqp_state == MESH_AMQP_STATE_CONNECTED) {
 				destroy_connection(context);
 
 				if (url_is_valid(context->config.url))
@@ -712,7 +709,7 @@ static void *amqp_thread(void *user_data)
 			}
 
 			amqp_basic_ack(context->conn_state, 1,
-				       envelope.delivery_tag, 0);
+					   envelope.delivery_tag, 0);
 
 			msg.type = REMOTE_CONTROL;
 
@@ -919,6 +916,11 @@ void mesh_amqp_set_routing_key(struct mesh_amqp *amqp, const char *routing_key,
 	send_message(amqp, msg);
 }
 
+enum mesh_amqp_state mesh_amqp_get_state(struct mesh_amqp *amqp)
+{
+	return amqp->amqp_state;
+}
+
 void mesh_amqp_publish(struct mesh_amqp *amqp, const void *data, size_t size)
 {
 	struct message *msg = new_message(PUBLISH);
@@ -944,5 +946,5 @@ void mesh_amqp_stop(struct mesh_amqp *amqp)
 
 bool mesh_amqp_is_ready(struct mesh_amqp *amqp)
 {
-	return amqp->amqp_state == AMQP_STATE_CONNECTED;
+	return amqp->amqp_state == MESH_AMQP_STATE_CONNECTED;
 }

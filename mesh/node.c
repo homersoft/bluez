@@ -2584,6 +2584,31 @@ static bool amqp_routing_key_getter(struct l_dbus *dbus, struct l_dbus_message *
 	return true;
 }
 
+static bool amqp_state_getter(struct l_dbus *dbus, struct l_dbus_message *msg,
+					struct l_dbus_message_builder *builder,
+								void *user_data)
+{
+	struct mesh_node *node = user_data;
+	const char *state = "";
+
+	switch (mesh_amqp_get_state(node->amqp)) {
+	case MESH_AMQP_STATE_CONNECTED:
+		state = "connected";
+		break;
+
+	case MESH_AMQP_STATE_CONNECTING:
+		state = "connecting";
+		break;
+
+	case MESH_AMQP_STATE_DISCONNECTED:
+		state = "disconnected";
+		break;
+	}
+
+	l_dbus_message_builder_append_basic(builder, 's', state);
+	return true;
+}
+
 static struct l_dbus_message *amqp_routing_key_setter(struct l_dbus *dbus,
 					struct l_dbus_message *msg,
 					struct l_dbus_message_iter *value,
@@ -2681,6 +2706,9 @@ static void setup_amqp_interface(struct l_dbus_interface *iface)
 
 	l_dbus_interface_property(iface, "RoutingKey", 0, "s",
 				  amqp_routing_key_getter, amqp_routing_key_setter);
+
+	l_dbus_interface_property(iface, "State", 0, "s",
+						amqp_state_getter, NULL);
 
 }
 

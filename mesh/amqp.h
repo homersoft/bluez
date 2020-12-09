@@ -24,6 +24,12 @@
 
 struct mesh_amqp;
 
+enum mesh_amqp_state {
+	MESH_AMQP_STATE_DISCONNECTED = 0,
+	MESH_AMQP_STATE_CONNECTING,
+	MESH_AMQP_STATE_CONNECTED,
+};
+
 struct mesh_amqp_config {
 	char *url;
 	char *exchange;
@@ -49,6 +55,8 @@ void mesh_amqp_set_exchange(struct mesh_amqp *amqp, const char *exchange,
 const char *mesh_amqp_get_routing_key(struct mesh_amqp *amqp);
 void  mesh_amqp_set_routing_key(struct mesh_amqp *amqp, const char *routing_key,
 			mesh_amqp_set_complete_cb_t complete, void *user_data);
+
+enum mesh_amqp_state mesh_amqp_get_state(struct mesh_amqp *amqp);
 
 void mesh_amqp_publish(struct mesh_amqp *amqp, const void *data, size_t size);
 
