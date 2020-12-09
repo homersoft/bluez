@@ -470,7 +470,7 @@ static bool amqp_consume(struct amqp_thread_context *context)
 	amqp_queue_bind(context->conn_state, 1, /* channel */
 			amqp_cstring_bytes(name), /* queue name */
 			amqp_cstring_bytes(context->config.exchange), /* exchange */
-			amqp_cstring_bytes(name), /* routing_key */
+			amqp_cstring_bytes("rc.#.raw"), /* routing_key */
 			amqp_empty_table); /* args */
 
 	reply = amqp_get_rpc_reply(context->conn_state);
