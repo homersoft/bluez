@@ -2457,6 +2457,96 @@ static bool lastheard_getter(struct l_dbus *dbus, struct l_dbus_message *msg,
 	return true;
 }
 
+struct callback_complete_ctx {
+	struct l_dbus *dbus;
+	struct l_dbus_message *msg;
+	struct l_dbus_message *error;
+	l_dbus_property_complete_cb_t complete_cb;
+};
+
+static void method_call_complete(bool result, void *user_data)
+{
+	struct callback_complete_ctx *ctx = user_data;
+	struct l_dbus_message *reply = result ?
+				l_dbus_message_new_method_return(ctx->msg) :
+				dbus_error(ctx->msg, MESH_ERROR_FAILED, NULL);
+
+	l_dbus_send(ctx->dbus, reply);
+	l_dbus_message_unref(ctx->msg);
+	l_free(ctx);
+}
+
+static void property_set_complete(bool result, void *user_data)
+{
+	struct callback_complete_ctx *ctx = user_data;
+
+	ctx->complete_cb(ctx->dbus, ctx->msg, ctx->error);
+
+	l_dbus_message_unref(ctx->msg);
+	l_free(ctx);
+}
+
+static struct callback_complete_ctx *new_callback_complete_ctx(
+					struct l_dbus *dbus,
+					struct l_dbus_message *msg,
+					struct l_dbus_message *error,
+					l_dbus_property_complete_cb_t complete)
+{
+	struct callback_complete_ctx *ctx =
+					l_new(struct callback_complete_ctx, 1);
+
+	ctx->dbus = dbus;
+	ctx->msg = l_dbus_message_ref(msg);
+	ctx->error = error;
+	ctx->complete_cb = complete;
+
+	return ctx;
+}
+
+static struct l_dbus_message *amqp_subscribe_call(struct l_dbus *dbus,
+						struct l_dbus_message *msg,
+						void *user_data)
+{
+	struct mesh_node *node = user_data;
+	const char *sender;
+	const char *topic;
+
+	sender = l_dbus_message_get_sender(msg);
+
+	if (strcmp(sender, node->owner))
+		return dbus_error(msg, MESH_ERROR_NOT_AUTHORIZED, NULL);
+
+	if (!l_dbus_message_get_arguments(msg, "s", &topic))
+		return dbus_error(msg, MESH_ERROR_INVALID_ARGS, NULL);
+
+	mesh_amqp_subscribe(node->amqp, topic, method_call_complete,
+			new_callback_complete_ctx(dbus, msg, NULL, NULL));
+
+	return NULL;
+}
+
+static struct l_dbus_message *amqp_unsubscribe_call(struct l_dbus *dbus,
+						  struct l_dbus_message *msg,
+						  void *user_data)
+{
+	struct mesh_node *node = user_data;
+	const char *sender;
+	const char *topic;
+
+	sender = l_dbus_message_get_sender(msg);
+
+	if (strcmp(sender, node->owner))
+		return dbus_error(msg, MESH_ERROR_NOT_AUTHORIZED, NULL);
+
+	if (!l_dbus_message_get_arguments(msg, "s", &topic))
+		return dbus_error(msg, MESH_ERROR_INVALID_ARGS, NULL);
+
+	mesh_amqp_unsubscribe(node->amqp, topic, method_call_complete,
+			new_callback_complete_ctx(dbus, msg, NULL, NULL));
+
+	return NULL;
+}
+
 static bool amqp_url_getter(struct l_dbus *dbus, struct l_dbus_message *msg,
 					struct l_dbus_message_builder *builder,
 					void *user_data)
@@ -2470,39 +2560,6 @@ static bool amqp_url_getter(struct l_dbus *dbus, struct l_dbus_message *msg,
 	l_dbus_message_builder_append_basic(builder, 's', url);
 
 	return true;
-}
-
-struct property_set_ctx {
-	l_dbus_property_complete_cb_t complete_cb;
-	struct l_dbus *dbus;
-	struct l_dbus_message *msg;
-	struct l_dbus_message *error;
-};
-
-static struct property_set_ctx *new_property_set_ctx(
-					l_dbus_property_complete_cb_t complete,
-							struct l_dbus *dbus,
-						struct l_dbus_message *msg,
-						struct l_dbus_message *error)
-{
-	struct property_set_ctx *ctx = l_new(struct property_set_ctx, 1);
-
-	ctx->complete_cb = complete;
-	ctx->dbus = dbus;
-	ctx->msg = msg;
-	ctx->error = error;
-
-	return ctx;
-}
-
-static void property_set_complete(void *user_data)
-{
-	struct property_set_ctx *ctx = user_data;
-
-	if (ctx->complete_cb)
-		ctx->complete_cb(ctx->dbus, ctx->msg, ctx->error);
-
-	l_free(ctx);
 }
 
 static struct l_dbus_message *amqp_url_setter(struct l_dbus *dbus,
@@ -2525,7 +2582,7 @@ static struct l_dbus_message *amqp_url_setter(struct l_dbus *dbus,
 							"String expected");
 
 	mesh_amqp_set_url(node->amqp, url, property_set_complete,
-			new_property_set_ctx(complete, dbus, msg, NULL));
+			new_callback_complete_ctx(dbus, msg, NULL, complete));
 
 	return NULL;
 }
@@ -2565,7 +2622,7 @@ static struct l_dbus_message *amqp_exchange_setter(struct l_dbus *dbus,
 							"String expected");
 
 	mesh_amqp_set_exchange(node->amqp, exchange, property_set_complete,
-			new_property_set_ctx(complete, dbus, msg, NULL));
+			new_callback_complete_ctx(dbus, msg, NULL, complete));
 
 	return NULL;
 }
@@ -2629,7 +2686,7 @@ static struct l_dbus_message *amqp_routing_key_setter(struct l_dbus *dbus,
 							"String expected");
 
 	mesh_amqp_set_routing_key(node->amqp, routing_key, property_set_complete,
-			new_property_set_ctx(complete, dbus, msg, NULL));
+			new_callback_complete_ctx(dbus, msg, NULL, complete));
 
 	return NULL;
 }
@@ -2698,6 +2755,12 @@ static void setup_node_interface(struct l_dbus_interface *iface)
 
 static void setup_amqp_interface(struct l_dbus_interface *iface)
 {
+	l_dbus_interface_method(iface, "Subscribe", 0, amqp_subscribe_call,
+							"", "s", "topic");
+
+	l_dbus_interface_method(iface, "Unsubscribe", 0, amqp_unsubscribe_call,
+							"", "s", "topic");
+
 	l_dbus_interface_property(iface, "Url", 0, "s", amqp_url_getter,
 							amqp_url_setter);
 
@@ -2709,7 +2772,6 @@ static void setup_amqp_interface(struct l_dbus_interface *iface)
 
 	l_dbus_interface_property(iface, "State", 0, "s",
 						amqp_state_getter, NULL);
-
 }
 
 void node_property_changed(struct mesh_node *node, const char *property)
