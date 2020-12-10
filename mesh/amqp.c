@@ -40,13 +40,15 @@ enum message_type {
 	SET_EXCHANGE,
 	SET_ROUTING_KEY,
 	PUBLISH,
+	SUBSCRIBE,
+	UNSUBSCRIBE,
 	STOP,
 	STATE_CHANGED,
 	REMOTE_CONTROL,
 };
 
-struct set_complete_ctx {
-	mesh_amqp_set_complete_cb_t complete_cb;
+struct complete_cb_ctx {
+	mesh_amqp_complete_cb_t complete_cb;
 	void *user_data;
 };
 
@@ -71,6 +73,9 @@ struct message {
 			size_t size;
 			uint8_t data[384];
 		} publish;
+		struct message_subscribe {
+			char topic[255];
+		} subscribe;
 		struct message_state_changed {
 			enum mesh_amqp_state state;
 		} state_changed;
@@ -99,6 +104,8 @@ struct amqp_thread_context {
 	struct mesh_amqp_config config;
 	enum mesh_amqp_state amqp_state;
 
+	struct l_queue *subscriptions;
+
 	int fd;
 	int tim_fd;
 	bool stop;
@@ -120,11 +127,12 @@ static bool amqp_read_handler(struct l_io *io, void *user_data)
 			case SET_URL:
 			case SET_EXCHANGE:
 			case SET_ROUTING_KEY:
-				if (msg.complete_cb)
-					msg.complete_cb(&msg, amqp);
+			case SUBSCRIBE:
+			case UNSUBSCRIBE:
+				msg.complete_cb(&msg, amqp);
 				return true;
 
-			case REMOTE_CONTROL:;
+			case REMOTE_CONTROL:
 				amqp->rc_send_cb(&msg.rc.msg, msg.rc.msg_len,
 							amqp->user_data);
 				return true;
@@ -285,7 +293,7 @@ static bool amqp_exchange_handler(struct amqp_thread_context *context)
 			amqp_cstring_bytes("topic"), /* type */
 			0, /* passive */
 			1, /* durable */
-			1, /* auto_delete */
+			0, /* auto_delete */
 			0, /* internal */
 			amqp_empty_table /* arguments */);
 
@@ -437,9 +445,51 @@ static void connect_with_delay(struct amqp_thread_context *context, int delay)
 		return;
 	}
 
-	l_info("%p", context);
-
 	set_amqp_state(context, MESH_AMQP_STATE_CONNECTING);
+}
+
+static bool amqp_subscribe_topic(const char *topic,
+					struct amqp_thread_context *context)
+{
+	amqp_rpc_reply_t reply;
+
+	char *queue_name =
+		l_strdup_printf("rc.%s.raw", context->config.routing_key);
+
+	amqp_queue_bind(context->conn_state, 1,
+			amqp_cstring_bytes(queue_name),
+			amqp_cstring_bytes(context->config.exchange),
+			amqp_cstring_bytes(topic),
+			amqp_empty_table);
+
+	reply = amqp_get_rpc_reply(context->conn_state);
+	if (!is_reply_ok(&reply)) {
+		l_info("Failed to subscribe exchange topic: '%s'", topic);
+		l_free(queue_name);
+		return false;
+	}
+
+	l_info("Exchange topic: '%s' bound with queue: '%s'",
+							topic, queue_name);
+
+	l_free(queue_name);
+
+	return true;
+}
+
+static bool amqp_subscribe_topics(struct amqp_thread_context *context)
+{
+	const struct l_queue_entry *subscription =
+				l_queue_get_entries(context->subscriptions);
+
+	while (subscription) {
+		if (!amqp_subscribe_topic(subscription->data, context))
+			return false;
+
+		subscription = subscription->next;
+	}
+
+	return true;
 }
 
 static bool amqp_consume(struct amqp_thread_context *context)
@@ -464,19 +514,8 @@ static bool amqp_consume(struct amqp_thread_context *context)
 
 	l_info("Queue: '%s' declared", name);
 
-	amqp_queue_bind(context->conn_state, 1, /* channel */
-			amqp_cstring_bytes(name), /* queue name */
-			amqp_cstring_bytes(context->config.exchange), /* exchange */
-			amqp_cstring_bytes("rc.#.raw"), /* routing_key */
-			amqp_empty_table); /* args */
-
-	reply = amqp_get_rpc_reply(context->conn_state);
-	if (!is_reply_ok(&reply)) {
-		l_info("Bind failed");
+	if (!amqp_subscribe_topics(context))
 		return false;
-	}
-
-	l_info("Exchange: '%s' bound with queue: '%s'", context->config.exchange, name);
 
 	amqp_basic_consume(context->conn_state, 1,
 			amqp_cstring_bytes(name), /* queue name */
@@ -533,21 +572,102 @@ reconnect:
 	return false;
 }
 
+static inline bool topic_match(const void *a, const void *b)
+{
+	return strcmp(a, b) == 0;
+}
+
+static bool amqp_unsubscribe_topic(const char *topic,
+					struct amqp_thread_context *context)
+{
+	amqp_rpc_reply_t reply;
+
+	char *queue_name =
+		l_strdup_printf("rc.%s.raw", context->config.routing_key);
+
+	amqp_queue_unbind(context->conn_state, 1,
+				amqp_cstring_bytes(queue_name),
+				amqp_cstring_bytes(context->config.exchange),
+				amqp_cstring_bytes(topic),
+				amqp_empty_table);
+
+	reply = amqp_get_rpc_reply(context->conn_state);
+	if (!is_reply_ok(&reply)) {
+		l_info("Failed to unsubscribe topic: '%s'", topic);
+		l_free(queue_name);
+		return false;
+	}
+
+	l_free(queue_name);
+	return true;
+}
+
+static bool amqp_subscribe_handler(struct message *msg,
+					struct amqp_thread_context *context)
+{
+	char *topic = l_strdup(msg->subscribe.topic);
+
+	if (l_queue_find(context->subscriptions, topic_match, topic)) {
+		l_warn("Topic: '%s' already subscribed!", topic);
+		l_free(topic);
+		return false;
+	}
+
+	if (!l_queue_push_tail(context->subscriptions, topic)) {
+		l_free(topic);
+		return false;
+	}
+
+	if (context->amqp_state == MESH_AMQP_STATE_CONNECTED) {
+		if (!amqp_subscribe_topic(topic, context)) {
+			l_queue_remove(context->subscriptions, topic);
+			l_free(topic);
+			return false;
+		}
+	}
+
+	return true;
+}
+
+static bool amqp_unsubscribe_handler(struct message *msg,
+					struct amqp_thread_context *context)
+{
+	char *topic = msg->subscribe.topic;
+	char *subscription = l_queue_find(context->subscriptions, topic_match,
+									topic);
+
+	if (!subscription) {
+		l_warn("Topic: '%s' is not subscribed!", topic);
+		return false;
+	}
+
+	if (context->amqp_state == MESH_AMQP_STATE_CONNECTED &&
+					!amqp_unsubscribe_topic(topic, context))
+		return false;
+
+	l_queue_remove(context->subscriptions, subscription);
+	l_free(subscription);
+
+	l_debug("Unsubscribed topic: '%s'", topic);
+
+	return true;
+}
+
 static void control_message_handler(struct amqp_thread_context *context)
 {
 	struct message msg;
 
 	while (recv(context->fd, &msg, sizeof(msg), 0) == sizeof(msg))
 	{
+		struct message ret_msg = {0};
+
+		ret_msg.type = msg.type;
+		ret_msg.complete_cb = msg.complete_cb;
+		ret_msg.user_data = msg.user_data;
+
 		switch (msg.type) {
-		case SET_URL: {
-			struct message ret_msg = {0};
-
+		case SET_URL:
 			config_set_url(&context->config, msg.url.value);
-
-			ret_msg.type = SET_URL;
-			ret_msg.complete_cb = msg.complete_cb;
-			ret_msg.user_data = msg.user_data;
 
 			strncpy(ret_msg.url.value, context->config.url,
 						sizeof(ret_msg.url) - 1);
@@ -559,17 +679,13 @@ static void control_message_handler(struct amqp_thread_context *context)
 
 			if (url_is_valid(context->config.url))
 				try_to_connect(context);
-		} return;
+			else
+				l_queue_clear(context->subscriptions, l_free);
+			return;
 
-		case SET_EXCHANGE: {
-			struct message ret_msg = {0};
-
+		case SET_EXCHANGE:
 			config_set_exchange(&context->config,
 							msg.exchange.value);
-
-			ret_msg.type = SET_EXCHANGE;
-			ret_msg.complete_cb = msg.complete_cb;
-			ret_msg.user_data = msg.user_data;
 
 			strncpy(ret_msg.exchange.value,
 						context->config.exchange,
@@ -583,32 +699,44 @@ static void control_message_handler(struct amqp_thread_context *context)
 				if (url_is_valid(context->config.url))
 					try_to_connect(context);
 			}
-		} return;
+			return;
 
-		case SET_ROUTING_KEY: {
-			struct message ret_msg = {0};
-
+		case SET_ROUTING_KEY:
 			config_set_routing_key(&context->config,
 							msg.routing_key.value);
-
-			ret_msg.type = SET_ROUTING_KEY;
-			ret_msg.complete_cb = msg.complete_cb;
-			ret_msg.user_data = msg.user_data;
 
 			strncpy(ret_msg.routing_key.value,
 					context->config.routing_key,
 					sizeof(ret_msg.routing_key) - 1);
 
 			send(context->fd, &ret_msg, sizeof(ret_msg), 0);
-		}	return;
+			return;
 
 		case PUBLISH:
-			if (!context->conn_state)
+			if (context->amqp_state != MESH_AMQP_STATE_CONNECTED)
 				return;
 
 			amqp_publish_handler(context, msg.publish.data,
 							msg.publish.size);
 			return;
+
+		case SUBSCRIBE:
+			if (amqp_subscribe_handler(&msg, context))
+				memcpy(ret_msg.subscribe.topic,
+					msg.subscribe.topic,
+					sizeof(msg.subscribe.topic));
+
+			send(context->fd, &ret_msg, sizeof(ret_msg), 0);
+			return;
+
+		case UNSUBSCRIBE:
+			if (amqp_unsubscribe_handler(&msg, context))
+				memcpy(ret_msg.subscribe.topic,
+					msg.subscribe.topic,
+					sizeof(msg.subscribe.topic));
+
+			send(context->fd, &ret_msg, sizeof(ret_msg), 0);
+		return;
 
 		case STOP:
 			context->stop = true;
@@ -731,6 +859,7 @@ static void *amqp_thread(void *user_data)
 	l_free(context->config.url);
 	l_free(context->config.exchange);
 	l_free(context->config.routing_key);
+	l_queue_destroy(context->subscriptions, l_free);
 
 	return context;
 }
@@ -763,6 +892,7 @@ void mesh_amqp_start(struct mesh_amqp *amqp)
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
+	thread_context->subscriptions = l_queue_new();
 	thread_context->fd = fds[1];
 	thread_context->tim_fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
 	if (thread_context->tim_fd < 0) {
@@ -819,10 +949,10 @@ const char *mesh_amqp_get_url(struct mesh_amqp *amqp)
 	return amqp->config.url;
 }
 
-static struct set_complete_ctx *new_set_complete_ctx(struct mesh_amqp *amqp,
-		mesh_amqp_set_complete_cb_t complete_cb, void *user_data)
+static struct complete_cb_ctx *new_complete_cb_ctx(
+			mesh_amqp_complete_cb_t complete_cb, void *user_data)
 {
-	struct set_complete_ctx *ctx = l_new(struct set_complete_ctx, 1);
+	struct complete_cb_ctx *ctx = l_new(struct complete_cb_ctx, 1);
 	ctx->complete_cb = complete_cb;
 	ctx->user_data = user_data;
 
@@ -831,23 +961,23 @@ static struct set_complete_ctx *new_set_complete_ctx(struct mesh_amqp *amqp,
 
 static void url_set_complete(struct message *msg, struct mesh_amqp *amqp)
 {
-	struct set_complete_ctx *ctx = msg->user_data;
+	struct complete_cb_ctx *ctx = msg->user_data;
 
 	l_debug("url: '%s'", msg->url.value);
 	config_set_url(&amqp->config, msg->url.value);
 
 	if (ctx->complete_cb)
-		ctx->complete_cb(ctx->user_data);
+		ctx->complete_cb(true, ctx->user_data);
 
 	l_free(ctx);
 }
 
 void mesh_amqp_set_url(struct mesh_amqp *amqp, const char *url,
-			mesh_amqp_set_complete_cb_t complete, void *user_data)
+			mesh_amqp_complete_cb_t complete, void *user_data)
 {
 	struct message *msg = new_message(SET_URL);
 	msg->complete_cb = url_set_complete;
-	msg->user_data = new_set_complete_ctx(amqp, complete, user_data);
+	msg->user_data = new_complete_cb_ctx(complete, user_data);
 
 	strncpy(msg->url.value, url ?: "", sizeof(msg->url.value) - 1);
 
@@ -861,23 +991,22 @@ const char *mesh_amqp_get_exchange(struct mesh_amqp *amqp)
 
 static void exchange_set_complete(struct message *msg, struct mesh_amqp *amqp)
 {
-	struct set_complete_ctx *ctx = msg->user_data;
+	struct complete_cb_ctx *ctx = msg->user_data;
 
 	l_debug("exchange: '%s'", msg->exchange.value);
 	config_set_exchange(&amqp->config, msg->exchange.value);
 
-	if (ctx->complete_cb)
-		ctx->complete_cb(ctx->user_data);
+	ctx->complete_cb(true, ctx->user_data);
 
 	l_free(ctx);
 }
 
 void mesh_amqp_set_exchange(struct mesh_amqp *amqp, const char *exchange,
-			mesh_amqp_set_complete_cb_t complete, void *user_data)
+			mesh_amqp_complete_cb_t complete, void *user_data)
 {
 	struct message *msg = new_message(SET_EXCHANGE);
 	msg->complete_cb = exchange_set_complete;
-	msg->user_data = new_set_complete_ctx(amqp, complete, user_data);
+	msg->user_data = new_complete_cb_ctx(complete, user_data);
 
 	strncpy(msg->exchange.value, exchange ?: "",
 					sizeof(msg->exchange.value) - 1);
@@ -892,23 +1021,22 @@ const char *mesh_amqp_get_routing_key(struct mesh_amqp *amqp)
 
 static void routing_key_set_complete(struct message *msg, struct mesh_amqp *amqp)
 {
-	struct set_complete_ctx *ctx = msg->user_data;
+	struct complete_cb_ctx *ctx = msg->user_data;
 
 	l_debug("routing_key: '%s'", msg->routing_key.value);
 	config_set_routing_key(&amqp->config, msg->routing_key.value);
 
-	if (ctx->complete_cb)
-		ctx->complete_cb(ctx->user_data);
+	ctx->complete_cb(true, ctx->user_data);
 
 	l_free(ctx);
 }
 
 void mesh_amqp_set_routing_key(struct mesh_amqp *amqp, const char *routing_key,
-			mesh_amqp_set_complete_cb_t complete, void *user_data)
+			mesh_amqp_complete_cb_t complete, void *user_data)
 {
 	struct message *msg = new_message(SET_ROUTING_KEY);
 	msg->complete_cb = routing_key_set_complete;
-	msg->user_data = new_set_complete_ctx(amqp, complete, user_data);
+	msg->user_data = new_complete_cb_ctx(complete, user_data);
 
 	strncpy(msg->routing_key.value, routing_key ?: "",
 				sizeof(msg->routing_key.value) - 1);
@@ -927,6 +1055,39 @@ void mesh_amqp_publish(struct mesh_amqp *amqp, const void *data, size_t size)
 
 	msg->publish.size = size;
 	memcpy(msg->publish.data, data, sizeof(msg->publish.data));
+
+	send_message(amqp, msg);
+}
+
+static void subscribe_call_complete(struct message *msg, struct mesh_amqp *amqp)
+{
+	struct complete_cb_ctx *ctx = msg->user_data;
+
+	ctx->complete_cb(strcmp(msg->subscribe.topic, ""), ctx->user_data);
+
+	l_free(ctx);
+}
+
+void mesh_amqp_subscribe(struct mesh_amqp *amqp, const char *topic,
+			mesh_amqp_complete_cb_t complete, void *user_data)
+{
+	struct message *msg = new_message(SUBSCRIBE);
+	msg->complete_cb = subscribe_call_complete;
+	msg->user_data = new_complete_cb_ctx(complete, user_data);
+
+	strncpy(msg->subscribe.topic, topic, sizeof(msg->subscribe.topic) - 1);
+
+	send_message(amqp, msg);
+}
+
+void mesh_amqp_unsubscribe(struct mesh_amqp *amqp, const char *topic,
+			   mesh_amqp_complete_cb_t complete, void *user_data)
+{
+	struct message *msg = new_message(UNSUBSCRIBE);
+	msg->complete_cb = subscribe_call_complete;
+	msg->user_data = new_complete_cb_ctx(complete, user_data);
+
+	strncpy(msg->subscribe.topic, topic, sizeof(msg->subscribe.topic) - 1);
 
 	send_message(amqp, msg);
 }

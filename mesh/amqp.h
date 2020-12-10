@@ -36,7 +36,7 @@ struct mesh_amqp_config {
 	char *routing_key;
 };
 
-typedef void (*mesh_amqp_set_complete_cb_t)(void *user_data);
+typedef void (*mesh_amqp_complete_cb_t)(bool result, void *user_data);
 typedef void (*mesh_amqp_rc_send_cb_t)(struct fd_msg *msg, size_t msg_len,
 							void *user_data);
 
@@ -46,19 +46,23 @@ void mesh_amqp_free(struct mesh_amqp *amqp);
 
 const char *mesh_amqp_get_url(struct mesh_amqp *amqp);
 void mesh_amqp_set_url(struct mesh_amqp *amqp, const char *url,
-		       mesh_amqp_set_complete_cb_t complete, void *user_data);
+			mesh_amqp_complete_cb_t complete, void *user_data);
 
 const char *mesh_amqp_get_exchange(struct mesh_amqp *amqp);
 void mesh_amqp_set_exchange(struct mesh_amqp *amqp, const char *exchange,
-			mesh_amqp_set_complete_cb_t complete, void *user_data);
+			mesh_amqp_complete_cb_t complete, void *user_data);
 
 const char *mesh_amqp_get_routing_key(struct mesh_amqp *amqp);
 void  mesh_amqp_set_routing_key(struct mesh_amqp *amqp, const char *routing_key,
-			mesh_amqp_set_complete_cb_t complete, void *user_data);
+			mesh_amqp_complete_cb_t complete, void *user_data);
 
 enum mesh_amqp_state mesh_amqp_get_state(struct mesh_amqp *amqp);
 
 void mesh_amqp_publish(struct mesh_amqp *amqp, const void *data, size_t size);
+void mesh_amqp_subscribe(struct mesh_amqp *amqp, const char *topic,
+			mesh_amqp_complete_cb_t complete, void *user_data);
+void mesh_amqp_unsubscribe(struct mesh_amqp *amqp, const char *topic,
+			mesh_amqp_complete_cb_t complete, void *user_data);
 
 void mesh_amqp_start(struct mesh_amqp *amqp);
 void mesh_amqp_stop(struct mesh_amqp *amqp);
