@@ -2457,6 +2457,27 @@ static bool lastheard_getter(struct l_dbus *dbus, struct l_dbus_message *msg,
 	return true;
 }
 
+static struct l_dbus_message *amqp_subscribe_call(struct l_dbus *dbus,
+						struct l_dbus_message *msg,
+							void *user_data)
+{
+	struct mesh_node *node = user_data;
+	const char *sender;
+	const char *pattern;
+
+	sender = l_dbus_message_get_sender(msg);
+
+	if (strcmp(sender, node->owner))
+		return dbus_error(msg, MESH_ERROR_NOT_AUTHORIZED, NULL);
+
+	if (!l_dbus_message_get_arguments(msg, "s", &pattern))
+		return dbus_error(msg, MESH_ERROR_INVALID_ARGS, NULL);
+
+	mesh_amqp_subscribe(node->amqp, pattern);
+
+	return l_dbus_message_new_method_return(msg);
+}
+
 static bool amqp_url_getter(struct l_dbus *dbus, struct l_dbus_message *msg,
 					struct l_dbus_message_builder *builder,
 					void *user_data)
@@ -2698,6 +2719,9 @@ static void setup_node_interface(struct l_dbus_interface *iface)
 
 static void setup_amqp_interface(struct l_dbus_interface *iface)
 {
+	l_dbus_interface_method(iface, "Subscribe", 0, amqp_subscribe_call,
+				"", "s", "pattern");
+
 	l_dbus_interface_property(iface, "Url", 0, "s", amqp_url_getter,
 							amqp_url_setter);
 
@@ -2709,7 +2733,6 @@ static void setup_amqp_interface(struct l_dbus_interface *iface)
 
 	l_dbus_interface_property(iface, "State", 0, "s",
 						amqp_state_getter, NULL);
-
 }
 
 void node_property_changed(struct mesh_node *node, const char *property)

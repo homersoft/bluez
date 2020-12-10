@@ -40,6 +40,7 @@ enum message_type {
 	SET_EXCHANGE,
 	SET_ROUTING_KEY,
 	PUBLISH,
+	SUBSCRIBE,
 	STOP,
 	STATE_CHANGED,
 	REMOTE_CONTROL,
@@ -71,6 +72,9 @@ struct message {
 			size_t size;
 			uint8_t data[384];
 		} publish;
+		struct message_subscribe {
+			char pattern[255];
+		} subscribe;
 		struct message_state_changed {
 			enum mesh_amqp_state state;
 		} state_changed;
@@ -98,6 +102,8 @@ struct amqp_thread_context {
 
 	struct mesh_amqp_config config;
 	enum mesh_amqp_state amqp_state;
+
+	struct l_queue *subscriptions;
 
 	int fd;
 	int tim_fd;
@@ -130,6 +136,7 @@ static bool amqp_read_handler(struct l_io *io, void *user_data)
 				return true;
 
 			case PUBLISH:
+			case SUBSCRIBE:
 			case STOP:
 				break;
 		}
@@ -437,9 +444,38 @@ static void connect_with_delay(struct amqp_thread_context *context, int delay)
 		return;
 	}
 
-	l_info("%p", context);
-
 	set_amqp_state(context, MESH_AMQP_STATE_CONNECTING);
+}
+
+static bool amqp_subscribe_topics(const char *queue_name,
+					struct amqp_thread_context *context)
+{
+	const struct l_queue_entry *subscription =
+				l_queue_get_entries(context->subscriptions);
+
+	while (subscription) {
+		amqp_rpc_reply_t reply;
+		const char *pattern = subscription->data;
+
+		amqp_queue_bind(context->conn_state, 1,
+				amqp_cstring_bytes(queue_name),
+				amqp_cstring_bytes(context->config.exchange),
+				amqp_cstring_bytes(pattern),
+				amqp_empty_table);
+
+		reply = amqp_get_rpc_reply(context->conn_state);
+		if (!is_reply_ok(&reply)) {
+			l_info("Bind failed: '%s'", pattern);
+			return false;
+		}
+
+		l_info("Exchange topic: '%s' bound with queue: '%s'",
+							pattern, queue_name);
+
+		subscription = subscription->next;
+	}
+
+	return true;
 }
 
 static bool amqp_consume(struct amqp_thread_context *context)
@@ -464,19 +500,8 @@ static bool amqp_consume(struct amqp_thread_context *context)
 
 	l_info("Queue: '%s' declared", name);
 
-	amqp_queue_bind(context->conn_state, 1, /* channel */
-			amqp_cstring_bytes(name), /* queue name */
-			amqp_cstring_bytes(context->config.exchange), /* exchange */
-			amqp_cstring_bytes("rc.#.raw"), /* routing_key */
-			amqp_empty_table); /* args */
-
-	reply = amqp_get_rpc_reply(context->conn_state);
-	if (!is_reply_ok(&reply)) {
-		l_info("Bind failed");
+	if (!amqp_subscribe_topics(name, context))
 		return false;
-	}
-
-	l_info("Exchange: '%s' bound with queue: '%s'", context->config.exchange, name);
 
 	amqp_basic_consume(context->conn_state, 1,
 			amqp_cstring_bytes(name), /* queue name */
@@ -559,6 +584,8 @@ static void control_message_handler(struct amqp_thread_context *context)
 
 			if (url_is_valid(context->config.url))
 				try_to_connect(context);
+			else
+				l_queue_clear(context->subscriptions, l_free);
 		} return;
 
 		case SET_EXCHANGE: {
@@ -576,13 +603,6 @@ static void control_message_handler(struct amqp_thread_context *context)
 						sizeof(ret_msg.exchange) - 1);
 
 			send(context->fd, &ret_msg, sizeof(ret_msg), 0);
-
-			if (context->amqp_state == MESH_AMQP_STATE_CONNECTED) {
-				destroy_connection(context);
-
-				if (url_is_valid(context->config.url))
-					try_to_connect(context);
-			}
 		} return;
 
 		case SET_ROUTING_KEY: {
@@ -608,6 +628,11 @@ static void control_message_handler(struct amqp_thread_context *context)
 
 			amqp_publish_handler(context, msg.publish.data,
 							msg.publish.size);
+			return;
+
+		case SUBSCRIBE:
+			l_queue_push_tail(context->subscriptions,
+					l_strdup(msg.subscribe.pattern));
 			return;
 
 		case STOP:
@@ -731,6 +756,7 @@ static void *amqp_thread(void *user_data)
 	l_free(context->config.url);
 	l_free(context->config.exchange);
 	l_free(context->config.routing_key);
+	l_queue_destroy(context->subscriptions, l_free);
 
 	return context;
 }
@@ -763,6 +789,7 @@ void mesh_amqp_start(struct mesh_amqp *amqp)
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
+	thread_context->subscriptions = l_queue_new();
 	thread_context->fd = fds[1];
 	thread_context->tim_fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
 	if (thread_context->tim_fd < 0) {
@@ -927,6 +954,15 @@ void mesh_amqp_publish(struct mesh_amqp *amqp, const void *data, size_t size)
 
 	msg->publish.size = size;
 	memcpy(msg->publish.data, data, sizeof(msg->publish.data));
+
+	send_message(amqp, msg);
+}
+
+void mesh_amqp_subscribe(struct mesh_amqp *amqp, const char *pattern)
+{
+	struct message *msg = new_message(SUBSCRIBE);
+	strncpy(msg->subscribe.pattern, pattern,
+					sizeof(msg->subscribe.pattern) - 1);
 
 	send_message(amqp, msg);
 }

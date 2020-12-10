@@ -46,7 +46,7 @@ void mesh_amqp_free(struct mesh_amqp *amqp);
 
 const char *mesh_amqp_get_url(struct mesh_amqp *amqp);
 void mesh_amqp_set_url(struct mesh_amqp *amqp, const char *url,
-		       mesh_amqp_set_complete_cb_t complete, void *user_data);
+			mesh_amqp_set_complete_cb_t complete, void *user_data);
 
 const char *mesh_amqp_get_exchange(struct mesh_amqp *amqp);
 void mesh_amqp_set_exchange(struct mesh_amqp *amqp, const char *exchange,
@@ -59,6 +59,7 @@ void  mesh_amqp_set_routing_key(struct mesh_amqp *amqp, const char *routing_key,
 enum mesh_amqp_state mesh_amqp_get_state(struct mesh_amqp *amqp);
 
 void mesh_amqp_publish(struct mesh_amqp *amqp, const void *data, size_t size);
+void mesh_amqp_subscribe(struct mesh_amqp *amqp, const char *pattern);
 
 void mesh_amqp_start(struct mesh_amqp *amqp);
 void mesh_amqp_stop(struct mesh_amqp *amqp);
