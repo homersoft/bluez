@@ -18,6 +18,7 @@
  */
 #include "mesh/amqp.h"
 #include "amqp_tcp_socket.h"
+#include "amqp_ssl_socket.h"
 
 #include <ell/ell.h>
 #include <pthread.h>
@@ -222,49 +223,34 @@ static bool is_reply_ok(amqp_rpc_reply_t *reply)
 	return false;
 }
 
-static bool amqp_connect_handler(struct amqp_thread_context *context)
+static bool amqp_connect_handler(struct amqp_thread_context *context,
+					struct amqp_connection_info *info)
 {
 	bool ret = false;
 	int status;
 	amqp_rpc_reply_t reply;
-	struct amqp_connection_info info;
-	char *tmp_url = NULL;
 	char *vhost = NULL;
 
-	if (!context->config.url) {
-		l_info("AMQP broker URL is not set!");
-		return false;
-	}
-
-	tmp_url =  l_strdup(context->config.url);
-
-	if (amqp_parse_url(tmp_url, &info) != AMQP_STATUS_OK) {
-		l_warn("Cannot parse URL: '%s'", context->config.url);
-		goto cleanup;
-	}
-
-	amqp_connection_close(context->conn_state, AMQP_REPLY_SUCCESS);
-
 	status = amqp_socket_open(amqp_get_socket(context->conn_state),
-						info.host, info.port);
+						info->host, info->port);
 
 	if (status != AMQP_STATUS_OK) {
 		l_error("amqp_socket_open() failed: %i", status);
 		goto cleanup;
 	}
 
-	vhost = l_strdup_printf("/%s", info.vhost);
+	vhost = l_strdup_printf("/%s", info->vhost);
 
 	reply = amqp_login(context->conn_state, vhost, 0, AMQP_DEFAULT_FRAME_SIZE, 15,
-		AMQP_SASL_METHOD_PLAIN, info.user, info.password);
+		AMQP_SASL_METHOD_PLAIN, info->user, info->password);
 
 	if (!is_reply_ok(&reply)) {
 		l_error("Login failed");
 		goto cleanup;
 	}
 
-	l_info("Connected to 'amqp://%s:***@%s:%i%s'",
-			info.user, info.host, info.port, vhost);
+	l_info("Connected to '%s://%s:****@%s:%i%s'", info->ssl ? "amqps" : "amqp",
+				info->user, info->host, info->port, vhost);
 
 	amqp_channel_open(context->conn_state, 1);
 	reply = amqp_get_rpc_reply(context->conn_state);
@@ -278,7 +264,6 @@ static bool amqp_connect_handler(struct amqp_thread_context *context)
 	ret = true;
 
 cleanup:
-	l_free(tmp_url);
 	l_free(vhost);
 
 	return ret;
@@ -415,18 +400,25 @@ static void destroy_connection(struct amqp_thread_context *context)
 	l_info("AMQP disconnected");
 }
 
-static bool new_connection(struct amqp_thread_context *context)
+static bool new_connection(struct amqp_thread_context *context,
+					struct amqp_connection_info *info)
 {
 	context->conn_state = amqp_new_connection();
 	if (!context->conn_state)
 		return false;
 
-	context->sock = amqp_tcp_socket_new(context->conn_state);
+	context->sock = info->ssl ? amqp_ssl_socket_new(context->conn_state)
+				: amqp_tcp_socket_new(context->conn_state);
 	if (!context->sock) {
 		amqp_destroy_connection(context->conn_state);
 		context->conn_state = NULL;
 
 		return false;
+	}
+
+	if (info->ssl) {
+		amqp_ssl_socket_set_verify_peer(context->sock, 0);
+		amqp_ssl_socket_set_verify_hostname(context->sock, 1);
 	}
 
 	return true;
@@ -540,13 +532,30 @@ static bool amqp_consume(struct amqp_thread_context *context)
 
 static bool try_to_connect(struct amqp_thread_context *context)
 {
+	struct amqp_connection_info info;
+	char *tmp_url;
+
+	if (!context->config.url) {
+		l_info("AMQP broker URL is not set!");
+		return false;
+	}
+
+	tmp_url =  l_strdup(context->config.url);
+
+	if (amqp_parse_url(tmp_url, &info) != AMQP_STATUS_OK) {
+		l_warn("Cannot parse URL: '%s'", context->config.url);
+
+		l_free(tmp_url);
+		return false;
+	}
+
 	l_info("AMQP trying to connect...");
 
-	if (!new_connection(context)) {
+	if (!new_connection(context, &info)) {
 		goto reconnect;
 	}
 
-	if (!amqp_connect_handler(context))
+	if (!amqp_connect_handler(context, &info))
 	{
 		destroy_connection(context);
 		goto reconnect;
@@ -565,10 +574,12 @@ static bool try_to_connect(struct amqp_thread_context *context)
 	}
 
 	set_amqp_state(context, MESH_AMQP_STATE_CONNECTED);
+	l_free(tmp_url);
 	return true;
 
 reconnect:
 	connect_with_delay(context, DEFAULT_RECONNECT_DELAY);
+	l_free(tmp_url);
 	return false;
 }
 
