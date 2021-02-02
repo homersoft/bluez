@@ -300,9 +300,28 @@ static void amqp_publish_handler(struct amqp_thread_context *context, uint8_t *d
 	amqp_bytes_t body;
 	char *key = l_strdup_printf("mon.%s.raw", context->config.routing_key);
 
-	props._flags = AMQP_BASIC_CONTENT_TYPE_FLAG | AMQP_BASIC_DELIVERY_MODE_FLAG;
+	amqp_table_entry_t headers[] = {
+		{
+			.key = amqp_cstring_bytes("gateway-uuid"),
+			.value = {
+				.kind = AMQP_FIELD_KIND_UTF8,
+				.value = {
+					.bytes = amqp_cstring_bytes(context->config.uuid)
+				}
+			}
+		}
+	};
+
+	props._flags = (
+		AMQP_BASIC_CONTENT_TYPE_FLAG |
+		AMQP_BASIC_DELIVERY_MODE_FLAG |
+		AMQP_BASIC_HEADERS_FLAG
+	);
 	props.content_type = amqp_cstring_bytes("application/octet-stream");
 	props.delivery_mode = 2; /* persistent delivery mode */
+
+	props.headers.num_entries = L_ARRAY_SIZE(headers);
+	props.headers.entries = headers;
 
 	body.len = size;
 	body.bytes = data;
@@ -340,6 +359,12 @@ static void config_set_routing_key(struct mesh_amqp_config *config,
 {
 	l_free(config->routing_key);
 	config->routing_key = l_strdup(routing_key ?: "");
+}
+
+static void config_set_uuid(struct mesh_amqp_config *config, const uint8_t uuid[16])
+{
+	l_free(config->uuid);
+	config->uuid = l_util_hexstring(uuid, 16);
 }
 
 static inline bool url_is_empty(const char *url)
@@ -890,7 +915,7 @@ struct mesh_amqp *mesh_amqp_new(mesh_amqp_rc_send_cb_t rc_send_cb, void *user_da
 	return amqp;
 }
 
-void mesh_amqp_start(struct mesh_amqp *amqp)
+void mesh_amqp_start(struct mesh_amqp *amqp, const uint8_t uuid[16])
 {
 	pthread_attr_t attr;
 	int fds[2];
@@ -915,6 +940,7 @@ void mesh_amqp_start(struct mesh_amqp *amqp)
 	config_set_url(&thread_context->config, amqp->config.url);
 	config_set_exchange(&thread_context->config, amqp->config.exchange);
 	config_set_routing_key(&thread_context->config, amqp->config.routing_key);
+	config_set_uuid(&thread_context->config, uuid);
 
 	amqp->thread_started = !pthread_create(&amqp->thread, &attr, amqp_thread, thread_context);
 	amqp->queue = l_queue_new();

@@ -497,7 +497,7 @@ static bool init_from_storage(struct mesh_config_node *db_node,
 	node->relay.interval = db_node->modes.relay.interval;
 	node->beacon = db_node->modes.beacon;
 
-	mesh_amqp_start(node->amqp);
+	mesh_amqp_start(node->amqp, node->uuid);
 
 	l_debug("relay %2.2x, proxy %2.2x, lpn %2.2x, friend %2.2x",
 			node->relay.mode, node->proxy, node->lpn, node->friend);
@@ -2886,5 +2886,5 @@ void node_finalize_new_node(struct mesh_node *node, struct mesh_io *io)
 
 	/* Register callback for the node's io */
 	attach_io(node, io);
-	mesh_amqp_start(node->amqp);
+	mesh_amqp_start(node->amqp, node->uuid);
 }
