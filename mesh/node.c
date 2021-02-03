@@ -267,8 +267,8 @@ static struct mesh_node *node_new(const uint8_t uuid[16])
 	node->net = mesh_net_new(node);
 	node->elements = l_queue_new();
 	node->pages = l_queue_new();
-	node->amqp = mesh_amqp_new(rc_msg_send, node);
 	memcpy(node->uuid, uuid, sizeof(node->uuid));
+	node->amqp = mesh_amqp_new(rc_msg_send, node);
 	set_defaults(node);
 
 	return node;

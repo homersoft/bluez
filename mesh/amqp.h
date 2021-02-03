@@ -23,6 +23,7 @@
 #include "mesh/fd_msg.h"
 
 struct mesh_amqp;
+struct mesh_node;
 
 enum mesh_amqp_state {
 	MESH_AMQP_STATE_DISCONNECTED = 0,
@@ -34,6 +35,7 @@ struct mesh_amqp_config {
 	char *url;
 	char *exchange;
 	char *routing_key;
+	char *uuid;
 };
 
 typedef void (*mesh_amqp_complete_cb_t)(bool result, void *user_data);
@@ -41,7 +43,7 @@ typedef void (*mesh_amqp_rc_send_cb_t)(struct fd_msg *msg, size_t msg_len,
 							void *user_data);
 
 struct mesh_amqp *mesh_amqp_new(mesh_amqp_rc_send_cb_t rc_send_cb,
-							void *user_data);
+						struct mesh_node *node);
 void mesh_amqp_free(struct mesh_amqp *amqp);
 
 const char *mesh_amqp_get_url(struct mesh_amqp *amqp);
