@@ -28,6 +28,8 @@
 #include <unistd.h>
 #include <string.h>
 
+#include "mesh/node.h"
+
 static const int DEFAULT_RECONNECT_DELAY = 5;
 
 
@@ -231,6 +233,22 @@ static bool amqp_connect_handler(struct amqp_thread_context *context,
 	amqp_rpc_reply_t reply;
 	char *vhost = NULL;
 
+	amqp_table_entry_t props_entries[] = {
+		{
+			.key = amqp_cstring_bytes("gateway"),
+			.value = {
+				.kind = AMQP_FIELD_KIND_UTF8,
+				.value = {
+					.bytes = amqp_cstring_bytes(context->config.uuid),
+				}
+			}
+		}
+	};
+	amqp_table_t props = {
+		.num_entries = L_ARRAY_SIZE(props_entries),
+		.entries = props_entries,
+	};
+
 	status = amqp_socket_open(amqp_get_socket(context->conn_state),
 						info->host, info->port);
 
@@ -241,8 +259,9 @@ static bool amqp_connect_handler(struct amqp_thread_context *context,
 
 	vhost = l_strdup_printf("/%s", info->vhost);
 
-	reply = amqp_login(context->conn_state, vhost, 0, AMQP_DEFAULT_FRAME_SIZE, 15,
-		AMQP_SASL_METHOD_PLAIN, info->user, info->password);
+	reply = amqp_login_with_properties(context->conn_state, vhost, 0,
+			AMQP_DEFAULT_FRAME_SIZE, 15, &props,
+			AMQP_SASL_METHOD_PLAIN, info->user, info->password);
 
 	if (!is_reply_ok(&reply)) {
 		l_error("Login failed");
@@ -340,6 +359,13 @@ static void config_set_routing_key(struct mesh_amqp_config *config,
 {
 	l_free(config->routing_key);
 	config->routing_key = l_strdup(routing_key ?: "");
+}
+
+static void config_set_uuid(struct mesh_amqp_config *config,
+							const char *uuid)
+{
+	l_free(config->uuid);
+	config->uuid = l_strdup(uuid ?: "");
 }
 
 static inline bool url_is_empty(const char *url)
@@ -875,17 +901,21 @@ static void *amqp_thread(void *user_data)
 	return context;
 }
 
-struct mesh_amqp *mesh_amqp_new(mesh_amqp_rc_send_cb_t rc_send_cb, void *user_data)
+struct mesh_amqp *mesh_amqp_new(mesh_amqp_rc_send_cb_t rc_send_cb, struct mesh_node *node)
 {
+	char *uuid = l_util_hexstring(node_uuid_get(node), 16);
 	struct mesh_amqp *amqp = l_new(struct mesh_amqp, 1);
 	memset(amqp, 0, sizeof(*amqp));
 
 	amqp->rc_send_cb = rc_send_cb;
-	amqp->user_data = user_data;
+	amqp->user_data = node;
 
 	config_set_url(&amqp->config, "");
 	config_set_exchange(&amqp->config, "");
 	config_set_routing_key(&amqp->config, "");
+	config_set_uuid(&amqp->config, uuid);
+
+	l_free(uuid);
 
 	return amqp;
 }
@@ -915,6 +945,7 @@ void mesh_amqp_start(struct mesh_amqp *amqp)
 	config_set_url(&thread_context->config, amqp->config.url);
 	config_set_exchange(&thread_context->config, amqp->config.exchange);
 	config_set_routing_key(&thread_context->config, amqp->config.routing_key);
+	config_set_uuid(&thread_context->config, amqp->config.uuid);
 
 	amqp->thread_started = !pthread_create(&amqp->thread, &attr, amqp_thread, thread_context);
 	amqp->queue = l_queue_new();
