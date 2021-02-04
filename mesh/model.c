@@ -813,6 +813,15 @@ static inline void send_fd(void *data, size_t len, void *user_data)
 	fd_msg_send(user_data, data, len);
 }
 
+static inline uint64_t get_timestamp(void)
+{
+	struct timeval tv;
+
+	gettimeofday(&tv, NULL);
+
+	return (uint64_t)(tv.tv_sec) * 1000 + (uint64_t)(tv.tv_usec) / 1000;
+}
+
 static void send_fd_dev_key_msg_rcvd(uint8_t ele_idx, uint16_t src,
 					uint16_t app_idx, uint16_t net_idx,
 					uint16_t size, const uint8_t *data,
@@ -824,6 +833,7 @@ static void send_fd_dev_key_msg_rcvd(uint8_t ele_idx, uint16_t src,
 	msg->element_idx = ele_idx;
 	msg->src_addr = src;
 	msg->net_idx = net_idx;
+	msg->timestamp = get_timestamp();
 
 	send_callback(msg, sizeof(*msg) + size, user_data);
 	l_free(msg);
@@ -898,6 +908,7 @@ static void send_fd_msg_rcvd(uint8_t ele_idx,
 	msg->src_addr = src;
 	msg->dst_addr = dst;
 	msg->app_idx = app_idx;
+	msg->timestamp = get_timestamp();
 
 	if (virt) {
 		msg->dst_addr = virt->addr;
