@@ -37,6 +37,7 @@ struct fd_msg {
 	uint16_t net_idx;
 	uint8_t ttl;
 	uint8_t label[16];
+	uint64_t timestamp;
 	uint8_t data[];
 } __attribute__((packed));
 
