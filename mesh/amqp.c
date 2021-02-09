@@ -235,14 +235,24 @@ static bool amqp_connect_handler(struct amqp_thread_context *context,
 
 	amqp_table_entry_t props_entries[] = {
 		{
-			.key = amqp_cstring_bytes("gateway"),
+			.key = amqp_cstring_bytes("uuid"),
 			.value = {
 				.kind = AMQP_FIELD_KIND_UTF8,
 				.value = {
 					.bytes = amqp_cstring_bytes(context->config.uuid),
 				}
 			}
-		}
+		},
+		{
+			.key = amqp_cstring_bytes("routing_key"),
+			.value = {
+				.kind = AMQP_FIELD_KIND_UTF8,
+				.value = {
+					.bytes = amqp_cstring_bytes(context->config.routing_key),
+				}
+			}
+		},
+
 	};
 	amqp_table_t props = {
 		.num_entries = L_ARRAY_SIZE(props_entries),
