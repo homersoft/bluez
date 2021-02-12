@@ -41,7 +41,7 @@ typedef void (*complete_cb_t)(struct message *msg, struct mesh_amqp *amqp);
 enum message_type {
 	SET_URL,
 	SET_EXCHANGE,
-	SET_ROUTING_KEY,
+	SET_IDENTITY,
 	PUBLISH,
 	SUBSCRIBE,
 	UNSUBSCRIBE,
@@ -68,10 +68,10 @@ struct message {
 		struct message_exchange {
 			char value[64];
 		} exchange;
-		struct message_routing_key
+		struct message_identity
 		{
 			char value[64];
-		} routing_key;
+		} identity;
 		struct message_publish {
 			size_t size;
 			uint8_t data[384];
@@ -129,7 +129,7 @@ static bool amqp_read_handler(struct l_io *io, void *user_data)
 
 			case SET_URL:
 			case SET_EXCHANGE:
-			case SET_ROUTING_KEY:
+			case SET_IDENTITY:
 			case SUBSCRIBE:
 			case UNSUBSCRIBE:
 				msg.complete_cb(&msg, amqp);
@@ -244,11 +244,11 @@ static bool amqp_connect_handler(struct amqp_thread_context *context,
 			}
 		},
 		{
-			.key = amqp_cstring_bytes("routing_key"),
+			.key = amqp_cstring_bytes("identity"),
 			.value = {
 				.kind = AMQP_FIELD_KIND_UTF8,
 				.value = {
-					.bytes = amqp_cstring_bytes(context->config.routing_key),
+					.bytes = amqp_cstring_bytes(context->config.identity),
 				}
 			}
 		},
@@ -364,11 +364,11 @@ static void config_set_exchange(struct mesh_amqp_config *config,
 	config->exchange = l_strdup(exchange ?: "");
 }
 
-static void config_set_routing_key(struct mesh_amqp_config *config,
-				   const char *routing_key)
+static void config_set_identity(struct mesh_amqp_config *config,
+				   const char *identity)
 {
-	l_free(config->routing_key);
-	config->routing_key = l_strdup(routing_key ?: "");
+	l_free(config->identity);
+	config->identity = l_strdup(identity ?: "");
 }
 
 static void config_set_uuid(struct mesh_amqp_config *config,
@@ -482,7 +482,7 @@ static bool amqp_subscribe_topic(const char *topic,
 	amqp_rpc_reply_t reply;
 
 	char *queue_name =
-		l_strdup_printf("rc.%s.raw", context->config.routing_key);
+		l_strdup_printf("rc.%s.raw", context->config.identity);
 
 	amqp_queue_bind(context->conn_state, 1,
 			amqp_cstring_bytes(queue_name),
@@ -524,10 +524,10 @@ static bool amqp_consume(struct amqp_thread_context *context)
 {
 	amqp_rpc_reply_t reply;
 
-	char *name = l_strdup_printf("rc.%s.raw", context->config.routing_key);
+	char *queue_name = l_strdup_printf("rc.%s.raw", context->config.identity);
 
 	amqp_queue_declare(context->conn_state, 1,
-			amqp_cstring_bytes(name), /* name */
+			amqp_cstring_bytes(queue_name), /* name */
 			0, /* passive */
 			0, /* durable */
 			1, /* exclusive */
@@ -537,16 +537,16 @@ static bool amqp_consume(struct amqp_thread_context *context)
 	reply = amqp_get_rpc_reply(context->conn_state);
 	if (!is_reply_ok(&reply)) {
 		l_info("Queue declaration failed");
-		return false;
+		goto error;
 	}
 
-	l_info("Queue: '%s' declared", name);
+	l_info("Queue: '%s' declared", queue_name);
 
 	if (!amqp_subscribe_topics(context))
-		return false;
+		goto error;
 
 	amqp_basic_consume(context->conn_state, 1,
-			amqp_cstring_bytes(name), /* queue name */
+			amqp_cstring_bytes(queue_name), /* queue name */
 			amqp_empty_bytes, /* tag */
 			0, /* no_local */
 			0, /* no_ack */
@@ -556,14 +556,17 @@ static bool amqp_consume(struct amqp_thread_context *context)
 	reply = amqp_get_rpc_reply(context->conn_state);
 	if (!is_reply_ok(&reply)) {
 		l_info("Consume failed");
-		return false;
+		goto error;
 	}
 
 	l_info("Consumer started");
 
-	l_free(name);
-
+	l_free(queue_name);
 	return true;
+
+error:
+	l_free(queue_name);
+	return false;
 }
 
 static bool try_to_connect(struct amqp_thread_context *context)
@@ -630,7 +633,7 @@ static bool amqp_unsubscribe_topic(const char *topic,
 	amqp_rpc_reply_t reply;
 
 	char *queue_name =
-		l_strdup_printf("rc.%s.raw", context->config.routing_key);
+		l_strdup_printf("rc.%s.raw", context->config.identity);
 
 	amqp_queue_unbind(context->conn_state, 1,
 				amqp_cstring_bytes(queue_name),
@@ -748,13 +751,13 @@ static void control_message_handler(struct amqp_thread_context *context)
 			}
 			return;
 
-		case SET_ROUTING_KEY:
-			config_set_routing_key(&context->config,
-							msg.routing_key.value);
+		case SET_IDENTITY:
+			config_set_identity(&context->config,
+							msg.identity.value);
 
-			strncpy(ret_msg.routing_key.value,
-					context->config.routing_key,
-					sizeof(ret_msg.routing_key) - 1);
+			strncpy(ret_msg.identity.value,
+					context->config.identity,
+					sizeof(ret_msg.identity) - 1);
 
 			send(context->fd, &ret_msg, sizeof(ret_msg), 0);
 			return;
@@ -905,7 +908,7 @@ static void *amqp_thread(void *user_data)
 
 	l_free(context->config.url);
 	l_free(context->config.exchange);
-	l_free(context->config.routing_key);
+	l_free(context->config.identity);
 	l_queue_destroy(context->subscriptions, l_free);
 
 	return context;
@@ -922,7 +925,7 @@ struct mesh_amqp *mesh_amqp_new(mesh_amqp_rc_send_cb_t rc_send_cb, struct mesh_n
 
 	config_set_url(&amqp->config, "");
 	config_set_exchange(&amqp->config, "");
-	config_set_routing_key(&amqp->config, "");
+	config_set_identity(&amqp->config, "");
 	config_set_uuid(&amqp->config, uuid);
 
 	l_free(uuid);
@@ -954,7 +957,7 @@ void mesh_amqp_start(struct mesh_amqp *amqp)
 
 	config_set_url(&thread_context->config, amqp->config.url);
 	config_set_exchange(&thread_context->config, amqp->config.exchange);
-	config_set_routing_key(&thread_context->config, amqp->config.routing_key);
+	config_set_identity(&thread_context->config, amqp->config.identity);
 	config_set_uuid(&thread_context->config, amqp->config.uuid);
 
 	amqp->thread_started = !pthread_create(&amqp->thread, &attr, amqp_thread, thread_context);
@@ -973,7 +976,7 @@ void mesh_amqp_free(struct mesh_amqp *amqp)
 
 	l_free(amqp->config.url);
 	l_free(amqp->config.exchange);
-	l_free(amqp->config.routing_key);
+	l_free(amqp->config.identity);
 
 	l_io_destroy(amqp->io);
 	l_queue_destroy(amqp->queue, l_free);
@@ -1066,32 +1069,32 @@ void mesh_amqp_set_exchange(struct mesh_amqp *amqp, const char *exchange,
 	send_message(amqp, msg);
 }
 
-const char *mesh_amqp_get_routing_key(struct mesh_amqp *amqp)
+const char *mesh_amqp_get_identity(struct mesh_amqp *amqp)
 {
-	return amqp->config.routing_key;
+	return amqp->config.identity;
 }
 
-static void routing_key_set_complete(struct message *msg, struct mesh_amqp *amqp)
+static void identity_set_complete(struct message *msg, struct mesh_amqp *amqp)
 {
 	struct complete_cb_ctx *ctx = msg->user_data;
 
-	l_debug("routing_key: '%s'", msg->routing_key.value);
-	config_set_routing_key(&amqp->config, msg->routing_key.value);
+	l_debug("identity: '%s'", msg->identity.value);
+	config_set_identity(&amqp->config, msg->identity.value);
 
 	ctx->complete_cb(true, ctx->user_data);
 
 	l_free(ctx);
 }
 
-void mesh_amqp_set_routing_key(struct mesh_amqp *amqp, const char *routing_key,
+void mesh_amqp_set_identity(struct mesh_amqp *amqp, const char *identity,
 			mesh_amqp_complete_cb_t complete, void *user_data)
 {
-	struct message *msg = new_message(SET_ROUTING_KEY);
-	msg->complete_cb = routing_key_set_complete;
+	struct message *msg = new_message(SET_IDENTITY);
+	msg->complete_cb = identity_set_complete;
 	msg->user_data = new_complete_cb_ctx(complete, user_data);
 
-	strncpy(msg->routing_key.value, routing_key ?: "",
-				sizeof(msg->routing_key.value) - 1);
+	strncpy(msg->identity.value, identity ?: "",
+				sizeof(msg->identity.value) - 1);
 
 	send_message(amqp, msg);
 }

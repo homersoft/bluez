@@ -34,7 +34,7 @@ enum mesh_amqp_state {
 struct mesh_amqp_config {
 	char *url;
 	char *exchange;
-	char *routing_key;
+	char *identity;
 	char *uuid;
 };
 
@@ -54,8 +54,8 @@ const char *mesh_amqp_get_exchange(struct mesh_amqp *amqp);
 void mesh_amqp_set_exchange(struct mesh_amqp *amqp, const char *exchange,
 			mesh_amqp_complete_cb_t complete, void *user_data);
 
-const char *mesh_amqp_get_routing_key(struct mesh_amqp *amqp);
-void  mesh_amqp_set_routing_key(struct mesh_amqp *amqp, const char *routing_key,
+const char *mesh_amqp_get_identity(struct mesh_amqp *amqp);
+void  mesh_amqp_set_identity(struct mesh_amqp *amqp, const char *identity,
 			mesh_amqp_complete_cb_t complete, void *user_data);
 
 enum mesh_amqp_state mesh_amqp_get_state(struct mesh_amqp *amqp);

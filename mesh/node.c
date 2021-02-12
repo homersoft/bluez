@@ -2627,17 +2627,17 @@ static struct l_dbus_message *amqp_exchange_setter(struct l_dbus *dbus,
 	return NULL;
 }
 
-static bool amqp_routing_key_getter(struct l_dbus *dbus, struct l_dbus_message *msg,
+static bool amqp_identity_getter(struct l_dbus *dbus, struct l_dbus_message *msg,
 					struct l_dbus_message_builder *builder,
 					void *user_data)
 {
 	struct mesh_node *node = user_data;
-	const char *routing_key = mesh_amqp_get_routing_key(node->amqp);
+	const char *identity = mesh_amqp_get_identity(node->amqp);
 
-	if (!routing_key)
+	if (!identity)
 		return false;
 
-	l_dbus_message_builder_append_basic(builder, 's', routing_key);
+	l_dbus_message_builder_append_basic(builder, 's', identity);
 	return true;
 }
 
@@ -2666,7 +2666,7 @@ static bool amqp_state_getter(struct l_dbus *dbus, struct l_dbus_message *msg,
 	return true;
 }
 
-static struct l_dbus_message *amqp_routing_key_setter(struct l_dbus *dbus,
+static struct l_dbus_message *amqp_identity_setter(struct l_dbus *dbus,
 					struct l_dbus_message *msg,
 					struct l_dbus_message_iter *value,
 					l_dbus_property_complete_cb_t complete,
@@ -2674,18 +2674,21 @@ static struct l_dbus_message *amqp_routing_key_setter(struct l_dbus *dbus,
 {
 	struct mesh_node *node = user_data;
 	const char *sender;
-	const char *routing_key;
+	const char *identity;
+
 
 	sender = l_dbus_message_get_sender(msg);
 
 	if (strcmp(sender, node->owner))
 		return dbus_error(msg, MESH_ERROR_NOT_AUTHORIZED, NULL);
 
-	if (!l_dbus_message_iter_get_variant(value, "s", &routing_key))
+	if (!l_dbus_message_iter_get_variant(value, "s", &identity))
 		return dbus_error(msg, MESH_ERROR_INVALID_ARGS,
 							"String expected");
 
-	mesh_amqp_set_routing_key(node->amqp, routing_key, property_set_complete,
+	l_info("Identity: %s", identity);
+
+	mesh_amqp_set_identity(node->amqp, identity, property_set_complete,
 			new_callback_complete_ctx(dbus, msg, NULL, complete));
 
 	return NULL;
@@ -2767,8 +2770,8 @@ static void setup_amqp_interface(struct l_dbus_interface *iface)
 	l_dbus_interface_property(iface, "Exchange", 0, "s",
 				  amqp_exchange_getter, amqp_exchange_setter);
 
-	l_dbus_interface_property(iface, "RoutingKey", 0, "s",
-				  amqp_routing_key_getter, amqp_routing_key_setter);
+	l_dbus_interface_property(iface, "Identity", 0, "s",
+				  amqp_identity_getter, amqp_identity_setter);
 
 	l_dbus_interface_property(iface, "State", 0, "s",
 						amqp_state_getter, NULL);
