@@ -327,7 +327,7 @@ static void amqp_publish_handler(struct amqp_thread_context *context, uint8_t *d
 	amqp_rpc_reply_t reply;
 	amqp_basic_properties_t props;
 	amqp_bytes_t body;
-	char *key = l_strdup_printf("mon.%s.raw", context->config.routing_key);
+	char *key = l_strdup_printf("mon.%s.raw", context->config.uuid);
 
 	props._flags = AMQP_BASIC_CONTENT_TYPE_FLAG | AMQP_BASIC_DELIVERY_MODE_FLAG;
 	props.content_type = amqp_cstring_bytes("application/octet-stream");
