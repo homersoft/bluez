@@ -306,7 +306,7 @@ static bool amqp_exchange_handler(struct amqp_thread_context *context)
 			amqp_cstring_bytes(context->config.exchange), /* name */
 			amqp_cstring_bytes("topic"), /* type */
 			0, /* passive */
-			1, /* durable */
+			0, /* durable */
 			0, /* auto_delete */
 			0, /* internal */
 			amqp_empty_table /* arguments */);
@@ -331,7 +331,7 @@ static void amqp_publish_handler(struct amqp_thread_context *context, uint8_t *d
 
 	props._flags = AMQP_BASIC_CONTENT_TYPE_FLAG | AMQP_BASIC_DELIVERY_MODE_FLAG;
 	props.content_type = amqp_cstring_bytes("application/octet-stream");
-	props.delivery_mode = 2; /* persistent delivery mode */
+	props.delivery_mode = 1; /* transient delivery mode */
 
 	body.len = size;
 	body.bytes = data;
