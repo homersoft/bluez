@@ -2631,7 +2631,9 @@ static void process_beacon(void *net_ptr, void *user_data)
 
 	l_info("key_id: %u, ivi: %u, kr: %d, ivu: %d", beacon_data->key_id, net->iv_index, !!(subnet->kr_phase == KEY_REFRESH_PHASE_TWO), net->iv_update);
 
-	ret = net_key_beacon_refresh(beacon_data->key_id, net->iv_index,
+
+	if (net->iv_update ^ ivu)
+		ret = net_key_beacon_refresh(beacon_data->key_id, net->iv_index,
 		!!(subnet->kr_phase == KEY_REFRESH_PHASE_TWO), net->iv_update);
 
 	l_info("ret: %d", ret);
