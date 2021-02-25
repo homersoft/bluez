@@ -2628,6 +2628,19 @@ static void process_beacon(void *net_ptr, void *user_data)
 		!!(subnet->kr_phase == KEY_REFRESH_PHASE_TWO), net->iv_update);
 }
 
+static void process_beacon_remote(void *net_ptr, void *user_data)
+{
+	l_info("process_remote_beacon");
+	process_beacon(net_ptr, user_data);
+}
+
+static void process_beacon_local(void *net_ptr, void *user_data)
+{
+	l_info("process_local_beacon");
+	process_beacon(net_ptr, user_data);
+}
+
+
 static void beacon_recv(void *user_data, struct mesh_io_recv_info *info,
 					const uint8_t *data, uint16_t len)
 {
@@ -2656,7 +2669,7 @@ static void beacon_recv(void *user_data, struct mesh_io_recv_info *info,
 		return;
 	}
 
-	l_queue_foreach(nets, process_beacon, &beacon_data);
+	l_queue_foreach(nets, process_beacon_remote, &beacon_data);
 
 	if (beacon_data.processed)
 		net_key_beacon_seen(beacon_data.key_id);
@@ -2672,7 +2685,7 @@ void net_local_beacon(uint32_t key_id, uint8_t *beacon)
 	};
 
 	/* Deliver locally generated beacons to all nodes */
-	l_queue_foreach(nets, process_beacon, &beacon_data);
+	l_queue_foreach(nets, process_beacon_local, &beacon_data);
 }
 
 bool mesh_net_set_beacon_mode(struct mesh_net *net, bool enable)
