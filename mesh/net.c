@@ -2618,6 +2618,8 @@ static void process_beacon(void *net_ptr, void *user_data)
 	 * Ignore the beacon if it doesn't change anything, unless we're
 	 * doing IV Recovery
 	 */
+	l_info("net: iv_upd_state: %d, ivi: %u, net_ivi: %u, ivu: %d, net_ivu: %d", net->iv_upd_state, ivi, net->iv_index, ivu, net->iv_update);
+
 	if (net->iv_upd_state == IV_UPD_INIT || ivi != net->iv_index ||
 							ivu != net->iv_update)
 		update_iv_ivu_state(net, ivi, ivu);
