@@ -2694,6 +2694,7 @@ void net_local_beacon(uint32_t key_id, uint8_t *beacon)
 	};
 
 	/* Deliver locally generated beacons to all nodes */
+	l_info("len: %u", l_queue_length(nets));
 	l_queue_foreach(nets, process_beacon_local, &beacon_data);
 }
 
