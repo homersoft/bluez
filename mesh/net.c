@@ -2500,20 +2500,25 @@ static int key_refresh_finish(struct mesh_net *net, uint16_t idx)
 	return MESH_STATUS_SUCCESS;
 }
 
-static void update_kr_state(struct mesh_subnet *subnet, bool kr, uint32_t id)
+static bool update_kr_state(struct mesh_subnet *subnet, bool kr, uint32_t id)
 {
 	/* Figure out the key refresh phase */
 	if (kr) {
 		if (id == subnet->net_key_upd) {
 			l_debug("Beacon based KR phase 2 change");
-			key_refresh_phase_two(subnet->net, subnet->idx);
+			return (key_refresh_phase_two(subnet->net, subnet->idx)
+							== MESH_STATUS_SUCCESS);
+
 		}
 	} else {
 		if (id == subnet->net_key_upd) {
 			l_debug("Beacon based KR phase 3 change");
-			key_refresh_finish(subnet->net, subnet->idx);
+			return (key_refresh_finish(subnet->net, subnet->idx)
+							== MESH_STATUS_SUCCESS);
 		}
 	}
+
+	return false;
 }
 
 static bool update_iv_ivu_state(struct mesh_net *net, uint32_t iv_index,
@@ -2587,7 +2592,6 @@ static bool update_iv_ivu_state(struct mesh_net *net, uint32_t iv_index,
 
 static void process_beacon(void *net_ptr, void *user_data)
 {
-	bool ret;
 	bool updated = false;
 	struct mesh_net *net = net_ptr;
 	struct net_beacon_data *beacon_data = user_data;
@@ -2620,40 +2624,19 @@ static void process_beacon(void *net_ptr, void *user_data)
 	 * Ignore the beacon if it doesn't change anything, unless we're
 	 * doing IV Recovery
 	 */
-	l_info("net: iv_upd_state: %d, ivi: %u, net_ivi: %u, ivu: %d, net_ivu: %d", net->iv_upd_state, ivi, net->iv_index, ivu, net->iv_update);
-
 	if (net->iv_upd_state == IV_UPD_INIT || ivi != net->iv_index ||
 							ivu != net->iv_update)
-		updated = update_iv_ivu_state(net, ivi, ivu);
-
-	l_info("kr: %d, local_kr: %d, kr_phase: %u", kr, local_kr, subnet->kr_phase);
+		updated |= update_iv_ivu_state(net, ivi, ivu);
 
 	if (kr != local_kr)
-		update_kr_state(subnet, kr, beacon_data->key_id);
-
-	l_info("key_id: %u, ivi: %u, kr: %d, ivu: %d", beacon_data->key_id, net->iv_index, !!(subnet->kr_phase == KEY_REFRESH_PHASE_TWO), net->iv_update);
-
+		updated |= update_kr_state(subnet, kr, beacon_data->key_id);
 
 	if (updated) {
-		ret = net_key_beacon_refresh(beacon_data->key_id, net->iv_index,
-		!!(subnet->kr_phase == KEY_REFRESH_PHASE_TWO), net->iv_update);
-
-		l_info("ret: %d", ret);
+		net_key_beacon_refresh(beacon_data->key_id, net->iv_index,
+				!!(subnet->kr_phase == KEY_REFRESH_PHASE_TWO),
+								net->iv_update);
 	}
 }
-
-static void process_beacon_remote(void *net_ptr, void *user_data)
-{
-	l_info("process_remote_beacon");
-	process_beacon(net_ptr, user_data);
-}
-
-static void process_beacon_local(void *net_ptr, void *user_data)
-{
-	l_info("process_local_beacon");
-	process_beacon(net_ptr, user_data);
-}
-
 
 static void beacon_recv(void *user_data, struct mesh_io_recv_info *info,
 					const uint8_t *data, uint16_t len)
@@ -2683,7 +2666,7 @@ static void beacon_recv(void *user_data, struct mesh_io_recv_info *info,
 		return;
 	}
 
-	l_queue_foreach(nets, process_beacon_remote, &beacon_data);
+	l_queue_foreach(nets, process_beacon, &beacon_data);
 
 	if (beacon_data.processed)
 		net_key_beacon_seen(beacon_data.key_id);
@@ -2699,8 +2682,7 @@ void net_local_beacon(uint32_t key_id, uint8_t *beacon)
 	};
 
 	/* Deliver locally generated beacons to all nodes */
-	l_info("len: %u", l_queue_length(nets));
-	l_queue_foreach(nets, process_beacon_local, &beacon_data);
+	l_queue_foreach(nets, process_beacon, &beacon_data);
 }
 
 bool mesh_net_set_beacon_mode(struct mesh_net *net, bool enable)
