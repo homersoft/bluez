@@ -2586,6 +2586,7 @@ static void update_iv_ivu_state(struct mesh_net *net, uint32_t iv_index,
 
 static void process_beacon(void *net_ptr, void *user_data)
 {
+	bool ret;
 	struct mesh_net *net = net_ptr;
 	struct net_beacon_data *beacon_data = user_data;
 	uint32_t ivi;
@@ -2628,8 +2629,10 @@ static void process_beacon(void *net_ptr, void *user_data)
 
 	l_info("key_id: %u, ivi: %u, kr: %d, ivu: %d", beacon_data->key_id, net->iv_index, !!(subnet->kr_phase == KEY_REFRESH_PHASE_TWO), net->iv_update);
 
-	net_key_beacon_refresh(beacon_data->key_id, net->iv_index,
+	ret = net_key_beacon_refresh(beacon_data->key_id, net->iv_index,
 		!!(subnet->kr_phase == KEY_REFRESH_PHASE_TWO), net->iv_update);
+
+	l_info("ret: %d", ret);
 }
 
 static void process_beacon_remote(void *net_ptr, void *user_data)

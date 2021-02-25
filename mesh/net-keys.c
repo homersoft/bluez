@@ -485,8 +485,14 @@ bool net_key_beacon_refresh(uint32_t id, uint32_t iv_index, bool kr, bool ivu)
 	if (!net_key_snb_compose(id, iv_index, kr, ivu, beacon))
 		return false;
 
-	if (memcmp(key->snb.beacon, beacon, sizeof(beacon)))
+	if (memcmp(key->snb.beacon, beacon, sizeof(beacon))) {
+		char *c1 = l_util_hexstring(key->snb.beacon, sizeof(beacon));
+		char *c2 = l_util_hexstring(beacon, sizeof(beacon));
+		l_info("different: '%s' != '%s'", c1, c2);
+		l_free(c1);
+		l_free(c2);
 		memcpy(key->snb.beacon, beacon, sizeof(beacon));
+	}
 	else
 		return false;
 
