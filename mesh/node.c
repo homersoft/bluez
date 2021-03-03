@@ -2674,7 +2674,6 @@ static struct l_dbus_message *amqp_identity_setter(struct l_dbus *dbus,
 	const char *sender;
 	const char *identity;
 
-
 	sender = l_dbus_message_get_sender(msg);
 
 	if (strcmp(sender, node->owner))
@@ -2690,6 +2689,82 @@ static struct l_dbus_message *amqp_identity_setter(struct l_dbus *dbus,
 			new_callback_complete_ctx(dbus, msg, NULL, complete));
 
 	return NULL;
+}
+
+static struct l_dbus_message *amqp_opcodes_whitelist_setter(struct l_dbus *dbus,
+					struct l_dbus_message *msg,
+					struct l_dbus_message_iter *value,
+					l_dbus_property_complete_cb_t complete,
+					void *user_data)
+{
+	struct mesh_node *node = user_data;
+	const char *sender;
+
+	struct l_dbus_message_iter iter;
+	struct l_queue *whitelist;
+	uint32_t opcode;
+
+	sender = l_dbus_message_get_sender(msg);
+
+	if (!node->amqp)
+		return dbus_error(msg, MESH_ERROR_DOES_NOT_EXIST,
+						"Internal error - AMQP");
+
+	whitelist = mesh_amqp_get_opcodes_whitelist(node->amqp);
+
+	if (!whitelist)
+		return dbus_error(msg, MESH_ERROR_DOES_NOT_EXIST,
+					"Internal error - Opcodes Whitelist");
+
+	if (strcmp(sender, node->owner))
+		return dbus_error(msg, MESH_ERROR_NOT_AUTHORIZED, NULL);
+
+	if (!l_dbus_message_iter_get_variant(value, "au", &iter))
+		return dbus_error(msg, MESH_ERROR_INVALID_ARGS,
+						"List of opcodes expected");
+
+	l_queue_clear(whitelist, NULL);
+
+	while (l_dbus_message_iter_next_entry(&iter, &opcode)) {
+		uint8_t buf[3];
+
+		if (!mesh_model_opcode_set(opcode, buf))
+			continue;
+
+		l_info("Whitelisted opcode: 0x%X", opcode);
+
+		if (!l_queue_push_tail(whitelist, L_UINT_TO_PTR(opcode)))
+			return dbus_error(msg, MESH_ERROR_FAILED,
+							"Failed to set opcode");
+	}
+
+	complete(dbus, msg, NULL);
+	return NULL;
+}
+
+
+static void message_builder_append_opcode(void *opcode_ptr, void *builder)
+{
+	uint32_t opcode = L_PTR_TO_UINT(opcode_ptr);
+	l_dbus_message_builder_append_basic(builder, 'u', &opcode);
+}
+
+static bool amqp_opcodes_whitelist_getter(struct l_dbus *dbus,
+					struct l_dbus_message *msg,
+					struct l_dbus_message_builder *builder,
+					void *user_data)
+{
+	struct mesh_node *node = user_data;
+	struct l_queue *whitelist = mesh_amqp_get_opcodes_whitelist(node->amqp);
+
+	if (!whitelist)
+		return false;
+
+	l_dbus_message_builder_enter_array(builder, "u");
+	l_queue_foreach(whitelist, message_builder_append_opcode, builder);
+	l_dbus_message_builder_leave_array(builder);
+
+	return true;
 }
 
 static bool addresses_getter(struct l_dbus *dbus, struct l_dbus_message *msg,
@@ -2754,6 +2829,10 @@ static void setup_node_interface(struct l_dbus_interface *iface)
 
 static void setup_amqp_interface(struct l_dbus_interface *iface)
 {
+	l_dbus_interface_property(iface, "OpcodesWhitelist", 0, "au",
+						amqp_opcodes_whitelist_getter,
+						amqp_opcodes_whitelist_setter);
+
 	l_dbus_interface_method(iface, "Subscribe", 0, amqp_subscribe_call,
 							"", "s", "topic");
 

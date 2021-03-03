@@ -891,7 +891,26 @@ static void send_fd_msg_rcvd(uint8_t ele_idx,
 				 uint16_t size, const uint8_t *data,
 				 send_callback_t send_callback, void *user_data)
 {
-	struct fd_msg *msg = fd_msg_new(data, size);
+	struct fd_msg *msg;
+
+	if (send_callback == send_amqp) {
+		struct mesh_amqp *amqp = user_data;
+
+		uint32_t opcode;
+		uint16_t opcode_len;
+
+		if (!mesh_model_opcode_get(data, size, &opcode, &opcode_len)) {
+			l_warn("Failed to get an opcode. Buffer too short");
+			return;
+		}
+
+		if (IS_GROUP(dst) &&
+			!l_queue_find(mesh_amqp_get_opcodes_whitelist(amqp),
+					simple_match, L_UINT_TO_PTR(opcode)))
+			return;
+	}
+
+	msg = fd_msg_new(data, size);
 	msg->flags = 0;
 	msg->element_idx = ele_idx;
 	msg->src_addr = src;

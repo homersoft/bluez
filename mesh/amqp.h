@@ -70,3 +70,5 @@ void mesh_amqp_start(struct mesh_amqp *amqp);
 void mesh_amqp_stop(struct mesh_amqp *amqp);
 
 bool mesh_amqp_is_ready(struct mesh_amqp *amqp);
+
+struct l_queue *mesh_amqp_get_opcodes_whitelist(struct mesh_amqp *amqp);
