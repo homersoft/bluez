@@ -93,6 +93,7 @@ struct mesh_amqp {
 	struct mesh_amqp_config config;
 	pthread_t thread;
 	struct l_queue *queue;
+	struct l_queue *opcodes_whitelist;
 	struct l_io *io;
 	bool thread_started;
 	enum mesh_amqp_state amqp_state;
@@ -926,6 +927,7 @@ struct mesh_amqp *mesh_amqp_new(mesh_amqp_rc_send_cb_t rc_send_cb,
 	struct mesh_amqp *amqp = l_new(struct mesh_amqp, 1);
 	memset(amqp, 0, sizeof(*amqp));
 
+	amqp->opcodes_whitelist = l_queue_new();
 	amqp->rc_send_cb = rc_send_cb;
 	amqp->user_data = node;
 
@@ -987,6 +989,7 @@ void mesh_amqp_free(struct mesh_amqp *amqp)
 	l_free(amqp->config.identity);
 
 	l_io_destroy(amqp->io);
+	l_queue_destroy(amqp->opcodes_whitelist, NULL);
 	l_queue_destroy(amqp->queue, l_free);
 	l_free(amqp);
 }
@@ -1171,4 +1174,9 @@ void mesh_amqp_stop(struct mesh_amqp *amqp)
 bool mesh_amqp_is_ready(struct mesh_amqp *amqp)
 {
 	return amqp->amqp_state == MESH_AMQP_STATE_CONNECTED;
+}
+
+struct l_queue *mesh_amqp_get_opcodes_whitelist(struct mesh_amqp *amqp)
+{
+	return amqp->opcodes_whitelist;
 }
