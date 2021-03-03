@@ -31,38 +31,12 @@
 #include "mesh/util.h"
 #include "mesh/model.h"
 #include "mesh/keyring.h"
+#include "mesh/amqp.h"
 
 /* Divide and round to ceiling (up) to calculate segment count */
 #define CEILDIV(val, div) (((val) + (div) - 1) / (div))
 
 #define VIRTUAL_BASE			0x10000
-
-enum fd_msg_type {
-	DEV_KEY_MSG = 0,
-	APP_KEY_MSG = 1,
-};
-
-struct fd_msg {
-
-	uint8_t element;
-	uint16_t src;
-
-	enum fd_msg_type type :8;
-	union {
-		struct {
-			uint16_t net_idx;
-			uint8_t remote;
-		} dev;
-
-		struct {
-			uint16_t app_idx;
-			uint16_t dst;
-			uint8_t label[16];
-		} app;
-	};
-
-	uint8_t data[];
-} __attribute__((packed));
 
 struct mesh_model {
 	const struct mesh_model_ops *cbs;
@@ -791,17 +765,14 @@ static int add_sub(struct mesh_net *net, struct mesh_model *mod,
 	return MESH_STATUS_SUCCESS;
 }
 
-static struct fd_msg *fd_msg_new(uint8_t ele_idx, uint16_t src, uint16_t size, const uint8_t *data, enum fd_msg_type type)
+static struct fd_msg *fd_msg_new(const uint8_t *data, uint16_t data_len)
 {
-	size_t msg_len = sizeof(struct fd_msg) + size;
+	size_t msg_len = sizeof(struct fd_msg) + data_len;
+
 	struct fd_msg *msg = l_malloc(msg_len);
+	memset(msg, 0, sizeof(*msg));
 
-	msg->element = ele_idx;
-	msg->src = src;
-	msg->type = type;
-
-	memcpy(msg->data, data, size);
-
+	memcpy(msg->data, data, data_len);
 	return msg;
 }
 
@@ -809,7 +780,7 @@ static void fd_msg_send(struct l_io *io, struct fd_msg *msg, size_t size)
 {
 	struct iovec iov = {
 		.iov_base = msg,
-		.iov_len = sizeof(struct fd_msg) + size,
+		.iov_len = size,
 	};
 	struct msghdr hdr = {
 		.msg_iov = &iov,
@@ -817,21 +788,44 @@ static void fd_msg_send(struct l_io *io, struct fd_msg *msg, size_t size)
 	};
 
 	(void)sendmsg(l_io_get_fd(io), &hdr, MSG_NOSIGNAL);
-
-	l_free(msg);
 }
 
-static void send_fd_dev_key_msg_rcvd(struct l_io *io, uint8_t ele_idx,
-				     uint16_t src, uint16_t app_idx,
-				     uint16_t net_idx, uint16_t size,
-				     const uint8_t *data)
+typedef void (*send_callback_t)(void *data, size_t len, void *user_data);
+
+static inline void send_amqp(void *data, size_t len, void *user_data)
 {
-	struct fd_msg *msg = fd_msg_new(ele_idx, src, size, data, DEV_KEY_MSG);
+	mesh_amqp_publish(user_data, data, len);
+}
 
-	msg->dev.net_idx = net_idx;
-	msg->dev.remote = (app_idx != APP_IDX_DEV_LOCAL);
+static inline void send_fd(void *data, size_t len, void *user_data)
+{
+	fd_msg_send(user_data, data, len);
+}
 
-	fd_msg_send(io, msg, size);
+static inline uint64_t get_timestamp(void)
+{
+	struct timeval tv;
+
+	gettimeofday(&tv, NULL);
+
+	return (uint64_t)(tv.tv_sec) * 1000 + (uint64_t)(tv.tv_usec) / 1000;
+}
+
+static void send_fd_dev_key_msg_rcvd(uint8_t ele_idx, uint16_t src,
+					uint16_t app_idx, uint16_t net_idx,
+					uint16_t size, const uint8_t *data,
+					send_callback_t send_callback,
+					void *user_data)
+{
+	struct fd_msg *msg = fd_msg_new(data, size);
+	msg->flags = (1 << 0) | ((app_idx == APP_IDX_DEV_REMOTE) << 1);
+	msg->element_idx = ele_idx;
+	msg->src_addr = src;
+	msg->net_idx = net_idx;
+	msg->timestamp = get_timestamp();
+
+	send_callback(msg, sizeof(*msg) + size, user_data);
+	l_free(msg);
 }
 
 static void send_dbus_dev_key_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
@@ -871,37 +865,48 @@ static void send_dbus_dev_key_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
 }
 
 static void send_dev_key_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
-				       uint16_t src, uint16_t app_idx,
-				       uint16_t net_idx, uint16_t size,
-				       const uint8_t *data)
+					   uint16_t src, uint16_t app_idx,
+					   uint16_t net_idx, uint16_t size,
+					   const uint8_t *data)
 {
 	struct l_io *io = node_get_fd_io(node);
+	struct mesh_amqp *amqp = node_get_amqp(node);
+
+	if (amqp && mesh_amqp_is_ready(amqp))
+		send_fd_dev_key_msg_rcvd(ele_idx, src, app_idx, net_idx,
+				 size, data, send_amqp, amqp);
 
 	if (io)
-		send_fd_dev_key_msg_rcvd(io, ele_idx, src, app_idx, net_idx,
-					 size, data);
+		send_fd_dev_key_msg_rcvd(ele_idx, src, app_idx, net_idx,
+					 size, data, send_fd, io);
 	else
 		send_dbus_dev_key_msg_rcvd(node, ele_idx, src, app_idx, net_idx,
 					   size, data);
 }
 
-static void send_fd_msg_rcvd(struct l_io *io, uint8_t ele_idx,
-			     uint16_t src, uint16_t dst,
-			     const struct mesh_virtual *virt,
-			     uint16_t app_idx,
-			     uint16_t size, const uint8_t *data)
+static void send_fd_msg_rcvd(uint8_t ele_idx,
+				 uint16_t src, uint16_t dst,
+				 const struct mesh_virtual *virt,
+				 uint16_t app_idx,
+				 uint16_t size, const uint8_t *data,
+				 send_callback_t send_callback, void *user_data)
 {
-	struct fd_msg *msg = fd_msg_new(ele_idx, src, size, data, APP_KEY_MSG);
+	struct fd_msg *msg = fd_msg_new(data, size);
+	msg->flags = 0;
+	msg->element_idx = ele_idx;
+	msg->src_addr = src;
+	msg->dst_addr = dst;
+	msg->app_idx = app_idx;
+	msg->timestamp = get_timestamp();
 
-	msg->app.app_idx = app_idx;
-	msg->app.dst = dst;
+	if (virt) {
+		msg->dst_addr = virt->addr;
+		memcpy(msg->label, virt->label, sizeof(msg->label));
+	}
 
-	if (virt)
-		memcpy(msg->app.label, virt, sizeof(msg->app.label));
-
-	fd_msg_send(io, msg, size);
+	send_callback(msg, sizeof(*msg) + size, user_data);
+	l_free(msg);
 }
-
 
 static void send_dbus_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
 					uint16_t src, uint16_t dst,
@@ -955,10 +960,15 @@ static void send_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
 			  uint16_t size, const uint8_t *data)
 {
 	struct l_io *io = node_get_fd_io(node);
+	struct mesh_amqp *amqp = node_get_amqp(node);
+
+	if (amqp && mesh_amqp_is_ready(amqp))
+		send_fd_msg_rcvd(ele_idx, src, dst, virt, app_idx,
+						 size, data, send_amqp, amqp);
 
 	if (io)
-		send_fd_msg_rcvd(io, ele_idx, src, dst, virt, app_idx,
-				 size, data);
+		send_fd_msg_rcvd(ele_idx, src, dst, virt, app_idx,
+						 size, data, send_fd, io);
 	else
 		send_dbus_msg_rcvd(node, ele_idx, src, dst, virt, app_idx,
 				   size, data);
