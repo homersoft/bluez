@@ -28,7 +28,7 @@ pkgincludedir = $(includedir)/bluetooth
 
 pkginclude_HEADERS =
 
-AM_CFLAGS = $(WARNING_CFLAGS) $(MISC_CFLAGS) $(UDEV_CFLAGS) $(ell_cflags)
+AM_CFLAGS = $(WARNING_CFLAGS) $(MISC_CFLAGS) $(UDEV_CFLAGS) $(ell_cflags) ${rabbitmq_cflags} -pthread
 AM_LDFLAGS = $(MISC_LDFLAGS)
 
 if DATAFILES
@@ -98,6 +98,9 @@ gdbus_libgdbus_internal_la_SOURCES = gdbus/gdbus.h \
 
 openssl_cflags = @OPENSSL_CFLAGS@
 openssl_ldadd = @OPENSSL_LIBS@
+
+rabbitmq_cflags = @RABBITMQ_CFLAGS@
+rabbitmq_ldadd = @RABBITMQ_LIBS@
 
 if EXTERNAL_ELL
 ell_cflags = @ELL_CFLAGS@

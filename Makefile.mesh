@@ -11,6 +11,7 @@ dbussystembus_DATA += mesh/org.bluez.mesh.service
 endif
 
 mesh_sources = mesh/mesh.h mesh/mesh.c \
+				mesh/amqp.h mesh/amqp.c \
 				mesh/net-keys.h mesh/net-keys.c \
 				mesh/mesh-io.h mesh/mesh-io.c \
 				mesh/mesh-mgmt.c mesh/mesh-mgmt.h \
@@ -55,8 +56,9 @@ mesh/mesh.$(OBJEXT): ell/internal
 mesh/main.$(OBJEXT): src/builtin.h lib/bluetooth/bluetooth.h
 
 mesh_bluetooth_meshd_SOURCES = $(mesh_sources) mesh/main.c
+mesh_bluetooth_meshd_LDFLAGS = -pthread
 mesh_bluetooth_meshd_LDADD = src/libshared-ell.la $(ell_ldadd) -ljson-c \
-							$(openssl_ldadd)
+							$(openssl_ldadd) ${rabbitmq_ldadd}
 mesh_bluetooth_meshd_DEPENDENCIES = $(ell_dependencies) src/libshared-ell.la \
 				mesh/bluetooth-mesh.service
 
