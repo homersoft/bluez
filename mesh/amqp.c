@@ -236,6 +236,16 @@ static bool amqp_connect_handler(struct amqp_thread_context *context,
 
 	amqp_table_entry_t props_entries[] = {
 		{
+			.key = amqp_cstring_bytes("connection_name"),
+			.value = {
+				.kind = AMQP_FIELD_KIND_UTF8,
+				.value = {
+					.bytes = amqp_cstring_bytes(
+						context->config.identity),
+				}
+			}
+		},
+		{
 			.key = amqp_cstring_bytes("uuid"),
 			.value = {
 				.kind = AMQP_FIELD_KIND_UTF8,
