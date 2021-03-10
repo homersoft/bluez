@@ -255,17 +255,6 @@ static bool amqp_connect_handler(struct amqp_thread_context *context,
 				}
 			}
 		},
-		{
-			.key = amqp_cstring_bytes("identity"),
-			.value = {
-				.kind = AMQP_FIELD_KIND_UTF8,
-				.value = {
-					.bytes = amqp_cstring_bytes(
-						context->config.identity),
-				}
-			}
-		},
-
 	};
 	amqp_table_t props = {
 		.num_entries = L_ARRAY_SIZE(props_entries),
