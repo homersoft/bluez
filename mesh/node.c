@@ -105,6 +105,8 @@ struct mesh_node {
 	struct l_io *fd_io;
 	char *unix_fd_path;
 	struct mesh_amqp *amqp;
+	struct l_queue *rc_priority_queue;
+	struct l_timeout *rc_timeout;
 };
 
 struct node_import {
@@ -222,6 +224,22 @@ static void set_defaults(struct mesh_node *node)
 	node->fd_io = NULL;
 }
 
+struct postponed_msg {
+	size_t msg_len;
+	struct fd_msg fd_msg;
+};
+
+static struct postponed_msg *postponed_msg_new(struct fd_msg *fd_msg,
+							size_t msg_len)
+{
+	struct postponed_msg *msg = l_malloc(sizeof(*msg) + msg_len);
+
+	msg->msg_len = msg_len;
+	memcpy(&msg->fd_msg, fd_msg, sizeof(*fd_msg) + msg_len);
+
+	return msg;
+}
+
 static void rc_msg_send(struct fd_msg *msg, size_t msg_len, void *user_data)
 {
 	struct mesh_node *node = user_data;
@@ -248,12 +266,59 @@ static void rc_msg_send(struct fd_msg *msg, size_t msg_len, void *user_data)
 	}
 
 	l_debug("flags: %02x, app_idx: %04x, elem_idx: %02x, "
-	       "dst_addr: %04x, ttl: %d, data_len: %ld", msg->flags, app_idx,
+		"dst_addr: %04x, ttl: %d, data_len: %ld", msg->flags, app_idx,
 			msg->element_idx, msg->dst_addr, msg->ttl, data_len);
 
 	if (!mesh_model_send(node, src, msg->dst_addr, app_idx, msg->net_idx,
-		      msg->ttl, FD_MSG_IS_SEGMENTED(msg), data_len, msg->data))
+		msg->ttl, FD_MSG_IS_SEGMENTED(msg), data_len, msg->data))
 		l_error("Failed to send remote control command");
+}
+
+static int compare_msgs_timestamp(const void *a, const void *b, void *user_data)
+{
+	const struct postponed_msg *msg1 = a;
+	const struct postponed_msg *msg2 = b;
+
+	return msg2->fd_msg.timestamp >= msg1->fd_msg.timestamp;
+}
+
+static void rc_msg_flush(struct l_timeout *timeout, void *user_data)
+{
+	struct postponed_msg *msg;
+
+	struct mesh_node *node = user_data;
+	uint64_t current_timestamp = get_timestamp_ms();
+
+	while ((msg = l_queue_peek_head(node->rc_priority_queue))) {
+		if (msg->fd_msg.timestamp > current_timestamp)
+			break;
+
+		rc_msg_send(&msg->fd_msg, msg->msg_len, node);
+
+		l_queue_pop_head(node->rc_priority_queue);
+		l_free(msg);
+	}
+
+	if (msg) {
+		uint64_t diff = msg->fd_msg.timestamp - current_timestamp;
+		l_timeout_modify_ms(timeout, diff);
+	}
+}
+
+static void rc_msg_push(struct fd_msg *fd_msg, size_t msg_len, void *user_data)
+{
+	struct mesh_node *node = user_data;
+	struct postponed_msg *msg = postponed_msg_new(fd_msg, msg_len);
+
+	if (!l_queue_insert(node->rc_priority_queue, msg,
+						compare_msgs_timestamp, node)) {
+		l_free(msg);
+
+		l_warn("Failed to postpone Remote Control message");
+		return;
+	}
+
+	rc_msg_flush(node->rc_timeout, node);
 }
 
 static struct mesh_node *node_new(const uint8_t uuid[16])
@@ -265,8 +330,10 @@ static struct mesh_node *node_new(const uint8_t uuid[16])
 	node->elements = l_queue_new();
 	node->pages = l_queue_new();
 	memcpy(node->uuid, uuid, sizeof(node->uuid));
-	node->amqp = mesh_amqp_new(rc_msg_send, node);
+	node->amqp = mesh_amqp_new(rc_msg_push, node);
 	set_defaults(node);
+	node->rc_priority_queue = l_queue_new();
+	node->rc_timeout = l_timeout_create_ms(0, rc_msg_flush, node, NULL);
 
 	return node;
 }
@@ -347,6 +414,8 @@ static void free_node_resources(void *data)
 	mesh_config_release(node->cfg);
 	mesh_net_free(node->net);
 	mesh_amqp_free(node->amqp);
+	l_queue_destroy(node->rc_priority_queue, l_free);
+	l_timeout_remove(node->rc_timeout);
 
 	l_free(node->storage_dir);
 	l_free(node);
