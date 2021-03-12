@@ -8,6 +8,7 @@
  *
  */
 
+uint64_t get_timestamp_ms(void);
 uint32_t get_timestamp_secs(void);
 bool str2hex(const char *str, uint16_t in_len, uint8_t *out,
 							uint16_t out_len);
