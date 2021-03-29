@@ -97,6 +97,30 @@ static bool get_int(json_object *jobj, const char *keyword, int *value)
 	return true;
 }
 
+static bool get_int_from_hexstr(json_object *jobj, const char *keyword,
+								int *value)
+{
+	json_object *jvalue;
+	const char *str;
+	uint16_t hexstr_value;
+
+	if (!json_object_object_get_ex(jobj, keyword, &jvalue))
+		return false;
+
+	if (!json_object_is_type(jvalue, json_type_string))
+		return false;
+
+	str = json_object_get_string(jvalue);
+	if (errno == EINVAL)
+		return false;
+
+	if (sscanf(str, "%04hx", &hexstr_value) != 1)
+		return false;
+
+	*value = hexstr_value;
+	return true;
+}
+
 static bool add_u64_value(json_object *jobj, const char *desc,
 					const uint8_t u64[8])
 {
@@ -246,7 +270,9 @@ static bool get_key_index(json_object *jobj, const char *keyword,
 {
 	int idx;
 
-	if (!get_int(jobj, keyword, &idx))
+	/* To keep backward compatibility with previous configuration format */
+	if (!get_int_from_hexstr(jobj, keyword, &idx) &&
+						!get_int(jobj, keyword, &idx))
 		return false;
 
 	if (!CHECK_KEY_IDX_RANGE(idx))
