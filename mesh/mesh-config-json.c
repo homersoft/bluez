@@ -1377,11 +1377,19 @@ static bool read_node(json_object *jnode, struct mesh_config_node *node)
 	if (!read_token(jnode, node->token)) {
 		l_info("Failed to read node token");
 		return false;
+	} else {
+		char *token = l_util_hexstring(node->token, sizeof(node->token));
+		l_info("Token: %s", token);
+		l_free(token);
 	}
 
 	if (!read_device_key(jnode, node->dev_key)) {
 		l_info("Failed to read node device key");
 		return false;
+	} else {
+		char *dev_key = l_util_hexstring(node->dev_key, sizeof(node->dev_key));
+		l_info("Device key: %s", dev_key);
+		l_free(dev_key);
 	}
 
 	if (!parse_composition(jnode, node)) {
