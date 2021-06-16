@@ -803,15 +803,17 @@ static inline void send_fd(void *data, size_t len, void *user_data)
 }
 
 static void send_fd_dev_key_msg_rcvd(uint8_t ele_idx, uint16_t src,
-					uint16_t app_idx, uint16_t net_idx,
-					uint16_t size, const uint8_t *data,
-					send_callback_t send_callback,
-					void *user_data)
+						uint16_t dst, uint16_t app_idx,
+						uint16_t net_idx, uint16_t size,
+						const uint8_t *data,
+						send_callback_t send_callback,
+						void *user_data)
 {
 	struct fd_msg *msg = fd_msg_new(data, size);
 	msg->flags = (1 << 0) | ((app_idx == APP_IDX_DEV_REMOTE) << 1);
 	msg->element_idx = ele_idx;
 	msg->src_addr = src;
+	msg->dst_addr = dst;
 	msg->net_idx = net_idx;
 	msg->timestamp = get_timestamp_ms();
 
@@ -856,31 +858,32 @@ static void send_dbus_dev_key_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
 }
 
 static void send_dev_key_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
-					   uint16_t src, uint16_t app_idx,
-					   uint16_t net_idx, uint16_t size,
-					   const uint8_t *data)
+						uint16_t src, uint16_t app_idx,
+						uint16_t net_idx, uint16_t size,
+						const uint8_t *data)
 {
 	struct l_io *io = node_get_fd_io(node);
 	struct mesh_amqp *amqp = node_get_amqp(node);
+	uint16_t dst = node_get_primary(node) + ele_idx;
 
 	if (amqp && mesh_amqp_is_ready(amqp))
-		send_fd_dev_key_msg_rcvd(ele_idx, src, app_idx, net_idx,
-				 size, data, send_amqp, amqp);
+		send_fd_dev_key_msg_rcvd(ele_idx, src, dst, app_idx, net_idx,
+						size, data, send_amqp, amqp);
 
 	if (io)
-		send_fd_dev_key_msg_rcvd(ele_idx, src, app_idx, net_idx,
-					 size, data, send_fd, io);
+		send_fd_dev_key_msg_rcvd(ele_idx, src, dst, app_idx, net_idx,
+						size, data, send_fd, io);
 	else
 		send_dbus_dev_key_msg_rcvd(node, ele_idx, src, app_idx, net_idx,
-					   size, data);
+								size, data);
 }
 
-static void send_fd_msg_rcvd(uint8_t ele_idx,
-				 uint16_t src, uint16_t dst,
-				 const struct mesh_virtual *virt,
-				 uint16_t app_idx,
-				 uint16_t size, const uint8_t *data,
-				 send_callback_t send_callback, void *user_data)
+static void send_fd_msg_rcvd(uint8_t ele_idx, uint16_t src, uint16_t dst,
+						const struct mesh_virtual *virt,
+						uint16_t app_idx, uint16_t size,
+						const uint8_t *data,
+						send_callback_t send_callback,
+						void *user_data)
 {
 	struct fd_msg *msg;
 
