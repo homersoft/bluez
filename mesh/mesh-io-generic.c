@@ -473,19 +473,6 @@ static bool dev_destroy(struct mesh_io *io)
 	return true;
 }
 
-static bool dev_caps(struct mesh_io *io, struct mesh_io_caps *caps)
-{
-	struct mesh_io_private *pvt = io->pvt;
-
-	if (!pvt || !caps)
-		return false;
-
-	caps->max_num_filters = 255;
-	caps->window_accuracy = 50;
-
-	return true;
-}
-
 static void send_cancel_done(const void *buf, uint8_t size,
 							void *user_data)
 {
@@ -893,7 +880,6 @@ static bool recv_deregister(struct mesh_io *io, const uint8_t *filter,
 const struct mesh_io_api mesh_io_generic = {
 	.init = dev_init,
 	.destroy = dev_destroy,
-	.caps = dev_caps,
 	.send = send_tx,
 	.reg = recv_register,
 	.dereg = recv_deregister,

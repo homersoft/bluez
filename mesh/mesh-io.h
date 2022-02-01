@@ -57,11 +57,6 @@ struct mesh_io_send_info {
 	} u;
 };
 
-struct mesh_io_caps {
-	uint8_t max_num_filters;
-	uint8_t window_accuracy;
-};
-
 typedef void (*mesh_io_recv_func_t)(void *user_data,
 					struct mesh_io_recv_info *info,
 					const uint8_t *data, uint16_t len);
@@ -77,8 +72,6 @@ struct mesh_io *mesh_io_new(enum mesh_io_type type, void *opts,
 				struct l_dbus *dbus, mesh_io_ready_func_t cb,
 				void *user_data);
 void mesh_io_destroy(struct mesh_io *io);
-
-bool mesh_io_get_caps(struct mesh_io *io, struct mesh_io_caps *caps);
 
 bool mesh_io_register_recv_cb(struct mesh_io *io, const uint8_t *filter,
 					uint8_t len, mesh_io_recv_func_t cb,

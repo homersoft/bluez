@@ -57,7 +57,6 @@ struct bt_mesh {
 	uint16_t algorithms;
 	uint16_t req_index;
 	uint8_t friend_queue_sz;
-	uint8_t max_filters;
 	bool initialized;
 };
 
@@ -254,7 +253,6 @@ bool mesh_init(struct l_dbus *dbus, const char *config_dir,
 		const char *mesh_conf_fname, enum mesh_io_type type, void *opts,
 		mesh_ready_func_t cb, void *user_data)
 {
-	struct mesh_io_caps caps;
 	struct mesh_init_request *req;
 
 	if (mesh.io)
@@ -291,8 +289,6 @@ bool mesh_init(struct l_dbus *dbus, const char *config_dir,
 	}
 
 	l_debug("io %p", mesh.io);
-	mesh_io_get_caps(mesh.io, &caps);
-	mesh.max_filters = caps.max_num_filters;
 
 	pending_queue = l_queue_new();
 

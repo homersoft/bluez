@@ -284,19 +284,6 @@ static bool unit_destroy(struct mesh_io *io)
 	return true;
 }
 
-static bool unit_caps(struct mesh_io *io, struct mesh_io_caps *caps)
-{
-	struct mesh_io_private *pvt = io->pvt;
-
-	if (!pvt || !caps)
-		return false;
-
-	caps->max_num_filters = 255;
-	caps->window_accuracy = 50;
-
-	return true;
-}
-
 static bool simple_match(const void *a, const void *b)
 {
 	return a == b;
@@ -527,7 +514,6 @@ static bool recv_deregister(struct mesh_io *io, const uint8_t *filter,
 const struct mesh_io_api mesh_io_unit = {
 	.init = unit_init,
 	.destroy = unit_destroy,
-	.caps = unit_caps,
 	.send = send_tx,
 	.reg = recv_register,
 	.dereg = recv_deregister,

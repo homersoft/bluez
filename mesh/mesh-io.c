@@ -102,16 +102,6 @@ void mesh_io_destroy(struct mesh_io *io)
 	}
 }
 
-bool mesh_io_get_caps(struct mesh_io *io, struct mesh_io_caps *caps)
-{
-	io = l_queue_find(io_list, match_by_io, io);
-
-	if (io && io->api && io->api->caps)
-		return io->api->caps(io, caps);
-
-	return false;
-}
-
 bool mesh_io_register_recv_cb(struct mesh_io *io, const uint8_t *filter,
 				uint8_t len, mesh_io_recv_func_t cb,
 				void *user_data)
