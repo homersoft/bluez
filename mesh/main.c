@@ -71,7 +71,9 @@ static void usage(void)
 	       "\tsilvair:<tty>\n"
 	       "\t\tUse Silvair Radio SLIP protocol on <tty>\n"
 	       "\ttcpserver:<port>\n"
-	       "\t\tUse Silvair Radio SLIP protocol over TCP/IP\n");
+	       "\t\tUse Silvair Radio SLIP protocol over TCP/IP\n"
+	       "\tmqtt:<hostname>\n"
+	       "\t\tUse Silvair MQTT\n");
 }
 
 static void do_debug(const char *str, void *user_data)
@@ -201,6 +203,21 @@ static bool parse_io(const char *optarg, enum mesh_io_type *type, void **opts)
 		*type = MESH_IO_TYPE_TCPSERVER;
 
 		optarg += strlen("tcpserver");
+
+		if (*optarg != ':')
+			return false;
+
+		optarg++;
+
+		*opts = l_strdup(optarg);
+
+		return true;
+	}
+
+	if (strstr(optarg, "mqtt") == optarg) {
+		*type = MESH_IO_TYPE_MQTT;
+
+		optarg += strlen("mqtt");
 
 		if (*optarg != ':')
 			return false;

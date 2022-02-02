@@ -25,6 +25,7 @@
 #include "mesh/mesh-io-unit.h"
 #include "mesh/mesh-io-uart.h"
 #include "mesh/mesh-io-tcpserver.h"
+#include "mesh/mesh-io-mqtt.h"
 
 static const uint8_t prov_filter[] = {MESH_AD_TYPE_PROVISION};
 static const uint8_t net_filter[] = {MESH_AD_TYPE_NETWORK}; // TODO: also filter by NID
@@ -35,8 +36,9 @@ static const uint8_t snb_filter[] = {MESH_AD_TYPE_BEACON, 0x01}; // TODO: filter
 static const struct mesh_io_table table[] = {
 	{MESH_IO_TYPE_GENERIC, &mesh_io_generic},
 	{MESH_IO_TYPE_UNIT_TEST, &mesh_io_unit},
-	{MESH_IO_TYPE_UART,		&mesh_io_uart},
-	{MESH_IO_TYPE_TCPSERVER,	&mesh_io_tcpserver}
+	{MESH_IO_TYPE_UART, &mesh_io_uart},
+	{MESH_IO_TYPE_TCPSERVER, &mesh_io_tcpserver},
+	{MESH_IO_TYPE_MQTT, &mesh_io_mqtt}
 };
 
 

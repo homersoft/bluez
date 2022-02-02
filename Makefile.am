@@ -104,6 +104,9 @@ openssl_ldadd = @OPENSSL_LIBS@
 rabbitmq_cflags = @RABBITMQ_CFLAGS@
 rabbitmq_ldadd = @RABBITMQ_LIBS@
 
+mosquitto_cflags = @MOSQUITTO_CFLAGS@
+mosquitto_ldadd = @MOSQUITTO_LIBS@
+
 if EXTERNAL_ELL
 ell_cflags = @ELL_CFLAGS@
 ell_ldadd = @ELL_LIBS@

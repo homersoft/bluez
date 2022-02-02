@@ -32,3 +32,5 @@ void net_key_beacon_enable(uint32_t id);
 bool net_key_beacon_refresh(uint32_t id, uint32_t iv_index, bool kr, bool ivu);
 void net_key_beacon_disable(uint32_t id);
 uint32_t net_key_beacon_last_seen(uint32_t id);
+bool net_key_psk(uint32_t id, const uint8_t uuid[16], const uint8_t dev_key[16],
+                                uint8_t identity[16], uint8_t psk[16], uint8_t network_id[8]);

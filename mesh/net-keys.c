@@ -524,3 +524,27 @@ void net_key_cleanup(void)
 	l_queue_destroy(keys, l_free);
 	keys = NULL;
 }
+
+bool net_key_psk(uint32_t id, const uint8_t uuid[16], const uint8_t dev_key[16],
+                                    uint8_t identity[16], uint8_t psk[16], uint8_t network_id[8])
+{
+	const uint8_t idpsk[] = { 'i', 'd', 'p', 's', 'k' };
+	uint8_t input[24];
+	struct net_key *key = l_queue_find(keys, match_id, L_UINT_TO_PTR(id));
+
+	if (!key)
+		return false;
+
+	memcpy(network_id, key->network, 8);
+
+	memcpy(input, uuid, 16);
+	memcpy(input + 16, key->network, 8);
+
+	if (!mesh_crypto_s1(input, 24, identity))
+		return false;
+
+	if (!mesh_crypto_k1(dev_key, identity, idpsk, sizeof(idpsk), psk))
+		return false;
+
+	return true;
+}
