@@ -359,7 +359,7 @@ static bool crypto_128(const uint8_t n[16], const char *s, uint8_t out128[16])
 	const uint8_t id128[] = { 'i', 'd', '1', '2', '8', 0x01 };
 	uint8_t salt[16];
 
-	if (!mesh_crypto_s1(s, 4, salt))
+	if (!mesh_crypto_s1(s, strlen(s), salt))
 		return false;
 
 	return mesh_crypto_k1(n, salt, id128, sizeof(id128), out128);
@@ -401,6 +401,11 @@ bool mesh_crypto_nkbk(const uint8_t n[16], uint8_t beacon_key[16])
 bool mesh_crypto_nkpk(const uint8_t n[16], uint8_t proxy_key[16])
 {
 	return crypto_128(n, "nkpk", proxy_key);
+}
+
+bool mesh_crypto_nkpsk(const uint8_t n[16], uint8_t psk_key[16])
+{
+	return crypto_128(n, "nkpsk", psk_key);
 }
 
 bool mesh_crypto_k3(const uint8_t n[16], uint8_t out64[8])

@@ -1109,7 +1109,7 @@ void mesh_amqp_publish(struct mesh_amqp *amqp, const void *data, size_t size)
 	struct message *msg = new_message(PUBLISH);
 
 	msg->publish.size = size;
-	memcpy(msg->publish.data, data, sizeof(msg->publish.data));
+	memcpy(msg->publish.data, data, size);
 
 	send_message(amqp, msg);
 }

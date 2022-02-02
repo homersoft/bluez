@@ -9,6 +9,7 @@
  */
 
 struct mesh_io;
+struct mesh_subnet;
 
 #define MESH_IO_TX_COUNT_UNLIMITED	0
 
@@ -17,7 +18,8 @@ enum mesh_io_type {
 	MESH_IO_TYPE_GENERIC,
 	MESH_IO_TYPE_UNIT_TEST,
 	MESH_IO_TYPE_UART,
-	MESH_IO_TYPE_TCPSERVER
+	MESH_IO_TYPE_TCPSERVER,
+	MESH_IO_TYPE_MQTT
 };
 
 enum mesh_io_timing_type {
