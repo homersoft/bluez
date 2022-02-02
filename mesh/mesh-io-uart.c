@@ -574,7 +574,7 @@ const struct mesh_io_api mesh_io_uart = {
 	.init = uart_io_init,
 	.destroy = uart_io_destroy,
 	.send = uart_io_send,
-	.reg = uart_io_reg,
-	.dereg = uart_io_dereg,
+	.filter_reg = uart_io_reg,
+	.filter_dereg = uart_io_dereg,
 	.cancel = uart_io_cancel,
 };

@@ -43,7 +43,6 @@ static uint8_t scan_uuid[16];
 static struct mesh_node *scan_node;
 static struct l_timeout *scan_timeout;
 static struct add_data *add_pending;
-static const uint8_t prvb[2] = {MESH_AD_TYPE_BEACON, 0x00};
 
 static void scan_cancel(struct l_timeout *timeout, void *user_data)
 {
@@ -58,7 +57,7 @@ static void scan_cancel(struct l_timeout *timeout, void *user_data)
 
 	net = node_get_net(node);
 	io = mesh_net_get_io(net);
-	mesh_io_deregister_recv_cb(io, prvb, sizeof(prvb));
+	mesh_io_deregister_prov_beacon_cb(io);
 	scan_node = NULL;
 	scan_timeout = NULL;
 }
@@ -424,8 +423,7 @@ static struct l_dbus_message *start_scan_call(struct l_dbus *dbus,
 	net = node_get_net(node);
 	io = mesh_net_get_io(net);
 	scan_node = node;
-	mesh_io_register_recv_cb(io, prvb, sizeof(prvb),
-						prov_beacon_recv, node);
+	mesh_io_register_prov_beacon_cb(io, prov_beacon_recv, node);
 
 	if (duration)
 		scan_timeout = l_timeout_create(duration, scan_cancel,

@@ -118,6 +118,7 @@ bool mesh_send_pkt(uint8_t count, uint16_t interval,
 		.u.gen.interval = interval,
 		.u.gen.max_delay = 0,
 		.u.gen.min_delay = 0,
+		.net_key_id = 0
 	};
 
 	return mesh_io_send(mesh.io, &info, data, len);
@@ -140,28 +141,23 @@ static void prov_rx(void *user_data, struct mesh_io_recv_info *info,
 
 bool mesh_reg_prov_rx(prov_rx_cb_t cb, void *user_data)
 {
-	uint8_t prov_filter[] = {MESH_AD_TYPE_PROVISION};
-
 	if (mesh.prov_rx && mesh.prov_rx != cb)
 		return false;
 
 	mesh.prov_rx = cb;
 	mesh.prov_data = user_data;
 
-	return mesh_io_register_recv_cb(mesh.io, prov_filter,
-					sizeof(prov_filter), prov_rx, &mesh);
+	return mesh_io_register_prov_cb(mesh.io, prov_rx, &mesh);
 }
 
 void mesh_unreg_prov_rx(prov_rx_cb_t cb)
 {
-	uint8_t prov_filter[] = {MESH_AD_TYPE_PROVISION};
-
 	if (mesh.prov_rx != cb)
 		return;
 
 	mesh.prov_rx = NULL;
 	mesh.prov_data = NULL;
-	mesh_io_deregister_recv_cb(mesh.io, prov_filter, sizeof(prov_filter));
+	mesh_io_deregister_prov_cb(mesh.io);
 }
 
 static void io_ready_callback(void *user_data, bool result)

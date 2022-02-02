@@ -343,7 +343,8 @@ static void send_network_beacon(struct net_key *key)
 		.u.gen.interval = 100,
 		.u.gen.cnt = 1,
 		.u.gen.min_delay = DEFAULT_MIN_DELAY,
-		.u.gen.max_delay = DEFAULT_MAX_DELAY
+		.u.gen.max_delay = DEFAULT_MAX_DELAY,
+		.net_key_id = key->id
 	};
 
 	mesh_io_send(NULL, &info, key->snb.beacon, sizeof(key->snb.beacon));

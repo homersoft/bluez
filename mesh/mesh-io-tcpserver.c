@@ -847,7 +847,7 @@ const struct mesh_io_api mesh_io_tcpserver = {
 	.init = tcpserver_io_init,
 	.destroy = tcpserver_io_destroy,
 	.send = tcpserver_io_send,
-	.reg = tcpserver_io_reg,
-	.dereg = tcpserver_io_dereg,
+	.filter_reg = tcpserver_io_reg,
+	.filter_dereg = tcpserver_io_dereg,
 	.cancel = tcpserver_io_cancel,
 };

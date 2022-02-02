@@ -192,6 +192,7 @@ struct net_queue_data {
 
 struct oneshot_tx {
 	struct mesh_net *net;
+	uint32_t net_key_id;
 	uint16_t interval;
 	uint8_t cnt;
 	uint8_t size;
@@ -210,6 +211,10 @@ static struct l_queue *fast_cache;
 static struct l_queue *nets;
 
 static void net_rx(void *net_ptr, void *user_data);
+static void net_msg_recv(void *user_data, struct mesh_io_recv_info *info,
+					const uint8_t *data, uint16_t len);
+static void beacon_recv(void *user_data, struct mesh_io_recv_info *info,
+					const uint8_t *data, uint16_t len);
 
 static inline struct mesh_subnet *get_primary_subnet(struct mesh_net *net)
 {
@@ -806,6 +811,10 @@ int mesh_net_del_key(struct mesh_net *net, uint16_t idx)
 	if (l_queue_length(net->subnets) <= 1)
 		return MESH_STATUS_CANNOT_REMOVE;
 
+	/* Stop receiving packets for this subnet */
+	mesh_io_deregister_subnet_cb(net->io, subnet->net_key_cur);
+	mesh_io_deregister_subnet_cb(net->io, subnet->net_key_upd);
+
 	/* Delete associated app keys */
 	appkey_delete_bound_keys(net, idx);
 
@@ -838,6 +847,9 @@ static struct mesh_subnet *add_key(struct mesh_net *net, uint16_t idx,
 		l_free(subnet);
 		return NULL;
 	}
+
+	mesh_io_register_subnet_cb(net->io, subnet->net_key_cur, net_msg_recv,
+							beacon_recv, subnet);
 
 	net_key_beacon_refresh(subnet->net_key_tx, net->iv_index,
 						false, net->iv_update);
@@ -2194,22 +2206,22 @@ static bool match_by_dst(const void *a, const void *b)
 	return dest->dst == dst;
 }
 
-static void send_relay_pkt(struct mesh_net *net, uint8_t *data, uint8_t size)
+static void send_relay_pkt(struct mesh_net *net, uint32_t net_key_id, uint8_t *data, uint8_t size)
 {
 	uint8_t packet[30];
-	struct mesh_io *io = net->io;
 	struct mesh_io_send_info info = {
 		.type = MESH_IO_TIMING_TYPE_GENERAL,
 		.u.gen.interval = net->relay.interval,
 		.u.gen.cnt = net->relay.count,
 		.u.gen.min_delay = DEFAULT_MIN_DELAY,
-		.u.gen.max_delay = DEFAULT_MAX_DELAY
+		.u.gen.max_delay = DEFAULT_MAX_DELAY,
+		.net_key_id = net_key_id
 	};
 
 	packet[0] = MESH_AD_TYPE_NETWORK;
 	memcpy(packet + 1, data, size);
 
-	mesh_io_send(io, &info, packet, size + 1);
+	mesh_io_send(net->io, &info, packet, size + 1);
 }
 
 static bool simple_match(const void *a, const void *b)
@@ -2247,17 +2259,20 @@ static void send_msg_pkt_oneshot(void *user_data)
 	info.u.gen.min_delay = DEFAULT_MIN_DELAY;
 	/* No extra randomization when sending regular mesh messages */
 	info.u.gen.max_delay = DEFAULT_MIN_DELAY;
+	info.net_key_id = tx->net_key_id;
 
 	mesh_io_send(net->io, &info, tx->packet, tx->size);
 	l_free(tx);
 }
 
-static void send_msg_pkt(struct mesh_net *net, uint8_t cnt, uint16_t interval,
+static void send_msg_pkt(struct mesh_net *net, uint32_t net_key_id,
+						uint8_t cnt, uint16_t interval,
 						uint8_t *packet, uint8_t size)
 {
 	struct oneshot_tx *tx = l_new(struct oneshot_tx, 1);
 
 	tx->net = net;
+	tx->net_key_id = net_key_id;
 	tx->interval = interval;
 	tx->cnt = cnt;
 	tx->size = size;
@@ -2481,7 +2496,8 @@ static void net_msg_recv(void *user_data, struct mesh_io_recv_info *info,
 		net_data.out[1] |= ttl - 1;
 		net_key_encrypt(net_data.net_key_id, net_data.iv_index,
 					net_data.out, net_data.out_size);
-		send_relay_pkt(net_data.net, net_data.out, net_data.out_size);
+		send_relay_pkt(net_data.net, net_data.net_key_id, net_data.out,
+							net_data.out_size);
 	}
 }
 
@@ -2588,6 +2604,7 @@ static int key_refresh_finish(struct mesh_net *net, uint16_t idx)
 	l_debug("Key refresh phase 3: use new keys only, discard old ones");
 
 	/* Switch to using new keys, discard old ones */
+	mesh_io_deregister_subnet_cb(net->io, subnet->net_key_cur);
 	net_key_unref(subnet->net_key_cur);
 	subnet->net_key_tx = subnet->net_key_cur = subnet->net_key_upd;
 	subnet->net_key_upd = 0;
@@ -2859,26 +2876,25 @@ bool mesh_net_set_key(struct mesh_net *net, uint16_t idx, const uint8_t *key,
 
 bool mesh_net_attach(struct mesh_net *net, struct mesh_io *io)
 {
-	bool first;
+	const struct l_queue_entry *entry;
 
 	if (!net)
 		return false;
 
-	first = l_queue_isempty(nets);
-	if (first) {
-		uint8_t snb[] = {MESH_AD_TYPE_BEACON, 0x01};
-		uint8_t pkt[] = {MESH_AD_TYPE_NETWORK};
-
+	if (l_queue_isempty(nets)) {
 		if (!nets)
 			nets = l_queue_new();
 
 		if (!fast_cache)
 			fast_cache = l_queue_new();
+	}
 
-		mesh_io_register_recv_cb(io, snb, sizeof(snb),
-							beacon_recv, NULL);
-		mesh_io_register_recv_cb(io, pkt, sizeof(pkt),
-							net_msg_recv, NULL);
+	entry = l_queue_get_entries(net->subnets);
+	for (; entry; entry = entry->next) {
+		struct mesh_subnet *subnet = entry->data;
+		mesh_io_register_subnet_cb(io, subnet->net_key_cur,
+						net_msg_recv, beacon_recv,
+						subnet);
 	}
 
 	if (l_queue_find(nets, simple_match, net))
@@ -2893,8 +2909,7 @@ bool mesh_net_attach(struct mesh_net *net, struct mesh_io *io)
 
 struct mesh_io *mesh_net_detach(struct mesh_net *net)
 {
-	uint8_t snb[] = {MESH_AD_TYPE_BEACON, 0x01};
-	uint8_t pkt[] = {MESH_AD_TYPE_NETWORK};
+	const struct l_queue_entry *entry;
 	struct mesh_io *io;
 	uint8_t type = 0;
 
@@ -2905,10 +2920,10 @@ struct mesh_io *mesh_net_detach(struct mesh_net *net)
 
 	mesh_io_send_cancel(net->io, &type, 1);
 
-	/* Only deregister io if this is the last network detached.*/
-	if (l_queue_length(nets) < 2) {
-		mesh_io_deregister_recv_cb(io, snb, sizeof(snb));
-		mesh_io_deregister_recv_cb(io, pkt, sizeof(pkt));
+	entry = l_queue_get_entries(net->subnets);
+	for (; entry; entry = entry->next) {
+		struct mesh_subnet *subnet = entry->data;
+		mesh_io_deregister_subnet_cb(io, subnet->net_key_tx);
 	}
 
 	net->io = NULL;
@@ -3040,7 +3055,8 @@ static bool send_seg(struct mesh_net *net, uint8_t cnt, uint16_t interval,
 		return false;
 	}
 
-	send_msg_pkt(net, cnt, interval, packet, packet_len + 1);
+	send_msg_pkt(net, subnet->net_key_tx, cnt, interval, packet,
+								packet_len + 1);
 
 	msg->last_seg = segO;
 
@@ -3080,7 +3096,7 @@ void mesh_net_send_seg(struct mesh_net *net, uint32_t net_key_id,
 		return;
 	}
 
-	send_msg_pkt(net, net->tx_cnt, net->tx_interval, packet,
+	send_msg_pkt(net, net_key_id, net->tx_cnt, net->tx_interval, packet,
 								packet_len + 1);
 
 	l_debug("TX: Friend Seg-%d %04x -> %04x : len %u) : TTL %d : SEQ %06x",
@@ -3224,7 +3240,8 @@ void mesh_net_ack_send(struct mesh_net *net, uint32_t net_key_id,
 		return;
 	}
 
-	send_msg_pkt(net, net->tx_cnt, net->tx_interval, pkt, pkt_len + 1);
+	send_msg_pkt(net, net_key_id, net->tx_cnt, net->tx_interval, pkt,
+								pkt_len + 1);
 
 	l_debug("TX: Friend ACK %04x -> %04x : len %u : TTL %d : SEQ %06x",
 					src, dst, pkt_len, ttl, seq);
@@ -3299,8 +3316,8 @@ void mesh_net_transport_send(struct mesh_net *net, uint32_t net_key_id,
 	}
 
 	if (!(IS_UNASSIGNED(dst)))
-		send_msg_pkt(net, net->tx_cnt, net->tx_interval, pkt,
-								pkt_len + 1);
+		send_msg_pkt(net, net_key_id, net->tx_cnt, net->tx_interval,
+							pkt, pkt_len + 1);
 }
 
 int mesh_net_key_refresh_phase_set(struct mesh_net *net, uint16_t idx,

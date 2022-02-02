@@ -881,7 +881,7 @@ const struct mesh_io_api mesh_io_generic = {
 	.init = dev_init,
 	.destroy = dev_destroy,
 	.send = send_tx,
-	.reg = recv_register,
-	.dereg = recv_deregister,
+	.filter_reg = recv_register,
+	.filter_dereg = recv_deregister,
 	.cancel = tx_cancel,
 };

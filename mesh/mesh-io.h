@@ -57,16 +57,12 @@ struct mesh_io_send_info {
 		} poll_rsp;
 
 	} u;
+	uint32_t net_key_id;
 };
 
 typedef void (*mesh_io_recv_func_t)(void *user_data,
 					struct mesh_io_recv_info *info,
 					const uint8_t *data, uint16_t len);
-
-typedef void (*mesh_io_recv_ext_func_t)(void *user_data,
-					struct mesh_io_recv_info *info,
-					const uint8_t *data, uint16_t len,
-					const uint8_t *addr);
 
 typedef void (*mesh_io_ready_func_t)(void *user_data, bool result);
 
@@ -75,12 +71,22 @@ struct mesh_io *mesh_io_new(enum mesh_io_type type, void *opts,
 				void *user_data);
 void mesh_io_destroy(struct mesh_io *io);
 
-bool mesh_io_register_recv_cb(struct mesh_io *io, const uint8_t *filter,
-					uint8_t len, mesh_io_recv_func_t cb,
+bool mesh_io_register_prov_beacon_cb(struct mesh_io *io, mesh_io_recv_func_t cb,
 					void *user_data);
 
-bool mesh_io_deregister_recv_cb(struct mesh_io *io, const uint8_t *filter,
-								uint8_t len);
+bool mesh_io_deregister_prov_beacon_cb(struct mesh_io *io);
+
+bool mesh_io_register_prov_cb(struct mesh_io *io, mesh_io_recv_func_t cb,
+					void *user_data);
+
+bool mesh_io_deregister_prov_cb(struct mesh_io *io);
+
+bool mesh_io_register_subnet_cb(struct mesh_io *io, uint32_t net_key_id,
+						mesh_io_recv_func_t net_cb,
+						mesh_io_recv_func_t snb_cb,
+						void *user_data);
+
+bool mesh_io_deregister_subnet_cb(struct mesh_io *io, uint32_t net_key_id);
 
 bool mesh_io_send(struct mesh_io *io, struct mesh_io_send_info *info,
 					const uint8_t *data, uint16_t len);

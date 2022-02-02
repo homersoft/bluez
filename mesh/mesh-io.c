@@ -26,6 +26,11 @@
 #include "mesh/mesh-io-uart.h"
 #include "mesh/mesh-io-tcpserver.h"
 
+static const uint8_t prov_filter[] = {MESH_AD_TYPE_PROVISION};
+static const uint8_t net_filter[] = {MESH_AD_TYPE_NETWORK}; // TODO: also filter by NID
+static const uint8_t prvb_filter[] = {MESH_AD_TYPE_BEACON, 0x00};
+static const uint8_t snb_filter[] = {MESH_AD_TYPE_BEACON, 0x01}; // TODO: filter by network id
+
 /* List of Supported Mesh-IO Types */
 static const struct mesh_io_table table[] = {
 	{MESH_IO_TYPE_GENERIC, &mesh_io_generic},
@@ -33,6 +38,7 @@ static const struct mesh_io_table table[] = {
 	{MESH_IO_TYPE_UART,		&mesh_io_uart},
 	{MESH_IO_TYPE_TCPSERVER,	&mesh_io_tcpserver}
 };
+
 
 static struct l_queue *io_list;
 
@@ -106,27 +112,100 @@ void mesh_io_destroy(struct mesh_io *io)
 	}
 }
 
-bool mesh_io_register_recv_cb(struct mesh_io *io, const uint8_t *filter,
-				uint8_t len, mesh_io_recv_func_t cb,
+bool mesh_io_register_prov_beacon_cb(struct mesh_io *io, mesh_io_recv_func_t cb,
 				void *user_data)
 {
 	io = l_queue_find(io_list, match_by_io, io);
 
-	if (io && io->api && io->api->reg)
-		return io->api->reg(io, filter, len, cb, user_data);
+	if (io && io->api && io->api->filter_reg)
+		return io->api->filter_reg(io, prvb_filter, sizeof(prvb_filter), cb, user_data);
 
 	return false;
 }
 
-bool mesh_io_deregister_recv_cb(struct mesh_io *io, const uint8_t *filter,
-								uint8_t len)
+bool mesh_io_deregister_prov_beacon_cb(struct mesh_io *io)
 {
 	io = l_queue_find(io_list, match_by_io, io);
 
-	if (io && io->api && io->api->dereg)
-		return io->api->dereg(io, filter, len);
+	if (io && io->api && io->api->filter_dereg)
+		return io->api->filter_dereg(io, prvb_filter, sizeof(prvb_filter));
 
 	return false;
+}
+
+bool mesh_io_register_prov_cb(struct mesh_io *io, mesh_io_recv_func_t cb,
+				void *user_data)
+{
+	io = l_queue_find(io_list, match_by_io, io);
+
+	if (io && io->api && io->api->filter_reg)
+		return io->api->filter_reg(io, prov_filter, sizeof(prov_filter), cb, user_data);
+
+	return false;
+}
+
+bool mesh_io_deregister_prov_cb(struct mesh_io *io)
+{
+	io = l_queue_find(io_list, match_by_io, io);
+
+	if (io && io->api && io->api->filter_dereg)
+		return io->api->filter_dereg(io, prov_filter, sizeof(prov_filter));
+
+	return false;
+}
+
+bool mesh_io_register_subnet_cb(struct mesh_io *io, uint32_t net_key_id,
+						mesh_io_recv_func_t net_cb,
+						mesh_io_recv_func_t snb_cb,
+						void *user_data)
+{
+	io = l_queue_find(io_list, match_by_io, io);
+
+	if (!io || !io->api)
+		return false;
+
+	if (io->api->subnet_reg)
+		return io->api->subnet_reg(io, net_key_id, net_cb, snb_cb,
+								user_data);
+
+	if (!io->subnets++) {
+		if (!io->api->filter_reg)
+			return false;
+
+		if (!io->api->filter_reg(io, net_filter, sizeof(net_filter),
+								net_cb, NULL))
+			return false;
+
+		if (!io->api->filter_reg(io, snb_filter, sizeof(snb_filter),
+								snb_cb, NULL))
+			return false;
+	}
+
+	return true;
+}
+
+bool mesh_io_deregister_subnet_cb(struct mesh_io *io, uint32_t net_key_id)
+{
+	io = l_queue_find(io_list, match_by_io, io);
+
+	if (!io || !io->api)
+		return false;
+
+	if (io->api->subnet_dereg)
+		return io->api->subnet_dereg(io, net_key_id);
+
+	if (!--io->subnets) {
+		if (!io->api->filter_dereg)
+			return false;
+
+		if (!io->api->filter_dereg(io, net_filter, sizeof(net_filter)))
+			return false;
+
+		if (!io->api->filter_dereg(io, snb_filter, sizeof(snb_filter)))
+			return false;
+	}
+
+	return true;
 }
 
 bool mesh_io_send(struct mesh_io *io, struct mesh_io_send_info *info,
