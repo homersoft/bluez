@@ -76,10 +76,9 @@ static void do_debug(const char *str, void *user_data)
 	l_info("%s%s", prefix, str);
 }
 
-static void mesh_ready_callback(void *user_data, bool success)
+static void mesh_ready_callback(bool success, struct l_dbus *dbus,
+								void *user_data)
 {
-	struct l_dbus *dbus = user_data;
-
 	l_info("mesh_ready_callback");
 	if (!success) {
 		l_error("Failed to start mesh");
@@ -102,8 +101,8 @@ static void request_name_callback(struct l_dbus *dbus, bool success,
 		return;
 	}
 
-	if (!mesh_init(storage_dir, mesh_conf_fname, io_type, io_opts,
-					mesh_ready_callback, dbus)) {
+	if (!mesh_init(dbus, storage_dir, mesh_conf_fname, io_type, io_opts,
+					mesh_ready_callback, NULL)) {
 		l_error("Failed to initialize mesh");
 		l_main_quit();
 	}

@@ -27,6 +27,7 @@
 #include "mesh/mesh-io.h"
 #include "mesh/mesh-io-api.h"
 #include "mesh/mesh-io-generic.h"
+#include "mesh/dbus.h"
 
 struct mesh_io_private {
 	struct bt_hci *hci;
@@ -40,6 +41,7 @@ struct mesh_io_private {
 	uint16_t interval;
 	bool sending;
 	bool active;
+	struct l_dbus *dbus;
 };
 
 struct pvt_rx_reg {
@@ -429,7 +431,7 @@ static void read_info(int index, void *user_data)
 	hci_init(io);
 }
 
-static bool dev_init(struct mesh_io *io, void *opts,
+static bool dev_init(struct mesh_io *io, void *opts, struct l_dbus *dbus,
 				mesh_io_ready_func_t cb, void *user_data)
 {
 	if (!io || io->pvt)

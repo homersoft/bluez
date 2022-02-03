@@ -46,7 +46,8 @@ static bool match_by_type(const void *a, const void *b)
 }
 
 struct mesh_io *mesh_io_new(enum mesh_io_type type, void *opts,
-				mesh_io_ready_func_t cb, void *user_data)
+				struct l_dbus *dbus, mesh_io_ready_func_t cb,
+				void *user_data)
 {
 	const struct mesh_io_api *api = NULL;
 	struct mesh_io *io;
@@ -69,7 +70,7 @@ struct mesh_io *mesh_io_new(enum mesh_io_type type, void *opts,
 	io->type = type;
 	io->api = api;
 
-	if (!api->init(io, opts, cb, user_data))
+	if (!api->init(io, opts, dbus, cb, user_data))
 		goto fail;
 
 	if (!io_list)

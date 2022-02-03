@@ -209,7 +209,7 @@ static void unit_up(void *user_data)
 	l_timeout_create_ms(1, get_name, pvt, NULL);
 }
 
-static bool unit_init(struct mesh_io *io, void *opt,
+static bool unit_init(struct mesh_io *io, void *opt, struct l_dbus *dbus,
 				mesh_io_ready_func_t cb, void *user_data)
 {
 	struct mesh_io_private *pvt;

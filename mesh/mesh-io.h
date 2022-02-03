@@ -74,7 +74,8 @@ typedef void (*mesh_io_recv_ext_func_t)(void *user_data,
 typedef void (*mesh_io_ready_func_t)(void *user_data, bool result);
 
 struct mesh_io *mesh_io_new(enum mesh_io_type type, void *opts,
-				mesh_io_ready_func_t cb, void *user_data);
+				struct l_dbus *dbus, mesh_io_ready_func_t cb,
+				void *user_data);
 void mesh_io_destroy(struct mesh_io *io);
 
 bool mesh_io_get_caps(struct mesh_io *io, struct mesh_io_caps *caps);

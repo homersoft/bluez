@@ -71,6 +71,7 @@ struct join_data{
 
 struct mesh_init_request {
 	mesh_ready_func_t cb;
+	struct l_dbus *dbus;
 	void *user_data;
 };
 
@@ -173,7 +174,7 @@ static void io_ready_callback(void *user_data, bool result)
 	if (result)
 		node_attach_io_all(mesh.io);
 
-	req->cb(req->user_data, result);
+	req->cb(result, req->dbus, req->user_data);
 
 	l_free(req);
 }
@@ -249,9 +250,9 @@ done:
 	l_settings_free(settings);
 }
 
-bool mesh_init(const char *config_dir, const char *mesh_conf_fname,
-					enum mesh_io_type type, void *opts,
-					mesh_ready_func_t cb, void *user_data)
+bool mesh_init(struct l_dbus *dbus, const char *config_dir,
+		const char *mesh_conf_fname, enum mesh_io_type type, void *opts,
+		mesh_ready_func_t cb, void *user_data)
 {
 	struct mesh_io_caps caps;
 	struct mesh_init_request *req;
@@ -280,9 +281,10 @@ bool mesh_init(const char *config_dir, const char *mesh_conf_fname,
 
 	req = l_new(struct mesh_init_request, 1);
 	req->cb = cb;
+	req->dbus = dbus;
 	req->user_data = user_data;
 
-	mesh.io = mesh_io_new(type, opts, io_ready_callback, req);
+	mesh.io = mesh_io_new(type, opts, dbus, io_ready_callback, req);
 	if (!mesh.io) {
 		l_free(req);
 		return false;
