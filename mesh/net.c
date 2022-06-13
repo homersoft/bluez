@@ -30,6 +30,7 @@
 #include "mesh/model.h"
 #include "mesh/appkey.h"
 #include "mesh/rpl.h"
+#include <pthread.h>
 
 #define abs_diff(a, b) ((a) > (b) ? (a) - (b) : (b) - (a))
 
@@ -2463,6 +2464,8 @@ static void net_rx(void *net_ptr, void *user_data)
 	}
 }
 
+static pthread_mutex_t net_msg_lock = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
+
 static void net_msg_recv(void *user_data, struct mesh_io_recv_info *info,
 					const uint8_t *data, uint16_t len)
 {
@@ -2476,15 +2479,16 @@ static void net_msg_recv(void *user_data, struct mesh_io_recv_info *info,
 		.seen = false,
 	};
 
+	pthread_mutex_lock(&net_msg_lock);
 	if (len < 9)
-		return;
+		goto end;
 
 	hash = l_get_le64(data + 1);
 
 	/* Only process packet once per reception */
 	isNew = check_fast_cache(hash);
 	if (!isNew)
-		return;
+		goto end;
 
 	l_queue_foreach(nets, net_rx, &net_data);
 
@@ -2499,6 +2503,8 @@ static void net_msg_recv(void *user_data, struct mesh_io_recv_info *info,
 		send_relay_pkt(net_data.net, net_data.net_key_id, net_data.out,
 							net_data.out_size);
 	}
+end:
+	pthread_mutex_unlock(&net_msg_lock);
 }
 
 static void iv_upd_to(struct l_timeout *upd_timeout, void *user_data)
