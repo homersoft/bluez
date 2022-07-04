@@ -278,6 +278,8 @@ int main(int argc, char *argv[])
 		goto done;
 	}
 
+	dbus_set_bus(dbus);
+
 	if (dbus_debug)
 		l_dbus_set_debug(dbus, do_debug, "[DBUS] ", NULL);
 	l_dbus_set_ready_handler(dbus, ready_callback, dbus, NULL);

@@ -75,6 +75,11 @@ struct l_dbus_message *dbus_error(struct l_dbus_message *msg, int err,
 				"%s", error_table[err].default_desc);
 }
 
+void dbus_set_bus(struct l_dbus *bus)
+{
+	dbus = bus;
+}
+
 struct l_dbus *dbus_get_bus(void)
 {
 	return dbus;
@@ -82,6 +87,9 @@ struct l_dbus *dbus_get_bus(void)
 
 bool dbus_init(struct l_dbus *bus)
 {
+	if (dbus != bus)
+		return false;
+
 	/* Network interface */
 	if (!mesh_dbus_init(bus))
 		return false;
