@@ -8,5 +8,5 @@
  *
  */
 
-bool manager_dbus_init(struct l_dbus *dbus);
+bool manager_dbus_init(void);
 void manager_scan_cancel(struct mesh_node *node);

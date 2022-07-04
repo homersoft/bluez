@@ -21,7 +21,7 @@
 #include "mesh/error.h"
 #include "mesh/dbus.h"
 
-static struct l_dbus *dbus;
+static struct l_dbus *dbus = NULL;
 
 struct error_entry {
 	const char *dbus_err;
@@ -75,26 +75,29 @@ struct l_dbus_message *dbus_error(struct l_dbus_message *msg, int err,
 				"%s", error_table[err].default_desc);
 }
 
+void dbus_set_bus(struct l_dbus *bus)
+{
+	dbus = bus;
+}
+
 struct l_dbus *dbus_get_bus(void)
 {
 	return dbus;
 }
 
-bool dbus_init(struct l_dbus *bus)
+bool dbus_init()
 {
 	/* Network interface */
-	if (!mesh_dbus_init(bus))
+	if (!mesh_dbus_init())
 		return false;
 
 	/* Node interface */
-	if (!node_dbus_init(bus))
+	if (!node_dbus_init())
 		return false;
 
 	/* Management interface */
-	if (!manager_dbus_init(bus))
+	if (!manager_dbus_init())
 		return false;
-
-	dbus = bus;
 
 	return true;
 }

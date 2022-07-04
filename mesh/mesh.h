@@ -29,7 +29,7 @@ bool mesh_init(const char *config_dir, const char *mesh_conf_fname,
 					enum mesh_io_type type, void *opts,
 					mesh_ready_func_t cb, void *user_data);
 void mesh_cleanup(void);
-bool mesh_dbus_init(struct l_dbus *dbus);
+bool mesh_dbus_init(void);
 
 const char *mesh_status_str(uint8_t err);
 bool mesh_send_pkt(uint8_t count, uint16_t interval, void *data, uint16_t len);

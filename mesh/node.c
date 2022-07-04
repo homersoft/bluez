@@ -2230,9 +2230,9 @@ void node_property_changed(struct mesh_node *node, const char *property)
 						MESH_NODE_INTERFACE, property);
 }
 
-bool node_dbus_init(struct l_dbus *bus)
+bool node_dbus_init(void)
 {
-	if (!l_dbus_register_interface(bus, MESH_NODE_INTERFACE,
+	if (!l_dbus_register_interface(dbus_get_bus(), MESH_NODE_INTERFACE,
 						setup_node_interface,
 						NULL, false)) {
 		l_info("Unable to register %s interface", MESH_NODE_INTERFACE);

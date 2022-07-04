@@ -78,8 +78,6 @@ static void do_debug(const char *str, void *user_data)
 
 static void mesh_ready_callback(void *user_data, bool success)
 {
-	struct l_dbus *dbus = user_data;
-
 	l_info("mesh_ready_callback");
 	if (!success) {
 		l_error("Failed to start mesh");
@@ -87,7 +85,7 @@ static void mesh_ready_callback(void *user_data, bool success)
 		return;
 	}
 
-	if (!dbus_init(dbus)) {
+	if (!dbus_init()) {
 		l_error("Failed to initialize mesh D-Bus resources");
 		l_main_quit();
 	}
@@ -277,6 +275,8 @@ int main(int argc, char *argv[])
 		status = EXIT_FAILURE;
 		goto done;
 	}
+
+	dbus_set_bus(dbus);
 
 	if (dbus_debug)
 		l_dbus_set_debug(dbus, do_debug, "[DBUS] ", NULL);

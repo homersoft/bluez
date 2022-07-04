@@ -13,7 +13,8 @@
 
 #define DEFAULT_DBUS_TIMEOUT	30
 
-bool dbus_init(struct l_dbus *dbus);
+bool dbus_init();
+void dbus_set_bus(struct l_dbus *bus);
 struct l_dbus *dbus_get_bus(void);
 void dbus_append_byte_array(struct l_dbus_message_builder *builder,
 						const uint8_t *data, int len);

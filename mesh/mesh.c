@@ -909,9 +909,9 @@ static void setup_network_interface(struct l_dbus_interface *iface)
 					"unicast");
 }
 
-bool mesh_dbus_init(struct l_dbus *dbus)
+bool mesh_dbus_init(void)
 {
-	if (!l_dbus_register_interface(dbus, MESH_NETWORK_INTERFACE,
+	if (!l_dbus_register_interface(dbus_get_bus(), MESH_NETWORK_INTERFACE,
 						setup_network_interface,
 						NULL, false)) {
 		l_info("Unable to register %s interface",
@@ -919,11 +919,12 @@ bool mesh_dbus_init(struct l_dbus *dbus)
 		return false;
 	}
 
-	if (!l_dbus_object_add_interface(dbus, BLUEZ_MESH_PATH,
+	if (!l_dbus_object_add_interface(dbus_get_bus(), BLUEZ_MESH_PATH,
 						MESH_NETWORK_INTERFACE, NULL)) {
 		l_info("Unable to register the mesh object on '%s'",
 							MESH_NETWORK_INTERFACE);
-		l_dbus_unregister_interface(dbus, MESH_NETWORK_INTERFACE);
+		l_dbus_unregister_interface(dbus_get_bus(),
+							MESH_NETWORK_INTERFACE);
 		return false;
 	}
 

@@ -844,9 +844,10 @@ static void setup_management_interface(struct l_dbus_interface *iface)
 							"net_keys", "dev_keys");
 }
 
-bool manager_dbus_init(struct l_dbus *bus)
+bool manager_dbus_init(void)
 {
-	if (!l_dbus_register_interface(bus, MESH_MANAGEMENT_INTERFACE,
+	if (!l_dbus_register_interface(dbus_get_bus(),
+						MESH_MANAGEMENT_INTERFACE,
 						setup_management_interface,
 						NULL, false)) {
 		l_info("Unable to register %s interface",
