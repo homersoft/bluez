@@ -485,8 +485,8 @@ static bool amqp_subscribe_topic(const char *topic,
 {
 	amqp_rpc_reply_t reply;
 
-	char *queue_name =
-		l_strdup_printf("rc.%s.raw", context->config.identity);
+	char *queue_name = l_strdup_printf("rc.%s.%s.raw",
+			context->config.exchange, context->config.identity);
 
 	amqp_queue_bind(context->conn_state, 1,
 			amqp_cstring_bytes(queue_name),
@@ -496,7 +496,9 @@ static bool amqp_subscribe_topic(const char *topic,
 
 	reply = amqp_get_rpc_reply(context->conn_state);
 	if (!is_reply_ok(&reply)) {
-		l_info("Failed to subscribe exchange topic: '%s'", topic);
+		l_info("Failed to subscribe queue '%s' to exchange '%s' "
+				"topic: '%s'",
+				queue_name, context->config.exchange, topic);
 		l_free(queue_name);
 		return false;
 	}
@@ -528,8 +530,8 @@ static bool amqp_consume(struct amqp_thread_context *context)
 {
 	amqp_rpc_reply_t reply;
 
-	char *queue_name = l_strdup_printf("rc.%s.raw",
-						context->config.identity);
+	char *queue_name = l_strdup_printf("rc.%s.%s.raw",
+			context->config.exchange, context->config.identity);
 
 	amqp_queue_declare(context->conn_state, 1,
 			amqp_cstring_bytes(queue_name), /* name */
@@ -633,8 +635,8 @@ static bool amqp_unsubscribe_topic(const char *topic,
 {
 	amqp_rpc_reply_t reply;
 
-	char *queue_name =
-		l_strdup_printf("rc.%s.raw", context->config.identity);
+	char *queue_name = l_strdup_printf("rc.%s.%s.raw",
+			context->config.exchange, context->config.identity);
 
 	amqp_queue_unbind(context->conn_state, 1,
 				amqp_cstring_bytes(queue_name),
@@ -644,6 +646,9 @@ static bool amqp_unsubscribe_topic(const char *topic,
 
 	reply = amqp_get_rpc_reply(context->conn_state);
 	if (!is_reply_ok(&reply)) {
+		l_info("Failed to subscribe queue '%s'" "to exchange '%s' "
+				"topic: '%s'",
+				queue_name, context->config.exchange, topic);
 		l_info("Failed to unsubscribe topic: '%s'", topic);
 		l_free(queue_name);
 		return false;
