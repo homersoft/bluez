@@ -543,8 +543,5 @@ bool net_key_psk(uint32_t id, const uint8_t uuid[16], const uint8_t dev_key[16],
 	if (!mesh_crypto_s1(input, 24, identity))
 		return false;
 
-	if (!mesh_crypto_k1(dev_key, identity, idpsk, sizeof(idpsk), psk))
-		return false;
-
 	return true;
 }

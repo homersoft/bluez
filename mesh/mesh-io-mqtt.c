@@ -69,7 +69,6 @@ struct mqtt_conn {
 	struct l_timeout    *conn_timeout;
 	struct mosquitto	*mosq;
     char				identity[16];
-    char				psk[16];
 	char				*topic;
 
 	mesh_io_recv_func_t	net_cb;
@@ -453,10 +452,9 @@ static struct mqtt_conn *conn_new(struct mesh_io *io, uint32_t net_key_id,
 {
 	struct mqtt_conn *conn = l_new(struct mqtt_conn, 1);
 	char network_id[8];
-	char *identity, *psk, *network;
+	char *identity, *network;
 
-	if (!net_key_psk(net_key_id, io->pvt->uuid, io->pvt->key, conn->identity, conn->psk,
-																					network_id))
+	if (!net_key_psk(net_key_id, io->pvt->uuid, io->pvt->key, conn->identity, NULL, network_id))
 		return NULL;
 
 	network = l_util_hexstring(network_id, 8);
@@ -470,12 +468,10 @@ static struct mqtt_conn *conn_new(struct mesh_io *io, uint32_t net_key_id,
 	conn->io = io;
 
 	identity = l_util_hexstring(conn->identity, sizeof(conn->identity));
-	psk = l_util_hexstring(conn->psk, sizeof(conn->psk));
 
-	l_info("%i: identity=%s psk=%s network=%s", net_key_id, identity, psk, network);
+	l_info("%i: identity=%s network=%s", net_key_id, identity, network);
 
 	l_free(identity);
-	l_free(psk);
 	l_free(network);
 
 	return conn;
@@ -494,14 +490,12 @@ static void conn_timeout(struct l_timeout *timeout, void *user_data)
 	struct mqtt_conn *conn = user_data;
 	struct mesh_io *io = conn->io;
 	char *identity = l_util_hexstring(conn->identity, sizeof(conn->identity));
-	char *psk = l_util_hexstring(conn->psk, sizeof(conn->psk));
 
 	mosquitto_disconnect(conn->mosq);
 	mosquitto_loop_stop(conn->mosq, false);
 
 	mosquitto_reinitialise(conn->mosq, NULL, true, conn);
 
-	mosquitto_tls_psk_set(conn->mosq, psk, identity, NULL);
 	mosquitto_connect_callback_set(conn->mosq, on_connect);
 	mosquitto_disconnect_callback_set(conn->mosq, on_disconnect);
 	mosquitto_message_callback_set(conn->mosq, on_message);
@@ -511,7 +505,7 @@ static void conn_timeout(struct l_timeout *timeout, void *user_data)
 
 	l_timeout_modify(conn->conn_timeout, 1);
 	l_free(identity);
-	l_free(psk);
+
 }
 
 static bool mqtt_io_subnet_reg(struct mesh_io *io, uint32_t net_key_id,

@@ -75,7 +75,10 @@ struct mesh_io *mesh_io_new(enum mesh_io_type type, void *opts,
 	io = l_queue_find(io_list, match_by_type, L_UINT_TO_PTR(type));
 
 	if (!api || !api->init || io)
-		return NULL;
+    {
+        l_info("impostor");
+        return NULL;
+    }
 
 	io = l_new(struct mesh_io, 1);
 
