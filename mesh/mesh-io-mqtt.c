@@ -287,8 +287,7 @@ static void send_flush(struct mesh_io *io)
             l_debug("%i: [%s] send %s", conn->net_key_id, conn->topic, hex);
             l_free(hex);
 
-			mosquitto_publish(conn->mosq, NULL, conn->topic, tx->len,
-							tx->data, 1, false);
+			mosquitto_publish(conn->mosq, NULL, "testing_silvair_stack", tx->len, tx->data, 1, false);
 		}
 		l_free(tx);
 	} while (tx);
@@ -415,6 +414,7 @@ static void on_connect(struct mosquitto *mosq, void *user_data, int rc)
 	l_info("%i: connected(%i)", conn->net_key_id, rc);
 
 	mosquitto_subscribe(conn->mosq, NULL, conn->topic, 1);
+	l_info("%i: topic: %s", conn->net_key_id, conn->topic);
 
 	l_timeout_remove(conn->conn_timeout);
 	conn->conn_timeout = NULL;
@@ -461,7 +461,7 @@ static struct mqtt_conn *conn_new(struct mesh_io *io, uint32_t net_key_id,
 
 	conn->net_key_id = net_key_id;
 	conn->mosq = mosquitto_new(NULL, true, conn);
-	conn->topic = l_strdup_printf("mesh/%s", network);
+	conn->topic = l_strdup_printf("%s", network);
 	conn->net_cb = net_cb;
 	conn->snb_cb = snb_cb;
 	conn->user_data = user_data;
@@ -500,8 +500,14 @@ static void conn_timeout(struct l_timeout *timeout, void *user_data)
 	mosquitto_disconnect_callback_set(conn->mosq, on_disconnect);
 	mosquitto_message_callback_set(conn->mosq, on_message);
 
-	mosquitto_connect_async(conn->mosq, io->pvt->hostname, io->pvt->port, 5);
-	mosquitto_loop_start(conn->mosq);
+	l_info("%i: connect_async to hostname %s on port %d", conn->net_key_id, io->pvt->hostname, io->pvt->port);
+	int err = mosquitto_connect_async(conn->mosq, io->pvt->hostname, io->pvt->port, 5);
+	if (err != MOSQ_ERR_SUCCESS)
+	{
+	    l_debug("%i: err: %s, errno: %d", conn->net_key_id, mosquitto_strerror(err), errno);
+	}
+
+    mosquitto_loop_start(conn->mosq);
 
 	l_timeout_modify(conn->conn_timeout, 1);
 	l_free(identity);
@@ -528,7 +534,9 @@ static bool mqtt_io_subnet_reg(struct mesh_io *io, uint32_t net_key_id,
 		conn = conn_new(io, net_key_id, net_cb, snb_cb, user_data);
 
 		if (!conn)
+		{
 			return false;
+		}
 
 		conn->conn_timeout = l_timeout_create(0, conn_timeout, conn, NULL);
 		conn_timeout(conn->conn_timeout, conn);

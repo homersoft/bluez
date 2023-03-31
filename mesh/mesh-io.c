@@ -76,7 +76,7 @@ struct mesh_io *mesh_io_new(enum mesh_io_type type, void *opts,
 
 	if (!api || !api->init || io)
     {
-        l_info("impostor");
+        l_debug("impostor");
         return NULL;
     }
 
