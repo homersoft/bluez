@@ -287,7 +287,7 @@ static void send_flush(struct mesh_io *io)
             l_debug("%i: [%s] send %s", conn->net_key_id, conn->topic, hex);
             l_free(hex);
 
-			mosquitto_publish(conn->mosq, NULL, "testing_silvair_stack", tx->len, tx->data, 1, false);
+			mosquitto_publish(conn->mosq, NULL, "testing_silvair_stack", tx->len, tx->data, 0, false);
 		}
 		l_free(tx);
 	} while (tx);

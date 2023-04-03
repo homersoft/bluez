@@ -1045,13 +1045,20 @@ static bool mesh_crypto_packet_decrypt(uint8_t *packet, uint8_t packet_len,
 					NULL, 0,
 					packet + 7, packet_len - 7,
 					packet + 7, &mic, sizeof(mic)))
-			return false;
+    {
+        l_debug("aes crypt failed");
+                return false;
+    }
 
 		mic ^= l_get_be32(packet + packet_len - 4);
 		l_put_be32(mic, packet + packet_len - 4);
 
 		if (mic)
+		{
+
+    l_debug("incorrect MIC");
 			return false;
+		}
 	}
 
 	return true;
@@ -1074,7 +1081,10 @@ bool mesh_crypto_packet_decode(const uint8_t *packet, uint8_t packet_len,
 
 	if (!mesh_crypto_network_clarify(out, privacy_key, iv_index,
 						&ctl, &ttl, &seq, &src))
+    {
+	    l_debug("mesh clarify");
 		return false;
+    }
 
 	return mesh_crypto_packet_decrypt(out, packet_len, network_key,
 							iv_index, proxy,

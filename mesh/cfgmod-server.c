@@ -17,6 +17,7 @@
 
 #include "mesh/mesh-defs.h"
 #include "mesh/node.h"
+#include "mesh/mesh.h"
 #include "mesh/net.h"
 #include "mesh/appkey.h"
 #include "mesh/model.h"
@@ -720,10 +721,6 @@ static bool cfg_srv_pkt(uint16_t src, uint16_t dst, uint16_t app_idx,
         return false;
 
     net = node_get_net(node);
-    l_error("CONFIG-SRV-opcode 0x%x size %u idx %3.3x", opcode, size,
-            net_idx);
-    l_debug("CONFIG-SRV-opcode 0x%x size %u idx %3.3x", opcode, size,
-            net_idx);
 
     n = 0;
 
@@ -854,6 +851,10 @@ static bool cfg_srv_pkt(uint16_t src, uint16_t dst, uint16_t app_idx,
 
             msg[n++] = node_proxy_mode_get(node);
             l_debug("Get/Set Config Proxy (%d)", msg[n - 1]);
+
+            uint8_t a[] = {20, 40};
+            mesh_send_pkt(0, 0, a, 2);
+
             break;
 
         case OP_NODE_IDENTITY_SET:

@@ -2470,8 +2470,8 @@ static void net_msg_recv(void *user_data, struct mesh_io_recv_info *info,
 	bool isNew;
 	struct net_queue_data net_data = {
 		.info = info,
-		.data = data + 1,
-		.len = len - 1,
+		.data = data,
+		.len = len,
 		.relay_advice = RELAY_NONE,
 		.seen = false,
 	};
@@ -2479,7 +2479,7 @@ static void net_msg_recv(void *user_data, struct mesh_io_recv_info *info,
 	if (len < 9)
 		return;
 
-	hash = l_get_le64(data + 1);
+	hash = l_get_le64(data);
 
 	/* Only process packet once per reception */
 	isNew = check_fast_cache(hash);

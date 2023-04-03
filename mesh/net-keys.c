@@ -202,7 +202,9 @@ static void decrypt_net_pkt(void *a, void *b)
 	bool result;
 
 	if (cache_id || !key->ref_cnt || (cache_pkt[0] & 0x7f) != key->nid)
+	{
 		return;
+	}
 
 	result = mesh_crypto_packet_decode(cache_pkt, cache_len, false,
 						cache_plain, cache_iv_index,
