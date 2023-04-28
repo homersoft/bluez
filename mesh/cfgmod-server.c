@@ -850,11 +850,6 @@ static bool cfg_srv_pkt(uint16_t src, uint16_t dst, uint16_t app_idx,
             n = mesh_model_opcode_set(OP_CONFIG_PROXY_STATUS, msg);
 
             msg[n++] = node_proxy_mode_get(node);
-            l_debug("Get/Set Config Proxy (%d)", msg[n - 1]);
-
-            uint8_t a[] = {20, 40};
-            mesh_send_pkt(0, 0, a, 2);
-
             break;
 
         case OP_NODE_IDENTITY_SET:

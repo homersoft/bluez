@@ -185,7 +185,6 @@ static bool mqtt_io_init(struct mesh_io *io, void *opts,
 
 		if (delim)
 			opt = delim + 1;
-
 	} while (delim && (argc < L_ARRAY_SIZE(argv)));
 
 	if (argc <= 0) {
