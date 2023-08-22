@@ -51,6 +51,7 @@
 #define DEFAULT_TRANSMIT_INTERVAL	100
 
 #define SAR_KEY(src, seq0)	((((uint32_t)(seq0)) << 16) | (src))
+#define SAR_IN_MAX_LENGTH		40
 
 #define FAST_CACHE_SIZE 8
 
@@ -1961,6 +1962,16 @@ static bool seg_rxed(struct mesh_net *net, bool frnd, uint32_t iv_index,
 		l_debug("RXed (new: %04x %06x size: %d len: %d) %d of %d",
 				seqZero, seq, size, len, segO, segN);
 		l_debug("Queue Size: %d", l_queue_length(net->sar_in));
+
+		/* Note!
+		 * This is short-term solution related to the bug:
+		 * https://silvair.atlassian.net/browse/SP-11568
+		 */
+		if (l_queue_length(net->sar_in) > SAR_IN_MAX_LENGTH) {
+			l_debug("The message has been dropped due to the limit exceeded");
+			return false;
+		}
+
 		sar_in = mesh_sar_new(len);
 		sar_in->seqAuth = seqAuth;
 		sar_in->iv_index = iv_index;
