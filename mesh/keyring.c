@@ -19,6 +19,7 @@
 #include <limits.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include <sys/stat.h>
 
@@ -227,7 +228,7 @@ bool keyring_put_remote_dev_key(struct mesh_node *node, uint16_t unicast,
 			result = false;
 	}
 
-	l_error("result: %d", result);
+	l_error("result: %d, errno: %d", result, errno);
 
 	return result;
 }
