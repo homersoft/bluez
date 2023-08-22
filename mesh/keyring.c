@@ -192,7 +192,7 @@ bool keyring_put_remote_dev_key(struct mesh_node *node, uint16_t unicast,
 	bool result = true;
 	int fd, i;
 
-	l_error("keyring_put_remote_dev_key for: %d", unicast);
+	l_error("keyring_put_remote_dev_key for: %d, cnt: %d", unicast, count);
 
 	if (!IS_UNICAST_RANGE(unicast, count))
 		return false;
