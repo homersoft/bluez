@@ -215,8 +215,11 @@ bool keyring_put_remote_dev_key(struct mesh_node *node, uint16_t unicast,
 		l_debug("Put Dev Key %s", key_file);
 
 		fd = open(key_file, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+		l_error("fd: %d", fd);
 		if (fd >= 0) {
-			if (write(fd, dev_key, 16) != 16)
+			int b = write(fd, dev_key, 16);
+			l_error("write: %d", b);
+			if (b != 16)
 				result = false;
 
 			close(fd);
