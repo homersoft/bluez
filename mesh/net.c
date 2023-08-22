@@ -51,6 +51,7 @@
 #define DEFAULT_TRANSMIT_INTERVAL	100
 
 #define SAR_KEY(src, seq0)	((((uint32_t)(seq0)) << 16) | (src))
+#define SAR_IN_MAX_LENGTH		40
 
 #define FAST_CACHE_SIZE 8
 
@@ -2351,6 +2352,15 @@ static enum _relay_advice packet_received(void *user_data,
 								app_msg_len);
 			}
 		} else if (net_segmented) {
+			/*
+			 * Note!
+			 * This limit has been implemented as a workaround to
+			 * address the issue where timers, created due to SARed
+			 * mesh messages, consume the file descriptors (FDs)
+			 * of the Linux process.
+			 */
+			if (l_queue_length(net->sar_in) > SAR_IN_MAX_LENGTH)
+				return RELAY_NONE;
 			/*
 			 * If we accept SAR packets to non-Unicast, then
 			 * Friend Sar at least needs to be Unicast Only
