@@ -1707,7 +1707,9 @@ static void get_managed_objects_cb(struct l_dbus_message *msg, void *user_data)
 
 		req->ready_cb(req->pending_msg, MESH_ERROR_NONE, node);
 		l_free(import);
+//		l_error("req_type_import: %d", import->unicast);
 
+//		keyring_del_remote_dev_key_all(node, import->unicast);
 		return;
 
 	case REQUEST_TYPE_CREATE:

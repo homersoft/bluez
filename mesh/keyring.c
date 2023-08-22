@@ -192,6 +192,8 @@ bool keyring_put_remote_dev_key(struct mesh_node *node, uint16_t unicast,
 	bool result = true;
 	int fd, i;
 
+	l_error("keyring_put_remote_dev_key for: %d", unicast);
+
 	if (!IS_UNICAST_RANGE(unicast, count))
 		return false;
 
@@ -221,6 +223,8 @@ bool keyring_put_remote_dev_key(struct mesh_node *node, uint16_t unicast,
 		} else
 			result = false;
 	}
+
+	l_error("result: %d", result);
 
 	return result;
 }
@@ -346,6 +350,28 @@ bool keyring_del_remote_dev_key(struct mesh_node *node, uint16_t unicast,
 		l_debug("RM Dev Key %s", key_file);
 		remove(key_file);
 	}
+
+	return true;
+}
+
+bool keyring_del_remote_dev_key_all(struct mesh_node *node, uint16_t unicast)
+{
+	uint8_t dev_key[16];
+	uint8_t test_key[16];
+	uint8_t cnt = 1;
+
+	if (!keyring_get_remote_dev_key(node, unicast, dev_key))
+		return false;
+
+	while (keyring_get_remote_dev_key(node, unicast + cnt, test_key)) {
+		if (memcmp(dev_key, test_key, sizeof(dev_key)))
+			break;
+
+		cnt++;
+	}
+
+	if (cnt > 1)
+		return keyring_del_remote_dev_key(node, unicast + 1, cnt - 1);
 
 	return true;
 }
