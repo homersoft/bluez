@@ -173,8 +173,8 @@ static void io_ready_callback(void *user_data, bool result)
 
 	mesh.initialized = true;
 
-	if (result)
-		node_attach_io_all(mesh.io);
+	//if (result)
+	//	node_attach_io_all(mesh.io);
 
 	req->cb(req->user_data, result);
 
