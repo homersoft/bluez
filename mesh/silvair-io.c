@@ -320,7 +320,7 @@ static void process_evt_rx(struct silvair_io *io,
 			(const uint8_t *)rx_pld + pkt_hdr->pld_len)
 			break;
 
-		//io->process_rx_cb(io, rssi, adv + 1, field_len, user_data);
+		io->process_rx_cb(io, rssi, adv + 1, field_len, user_data);
 		adv += field_len + 1;
 	}
 }
