@@ -2855,7 +2855,6 @@ bool mesh_net_set_key(struct mesh_net *net, uint16_t idx, const uint8_t *key,
 	net_key_beacon_refresh(subnet->net_key_tx, net->iv_index,
 		!!(subnet->kr_phase == KEY_REFRESH_PHASE_TWO), net->iv_update);
 
-
 	return true;
 }
 
@@ -2879,8 +2878,8 @@ bool mesh_net_attach(struct mesh_net *net, struct mesh_io *io)
 
 		mesh_io_register_recv_cb(io, snb, sizeof(snb),
 							beacon_recv, NULL);
-		mesh_io_register_recv_cb(io, pkt, sizeof(pkt),
-							net_msg_recv, NULL);
+//		mesh_io_register_recv_cb(io, pkt, sizeof(pkt),
+//							net_msg_recv, NULL);
 	}
 
 	if (l_queue_find(nets, simple_match, net))
