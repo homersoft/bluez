@@ -1116,12 +1116,13 @@ enum mesh_amqp_state mesh_amqp_get_state(struct mesh_amqp *amqp)
 
 void mesh_amqp_publish(struct mesh_amqp *amqp, const void *data, size_t size)
 {
-	struct message *msg = new_message(PUBLISH);
-
-	msg->publish.size = size;
-	memcpy(msg->publish.data, data, sizeof(msg->publish.data));
-
-	send_message(amqp, msg);
+//	struct message *msg = new_message(PUBLISH);
+//
+//	msg->publish.size = size;
+//	memcpy(msg->publish.data, data, sizeof(msg->publish.data));
+//
+//	send_message(amqp, msg);
+	l_info("disabled");
 }
 
 static void subscribe_call_complete(struct message *msg, struct mesh_amqp *amqp)
@@ -1172,7 +1173,7 @@ void mesh_amqp_stop(struct mesh_amqp *amqp)
 
 bool mesh_amqp_is_ready(struct mesh_amqp *amqp)
 {
-	return amqp->amqp_state == MESH_AMQP_STATE_CONNECTED;
+	return 0;
 }
 
 struct l_queue *mesh_amqp_get_opcodes_whitelist(struct mesh_amqp *amqp)
