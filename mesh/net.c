@@ -2356,7 +2356,7 @@ static enum _relay_advice packet_received(void *user_data,
 		} else if (net_segmented) {
 			if (net->sar_in && l_queue_length(net->sar_in) > 20)
 				l_info("too many messages in the net->sar_in");
-				return RELAY_NONE
+				return RELAY_NONE;
 			/*
 			 * If we accept SAR packets to non-Unicast, then
 			 * Friend Sar at least needs to be Unicast Only
