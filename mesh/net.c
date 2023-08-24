@@ -1921,7 +1921,7 @@ static bool seg_rxed(struct mesh_net *net, bool frnd, uint32_t iv_index,
 	/* Discard *old* incoming-SAR-in-progress if this segment newer */
 	seqAuth = seq_auth(seq, seqZero);
 	if (sar_in &&
-		l_queue_length(sar_in) < SAR_IN_MAX_LENGTH &&
+		l_queue_length(net->sar_in) < SAR_IN_MAX_LENGTH &&
 			(sar_in->seqAuth != seqAuth ||
 				sar_in->iv_index != iv_index)) {
 		bool newer;
@@ -2354,6 +2354,9 @@ static enum _relay_advice packet_received(void *user_data,
 								app_msg_len);
 			}
 		} else if (net_segmented) {
+			if (net->sar_in && l_queue_length(net->sar_in) > 20)
+				l_info("too many messages in the net->sar_in");
+				return RELAY_NONE
 			/*
 			 * If we accept SAR packets to non-Unicast, then
 			 * Friend Sar at least needs to be Unicast Only
