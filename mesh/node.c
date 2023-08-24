@@ -3035,6 +3035,6 @@ void node_finalize_new_node(struct mesh_node *node, struct mesh_io *io)
 	node->busy = false;
 
 	/* Register callback for the node's io */
-	//attach_io(node, io);
+	attach_io(node, io);
 	mesh_amqp_start(node->amqp);
 }
