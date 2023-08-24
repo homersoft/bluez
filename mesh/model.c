@@ -819,41 +819,41 @@ static void send_fd_dev_key_msg_rcvd(uint8_t ele_idx, uint16_t src,
 	l_free(msg);
 }
 
-static void send_dbus_dev_key_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
-					uint16_t src, uint16_t app_idx,
-					uint16_t net_idx, uint16_t size,
-					const uint8_t *data)
-{
-	struct l_dbus *dbus = dbus_get_bus();
-	struct l_dbus_message *msg;
-	struct l_dbus_message_builder *builder;
-	const char *owner;
-	const char *path;
-	bool remote = (app_idx != APP_IDX_DEV_LOCAL);
-
-	owner = node_get_owner(node);
-	path = node_get_element_path(node, ele_idx);
-	if (!path || !owner)
-		return;
-
-	l_debug("Send \"DevKeyMessageReceived\"");
-
-	msg = l_dbus_message_new_method_call(dbus, owner, path,
-						MESH_ELEMENT_INTERFACE,
-						"DevKeyMessageReceived");
-
-	builder = l_dbus_message_builder_new(msg);
-
-	l_dbus_message_builder_append_basic(builder, 'q', &src);
-	l_dbus_message_builder_append_basic(builder, 'b', &remote);
-	l_dbus_message_builder_append_basic(builder, 'q', &net_idx);
-	dbus_append_byte_array(builder, data, size);
-
-	l_dbus_message_builder_finalize(builder);
-	l_dbus_message_builder_destroy(builder);
-
-	l_dbus_send(dbus, msg);
-}
+//static void send_dbus_dev_key_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
+//					uint16_t src, uint16_t app_idx,
+//					uint16_t net_idx, uint16_t size,
+//					const uint8_t *data)
+//{
+//	struct l_dbus *dbus = dbus_get_bus();
+//	struct l_dbus_message *msg;
+//	struct l_dbus_message_builder *builder;
+//	const char *owner;
+//	const char *path;
+//	bool remote = (app_idx != APP_IDX_DEV_LOCAL);
+//
+//	owner = node_get_owner(node);
+//	path = node_get_element_path(node, ele_idx);
+//	if (!path || !owner)
+//		return;
+//
+//	l_debug("Send \"DevKeyMessageReceived\"");
+//
+//	msg = l_dbus_message_new_method_call(dbus, owner, path,
+//						MESH_ELEMENT_INTERFACE,
+//						"DevKeyMessageReceived");
+//
+//	builder = l_dbus_message_builder_new(msg);
+//
+//	l_dbus_message_builder_append_basic(builder, 'q', &src);
+//	l_dbus_message_builder_append_basic(builder, 'b', &remote);
+//	l_dbus_message_builder_append_basic(builder, 'q', &net_idx);
+//	dbus_append_byte_array(builder, data, size);
+//
+//	l_dbus_message_builder_finalize(builder);
+//	l_dbus_message_builder_destroy(builder);
+//
+//	l_dbus_send(dbus, msg);
+//}
 
 static void send_dev_key_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
 					   uint16_t src, uint16_t app_idx,
@@ -870,9 +870,9 @@ static void send_dev_key_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
 	if (io)
 		send_fd_dev_key_msg_rcvd(ele_idx, src, app_idx, net_idx,
 					 size, data, send_fd, io);
-	else
-		send_dbus_dev_key_msg_rcvd(node, ele_idx, src, app_idx, net_idx,
-					   size, data);
+//	else
+//		send_dbus_dev_key_msg_rcvd(node, ele_idx, src, app_idx, net_idx,
+//					   size, data);
 }
 
 static void send_fd_msg_rcvd(uint8_t ele_idx,
@@ -918,50 +918,50 @@ static void send_fd_msg_rcvd(uint8_t ele_idx,
 	l_free(msg);
 }
 
-static void send_dbus_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
-					uint16_t src, uint16_t dst,
-					const struct mesh_virtual *virt,
-					uint16_t app_idx,
-					uint16_t size, const uint8_t *data)
-{
-	struct l_dbus *dbus = dbus_get_bus();
-	struct l_dbus_message *msg;
-	struct l_dbus_message_builder *builder;
-	const char *owner;
-	const char *path;
-
-	owner = node_get_owner(node);
-	path = node_get_element_path(node, ele_idx);
-	if (!path || !owner)
-		return;
-
-	l_debug("Send \"MessageReceived\"");
-
-	msg = l_dbus_message_new_method_call(dbus, owner, path,
-				MESH_ELEMENT_INTERFACE, "MessageReceived");
-
-	builder = l_dbus_message_builder_new(msg);
-
-	l_dbus_message_builder_append_basic(builder, 'q', &src);
-	l_dbus_message_builder_append_basic(builder, 'q', &app_idx);
-
-	if (virt) {
-		l_dbus_message_builder_enter_variant(builder, "ay");
-		dbus_append_byte_array(builder, virt->label,
-							sizeof(virt->label));
-		l_dbus_message_builder_leave_variant(builder);
-	} else {
-		l_dbus_message_builder_enter_variant(builder, "q");
-		l_dbus_message_builder_append_basic(builder, 'q', &dst);
-		l_dbus_message_builder_leave_variant(builder);
-	}
-
-	dbus_append_byte_array(builder, data, size);
-
-	l_dbus_message_builder_finalize(builder);
-	l_dbus_message_builder_destroy(builder);
-	l_dbus_send(dbus, msg);
-}
+//static void send_dbus_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
+//					uint16_t src, uint16_t dst,
+//					const struct mesh_virtual *virt,
+//					uint16_t app_idx,
+//					uint16_t size, const uint8_t *data)
+//{
+//	struct l_dbus *dbus = dbus_get_bus();
+//	struct l_dbus_message *msg;
+//	struct l_dbus_message_builder *builder;
+//	const char *owner;
+//	const char *path;
+//
+//	owner = node_get_owner(node);
+//	path = node_get_element_path(node, ele_idx);
+//	if (!path || !owner)
+//		return;
+//
+//	l_debug("Send \"MessageReceived\"");
+//
+//	msg = l_dbus_message_new_method_call(dbus, owner, path,
+//				MESH_ELEMENT_INTERFACE, "MessageReceived");
+//
+//	builder = l_dbus_message_builder_new(msg);
+//
+//	l_dbus_message_builder_append_basic(builder, 'q', &src);
+//	l_dbus_message_builder_append_basic(builder, 'q', &app_idx);
+//
+//	if (virt) {
+//		l_dbus_message_builder_enter_variant(builder, "ay");
+//		dbus_append_byte_array(builder, virt->label,
+//							sizeof(virt->label));
+//		l_dbus_message_builder_leave_variant(builder);
+//	} else {
+//		l_dbus_message_builder_enter_variant(builder, "q");
+//		l_dbus_message_builder_append_basic(builder, 'q', &dst);
+//		l_dbus_message_builder_leave_variant(builder);
+//	}
+//
+//	dbus_append_byte_array(builder, data, size);
+//
+//	l_dbus_message_builder_finalize(builder);
+//	l_dbus_message_builder_destroy(builder);
+//	l_dbus_send(dbus, msg);
+//}
 
 static void send_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
 			  uint16_t src, uint16_t dst,
@@ -979,9 +979,9 @@ static void send_msg_rcvd(struct mesh_node *node, uint8_t ele_idx,
 	if (io)
 		send_fd_msg_rcvd(ele_idx, src, dst, virt, app_idx,
 						 size, data, send_fd, io);
-	else
-		send_dbus_msg_rcvd(node, ele_idx, src, dst, virt, app_idx,
-				   size, data);
+//	else
+//		send_dbus_msg_rcvd(node, ele_idx, src, dst, virt, app_idx,
+//				   size, data);
 }
 
 bool mesh_model_rx(struct mesh_node *node, bool szmict, uint32_t seq0,
