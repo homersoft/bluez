@@ -358,7 +358,7 @@ static void amqp_publish_handler(struct amqp_thread_context *context,
 static void config_set_url(struct mesh_amqp_config *config, const char *url)
 {
 	l_free(config->url);
-	config->url = l_strdup(url ?: "");
+	config->url = url ? l_strdup(url) : "";
 }
 
 static void config_set_exchange(struct mesh_amqp_config *config,
