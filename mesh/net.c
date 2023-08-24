@@ -51,6 +51,7 @@
 #define DEFAULT_TRANSMIT_INTERVAL	100
 
 #define SAR_KEY(src, seq0)	((((uint32_t)(seq0)) << 16) | (src))
+#define SAR_IN_MAX_LENGTH		100
 
 #define FAST_CACHE_SIZE 8
 
@@ -1919,7 +1920,9 @@ static bool seg_rxed(struct mesh_net *net, bool frnd, uint32_t iv_index,
 
 	/* Discard *old* incoming-SAR-in-progress if this segment newer */
 	seqAuth = seq_auth(seq, seqZero);
-	if (sar_in && (sar_in->seqAuth != seqAuth ||
+	if (sar_in &&
+		l_queue_length(sar_in) < SAR_IN_MAX_LENGTH &&
+			(sar_in->seqAuth != seqAuth ||
 				sar_in->iv_index != iv_index)) {
 		bool newer;
 
