@@ -1960,8 +1960,18 @@ static bool seg_rxed(struct mesh_net *net, bool frnd, uint32_t iv_index,
 		uint16_t len = MAX_SEG_TO_LEN(segN);
 
 		l_debug("RXed (new: %04x %06x size: %d len: %d) %d of %d",
-				seqZero, seq, size, len, segO, segN);
+			seqZero, seq, size, len, segO, segN);
 		l_debug("Queue Size: %d", l_queue_length(net->sar_in));
+
+		/* Note!
+		 * This is short-term solution related to the bug:
+		 * https://silvair.atlassian.net/browse/SP-11568
+		 */
+		if (l_queue_length(net->sar_in) > SAR_IN_MAX_LENGTH) {
+			l_debug("The message has been dropped due to the limit exceeded");
+			return false;
+		}
+
 		sar_in = mesh_sar_new(len);
 		sar_in->seqAuth = seqAuth;
 		sar_in->iv_index = iv_index;
@@ -2352,15 +2362,6 @@ static enum _relay_advice packet_received(void *user_data,
 								app_msg_len);
 			}
 		} else if (net_segmented) {
-			/*
-			 * Note!
-			 * This limit has been implemented as a workaround to
-			 * address the issue where timers, created due to SARed
-			 * mesh messages, consume the file descriptors (FDs)
-			 * of the Linux process.
-			 */
-			if (l_queue_length(net->sar_in) > SAR_IN_MAX_LENGTH)
-				return RELAY_NONE;
 			/*
 			 * If we accept SAR packets to non-Unicast, then
 			 * Friend Sar at least needs to be Unicast Only
