@@ -1960,7 +1960,7 @@ static bool seg_rxed(struct mesh_net *net, bool frnd, uint32_t iv_index,
 		uint16_t len = MAX_SEG_TO_LEN(segN);
 
 		l_debug("RXed (new: %04x %06x size: %d len: %d) %d of %d",
-			seqZero, seq, size, len, segO, segN);
+				seqZero, seq, size, len, segO, segN);
 		l_debug("Queue Size: %d", l_queue_length(net->sar_in));
 
 		/* Note!
