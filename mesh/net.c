@@ -51,7 +51,7 @@
 #define DEFAULT_TRANSMIT_INTERVAL	100
 
 #define SAR_KEY(src, seq0)	((((uint32_t)(seq0)) << 16) | (src))
-#define SAR_IN_MAX_LENGTH		40
+#define SAR_IN_MAX_LENGTH		120	
 
 #define FAST_CACHE_SIZE 8
 
