@@ -44,14 +44,15 @@
 
 #define IV_UPDATE_SEQ_TRIGGER 0x800000  /* Half of Seq-Nums expended */
 
-#define SEG_TO	2
-#define MSG_TO	60
+#define SEG_TO		2
+#define MSG_TO		60
+#define RXED_SAR_TO	5
 
 #define DEFAULT_TRANSMIT_COUNT		1
 #define DEFAULT_TRANSMIT_INTERVAL	100
 
 #define SAR_KEY(src, seq0)	((((uint32_t)(seq0)) << 16) | (src))
-#define SAR_IN_MAX_LENGTH		40
+#define SAR_IN_MAX_LENGTH		60
 
 #define FAST_CACHE_SIZE 8
 
@@ -2015,6 +2016,8 @@ static bool seg_rxed(struct mesh_net *net, bool frnd, uint32_t iv_index,
 		/* Kill Inter-Seg timeout */
 		l_timeout_remove(sar_in->seg_timeout);
 		sar_in->seg_timeout = NULL;
+
+		l_timeout_modify(sar_in->msg_timeout, RXED_SAR_TO);
 		return true;
 	}
 
