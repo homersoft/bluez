@@ -2015,6 +2015,9 @@ static bool seg_rxed(struct mesh_net *net, bool frnd, uint32_t iv_index,
 		/* Kill Inter-Seg timeout */
 		l_timeout_remove(sar_in->seg_timeout);
 		sar_in->seg_timeout = NULL;
+		
+		l_timeout_modify(sar_in->msg_timeout, 5);
+
 		return true;
 	}
 
