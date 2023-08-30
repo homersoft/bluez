@@ -528,8 +528,8 @@ static bool amqp_consume(struct amqp_thread_context *context)
 {
 	amqp_rpc_reply_t reply;
 
-	char *queue_name = l_strdup_printf("rc.%s.%s.raw",
-						context->config.exchange, context->config.identity);
+	char *queue_name = l_strdup_printf("rc.%s.raw",
+						context->config.identity);
 
 	amqp_queue_declare(context->conn_state, 1,
 			amqp_cstring_bytes(queue_name), /* name */
