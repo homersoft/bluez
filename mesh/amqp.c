@@ -29,6 +29,9 @@
 #include <string.h>
 
 #include "mesh/node.h"
+#include "mesh/mesh-defs.h"
+
+#define MAX_PUBLISH_DATA_SIZE (MAX_MSG_LEN + sizeof(struct fd_msg))
 
 static const int DEFAULT_RECONNECT_DELAY = 5;
 
@@ -74,7 +77,7 @@ struct message {
 		} identity;
 		struct message_publish {
 			size_t size;
-			uint8_t data[384];
+			uint8_t data[MAX_PUBLISH_DATA_SIZE];
 		} publish;
 		struct message_subscribe {
 			char topic[255];
@@ -883,7 +886,7 @@ static void *amqp_thread(void *user_data)
 				goto cleanup;
 			}
 
-			if ((sizeof(msg.rc.msg) + 384) <
+			if ((sizeof(msg.rc.msg) + MAX_MSG_LEN) <
 						envelope.message.body.len) {
 				l_warn("Too long message");
 				amqp_basic_nack(context->conn_state, 1,
