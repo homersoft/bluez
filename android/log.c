@@ -190,7 +190,7 @@ void __btd_log_init(const char *debug, int detach)
 			desc->flags |= BTD_DEBUG_FLAG_PRINT;
 	}
 
-	info("Bluetooth daemon %s (Silvair version)", VERSION);
+	info("Bluetooth daemon %s", VERSION);
 }
 
 void __btd_log_cleanup(void)
